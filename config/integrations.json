@@ -7,6 +7,9 @@
       "owner_boundary": "moonishaider",
       "mode": "read-only",
       "enabled": false,
+      "endpoint": "https://api.githubcopilot.com/mcp",
+      "runtime_credential": "separate-user-oauth",
+      "provenance_required": ["connection_id", "owner", "repository", "visibility", "ref", "sha", "path", "issue_or_pr_id", "actor", "timestamp"],
       "tools": {"include": ["get_file_contents", "search_code", "search_repositories", "list_issues", "get_issue", "list_pull_requests", "get_pull_request", "get_pull_request_files", "get_pull_request_status"], "exclude": ["create_issue", "update_issue", "create_pull_request", "merge_pull_request", "push_files", "create_or_update_file", "delete_file"]}
     },
     {
@@ -15,6 +18,9 @@
       "owner_boundary": "Inside-Success",
       "mode": "read-only",
       "enabled": false,
+      "endpoint": "https://api.githubcopilot.com/mcp",
+      "runtime_credential": "separate-user-oauth",
+      "provenance_required": ["connection_id", "owner", "repository", "visibility", "ref", "sha", "path", "issue_or_pr_id", "actor", "timestamp"],
       "tools": {"include": ["get_file_contents", "search_code", "search_repositories", "list_issues", "get_issue", "list_pull_requests", "get_pull_request", "get_pull_request_files", "get_pull_request_status"], "exclude": ["create_issue", "update_issue", "create_pull_request", "merge_pull_request", "push_files", "create_or_update_file", "delete_file"]}
     },
     {
@@ -22,6 +28,19 @@
       "type": "slack-mcp",
       "mode": "read-only",
       "enabled": false,
+      "endpoint": "https://mcp.slack.com/mcp",
+      "account_boundary": "Inside Success workspace",
+      "browser_profile": "Company Chrome",
+      "tools": {"include": ["search", "fetch"], "exclude": ["send_message", "create_canvas", "update_canvas"]}
+    },
+    {
+      "id": "slack_mitchell_readonly",
+      "type": "slack-mcp",
+      "mode": "read-only",
+      "enabled": false,
+      "endpoint": "https://mcp.slack.com/mcp",
+      "account_boundary": "Mitchell workspace",
+      "browser_profile": "Profile 1",
       "tools": {"include": ["search", "fetch"], "exclude": ["send_message", "create_canvas", "update_canvas"]}
     },
     {
@@ -29,20 +48,30 @@
       "type": "google-workspace-mcp",
       "mode": "read-only",
       "enabled": false,
-      "tools": {"include": ["search", "fetch"], "exclude": ["create", "update", "delete", "send"]}
+      "account_boundary": "work Google account",
+      "browser_profile": "Company Chrome",
+      "endpoints": {"gmail": "https://gmailmcp.googleapis.com/mcp/v1", "drive": "https://drivemcp.googleapis.com/mcp/v1", "calendar": "https://calendarmcp.googleapis.com/mcp/v1"},
+      "oauth_scopes": ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/calendar.calendarlist.readonly", "https://www.googleapis.com/auth/calendar.events.readonly"],
+      "tools": {"include": ["search_threads", "get_message", "get_thread", "list_labels", "list_calendars", "list_events", "get_event"], "exclude": ["create_draft", "label_message", "label_thread", "unlabel_message", "unlabel_thread", "create_event", "update_event", "delete_event", "respond_to_event"]}
     },
     {
       "id": "google_personal_readonly",
       "type": "google-workspace-mcp",
       "mode": "read-only",
       "enabled": false,
-      "tools": {"include": ["search", "fetch"], "exclude": ["create", "update", "delete", "send"]}
+      "account_boundary": "personal Google account",
+      "browser_profile": "Profile 1",
+      "endpoints": {"gmail": "https://gmailmcp.googleapis.com/mcp/v1", "drive": "https://drivemcp.googleapis.com/mcp/v1", "calendar": "https://calendarmcp.googleapis.com/mcp/v1"},
+      "oauth_scopes": ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/calendar.calendarlist.readonly", "https://www.googleapis.com/auth/calendar.events.readonly"],
+      "tools": {"include": ["search_threads", "get_message", "get_thread", "list_labels", "list_calendars", "list_events", "get_event"], "exclude": ["create_draft", "label_message", "label_thread", "unlabel_message", "unlabel_thread", "create_event", "update_event", "delete_event", "respond_to_event"]}
     },
     {
       "id": "zoom_readonly",
       "type": "zoom-mcp",
       "mode": "read-only",
       "enabled": false,
+      "account_boundary": "Syed selected Zoom account",
+      "browser_profile": "Profile 1",
       "tools": {"include": ["search_meetings", "get_meeting_assets", "get_meeting_recordings", "get_meeting_transcript"], "exclude": ["create_meeting", "update_meeting", "delete_meeting"]}
     },
     {

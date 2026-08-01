@@ -92,11 +92,19 @@ class HistoryAndServiceTests(unittest.TestCase):
         spec.loader.exec_module(module)
         registered = []
         class Context:
-            def register_tool(self, tool):
-                registered.append(tool.__name__)
+            def register_tool(self, **definition):
+                registered.append(definition["name"])
+                self.assert_definition(definition)
+
+            @staticmethod
+            def assert_definition(definition):
+                assert definition["toolset"] == "hermes_attention"
+                assert definition["schema"]["name"] == definition["name"]
+                assert callable(definition["handler"])
         module.register(Context())
-        self.assertIn("propose_action", registered)
-        self.assertNotIn("execute_action", registered)
+        self.assertIn("hermes_attention_propose_action", registered)
+        self.assertIn("hermes_attention_routed_reasoning", registered)
+        self.assertNotIn("hermes_attention_execute_action", registered)
         self.assertFalse(any(name.startswith(("send", "create", "delete", "update")) for name in registered))
 
 
