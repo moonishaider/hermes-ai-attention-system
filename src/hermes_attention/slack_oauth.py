@@ -34,6 +34,7 @@ class SlackOAuthError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class SlackOAuthConnection:
     name: str
+    display_name: str
     app_id: str
     client_id: str
     client_secret_env: str
@@ -56,6 +57,7 @@ def load_connection(name: str, config_path: Path | None = None) -> SlackOAuthCon
         raise SlackOAuthError("Slack OAuth scope allowlist is empty or malformed")
     return SlackOAuthConnection(
         name=name,
+        display_name=str(raw["display_name"]),
         app_id=str(raw["app_id"]),
         client_id=str(raw["client_id"]),
         client_secret_env=str(raw["client_secret_env"]),
@@ -188,7 +190,7 @@ def persist_hermes_oauth_state(
     _atomic_json(client_path, {
         "client_id": connection.client_id,
         "client_secret": client_secret,
-        "client_name": "Hermes Inside Success Intelligence",
+        "client_name": connection.display_name,
         "redirect_uris": [connection.redirect_uri],
         "grant_types": ["authorization_code", "refresh_token"],
         "response_types": ["code"],
