@@ -1,6 +1,7 @@
 {
   "connections": {
     "inside-success": {
+      "display_name": "Hermes Inside Success Intelligence",
       "app_id": "AEXAMPLE001",
       "client_id": "0000000001.0000000001",
       "client_secret_env": "SLACK_INSIDE_SUCCESS_CLIENT_SECRET",

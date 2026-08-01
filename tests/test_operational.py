@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -156,7 +157,8 @@ class OperationalTests(unittest.TestCase):
 
     def test_slack_oauth_url_and_grant_are_strictly_read_only(self):
         connection = SlackOAuthConnection(
-            name="synthetic", app_id="A_TEST", client_id="C_TEST", client_secret_env="TEST_SECRET",
+            name="synthetic", display_name="Hermes Synthetic Intelligence",
+            app_id="A_TEST", client_id="C_TEST", client_secret_env="TEST_SECRET",
             server_name="slack_test", server_url="https://mcp.slack.com/mcp",
             resource="https://mcp.slack.com",
             authorization_endpoint="https://slack.com/oauth/v2_user/authorize",
@@ -174,7 +176,8 @@ class OperationalTests(unittest.TestCase):
 
     def test_slack_oauth_persistence_is_mode_600_and_result_has_no_tokens(self):
         connection = SlackOAuthConnection(
-            name="synthetic", app_id="A_TEST", client_id="C_TEST", client_secret_env="TEST_SECRET",
+            name="synthetic", display_name="Hermes Synthetic Intelligence",
+            app_id="A_TEST", client_id="C_TEST", client_secret_env="TEST_SECRET",
             server_name="slack_test", server_url="https://mcp.slack.com/mcp",
             resource="https://mcp.slack.com",
             authorization_endpoint="https://slack.com/oauth/v2_user/authorize",
@@ -190,6 +193,8 @@ class OperationalTests(unittest.TestCase):
         self.assertTrue(result["stored"])
         self.assertNotIn("access-secret", repr(result))
         self.assertNotIn("client-secret", repr(result))
+        client_payload = json.loads((token_dir / "slack_test.client.json").read_text(encoding="utf-8"))
+        self.assertEqual("Hermes Synthetic Intelligence", client_payload["client_name"])
         for path in token_dir.iterdir():
             self.assertEqual(0o600, path.stat().st_mode & 0o777)
 
