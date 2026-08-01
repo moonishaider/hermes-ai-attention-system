@@ -27,6 +27,34 @@
         "mpim:history",
         "im:history"
       ]
+    },
+    "mitchell": {
+      "display_name": "Hermes Mitchell Intelligence",
+      "app_id": "A0BN85H7Y80",
+      "client_id": "11628387368309.11756187270272",
+      "client_secret_env": "SLACK_MITCHELL_CLIENT_SECRET",
+      "server_name": "slack_mitchell_readonly",
+      "server_url": "https://mcp.slack.com/mcp",
+      "resource": "https://mcp.slack.com",
+      "authorization_endpoint": "https://slack.com/oauth/v2_user/authorize",
+      "token_endpoint": "https://slack.com/api/oauth.v2.user.access",
+      "redirect_uri": "http://127.0.0.1:8766/callback",
+      "scopes": [
+        "search:read.public",
+        "search:read.private",
+        "search:read.mpim",
+        "search:read.im",
+        "search:read.files",
+        "files:read",
+        "search:read.users",
+        "channels:read",
+        "groups:read",
+        "mpim:read",
+        "channels:history",
+        "groups:history",
+        "mpim:history",
+        "im:history"
+      ]
     }
   }
 }

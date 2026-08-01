@@ -1,6 +1,6 @@
 # Compatibility Report
 
-**Checked:** 2026-08-01
+**Checked:** 2026-08-02
 **Status:** Complete for implementation baseline
 
 This report records implementation-time verification against current official primary sources. Exact versions, capability decisions, and fallback boundaries will be completed before the Milestone 0 gate.
@@ -14,7 +14,7 @@ This report records implementation-time verification against current official pr
 | GitHub | Authenticated read access covers personal public repositories and authorized private Inside Success repositories. | Runtime uses two logical read-only connections; build writes only through guarded scripts. |
 | GitHub MCP | Official remote MCP supports provider-level `/readonly`, tool selection, host-managed OAuth, and PAT fallback. Hermes's dynamic OAuth registration received a safe 404 because GitHub requires a host-specific registered app. | Use separate fine-grained tokens through GitHub's documented fallback, `/mcp/readonly`, and Hermes allowlists. Never reuse the broad build credential. Live tool discovery remains required. |
 | Google Workspace MCP | Official Gmail, Drive, and Calendar MCPs are Developer Preview and expose read and write tools. A Google Cloud project/client is required. | Six account/product entries are prepared disabled with minimum read scopes in the registry and write exclusions. Activation waits for client/account consent. |
-| Slack MCP | Official hosted MCP is GA at `https://mcp.slack.com/mcp`; it requires an internal/directory app, confidential OAuth, workspace approval, and explicit MCP enablement. Its resource metadata advertises both reads and writes, and the pinned MCP SDK replaces configured scopes with that entire advertised set. | Use the project strict-scope OAuth adapter, which requests exactly the reviewed scopes and rejects extras. Inside Success is live with 14 read scopes and seven discovered read/search tools; agent-app experience remains off. Mitchell remains separate and disabled. |
+| Slack MCP | Official hosted MCP is GA at `https://mcp.slack.com/mcp`; it requires an internal/directory app, confidential OAuth, workspace approval, and explicit MCP enablement. Its resource metadata advertises both reads and writes, and the pinned MCP SDK replaces configured scopes with that entire advertised set. | Use the project strict-scope OAuth adapter, which requests exactly the reviewed scopes and rejects extras. Inside Success and Mitchell are live as separate apps/connections, each with 14 read scopes and seven discovered read/search tools; both agent-app experiences remain off. |
 | Zoom MCP | Hosted MCP requires a Marketplace integration point, product-specific URL/scopes, permissions, and licensing. | Registry remains disabled; do not invent a universal tool surface. Use the official API/export fallback if required meeting/recording/transcript tools are unavailable. |
 | ChatGPT history | Official supported historical path is user data export. No supported continuous personal-history API was identified. | Implement previewed official export backfill plus explicit structured context relay. Do not scrape the account or imply continuous sync. |
 

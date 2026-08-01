@@ -37,11 +37,11 @@
       "id": "slack_mitchell_readonly",
       "type": "slack-mcp",
       "mode": "read-only",
-      "enabled": false,
+      "enabled": true,
       "endpoint": "https://mcp.slack.com/mcp",
       "account_boundary": "Mitchell workspace",
       "browser_profile": "Profile 1",
-      "tools": {"include": ["search", "fetch"], "exclude": ["send_message", "create_canvas", "update_canvas"]}
+      "tools": {"include": ["slack_search_public", "slack_search_public_and_private", "slack_search_channels", "slack_search_users", "slack_read_channel", "slack_read_thread", "slack_read_file"], "exclude": ["slack_send_message", "slack_create_channel", "slack_create_canvas", "slack_update_canvas", "slack_add_reaction", "slack_create_list", "slack_update_list", "slack_upload_file"]}
     },
     {
       "id": "google_work_readonly",
