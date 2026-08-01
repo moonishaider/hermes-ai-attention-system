@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "contexts": [
+    {
+      "id": "inside-success",
+      "label": "Inside Success",
+      "browser_profile": "Company Chrome",
+      "rules": [
+        {"field": "workspace", "contains": "inside success", "weight": 0.9},
+        {"field": "github_owner", "equals": "Inside-Success", "weight": 1.0},
+        {"field": "connection_id", "contains": "inside_success", "weight": 1.0}
+      ]
+    },
+    {
+      "id": "mitchell",
+      "label": "Mitchell",
+      "browser_profile": "Profile 1",
+      "rules": [
+        {"field": "workspace", "contains": "mitchell", "weight": 0.95},
+        {"field": "connection_id", "contains": "mitchell", "weight": 1.0}
+      ]
+    },
+    {
+      "id": "personal",
+      "label": "Personal",
+      "browser_profile": "Profile 1",
+      "rules": [
+        {"field": "github_owner", "equals": "moonishaider", "weight": 1.0},
+        {"field": "connection_id", "contains": "personal", "weight": 0.9}
+      ]
+    },
+    {"id": "mixed", "label": "Mixed - confirmation required", "browser_profile": null, "rules": []},
+    {"id": "unknown", "label": "Unknown - fail closed", "browser_profile": null, "rules": []}
+  ],
+  "classification": {"minimum_confidence": 0.6, "mixed_delta": 0.15, "allow_multiple_labels": true}
+}

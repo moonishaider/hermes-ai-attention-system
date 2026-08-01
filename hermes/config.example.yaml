@@ -1,0 +1,18 @@
+# Merge these values into the installed Hermes configuration manually.
+# Secrets must be supplied through environment variables or the Hermes key store.
+model: deepseek/deepseek-v4-flash
+memory:
+  write_approval: true
+plugins:
+  enabled:
+    - hermes-attention
+toolsets:
+  enabled:
+    - hermes-attention
+  disabled:
+    - computer
+    - browser
+    - terminal
+mcp:
+  dynamic_tools: true
+  servers: {}

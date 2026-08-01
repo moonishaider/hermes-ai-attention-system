@@ -1,0 +1,4 @@
+name: hermes-attention
+version: 0.1.0
+description: Provenance-first attention, retrieval, task, handoff, and action-preview tools.
+entrypoint: __init__.py

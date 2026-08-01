@@ -1,0 +1,29 @@
+[storage]
+engine = "sqlite"
+database = "runtime-data/hermes_attention.sqlite3"
+immutable_provenance = true
+full_text_search = true
+
+[attention]
+queue_limit = 20
+unknown_context_fail_closed = true
+mixed_context_fail_closed = true
+surface_overdue = true
+surface_blocked = true
+
+[memory]
+write_approval = true
+contradictions_are_preserved = true
+default_retention = "until-reviewed"
+
+[actions]
+external_writes_enabled = false
+exact_preview_required = true
+approval_expiry_minutes = 15
+idempotency_required = true
+kill_switch_default = false
+
+[privacy]
+redact_secrets_before_storage = true
+screen_capture_default = false
+raw_history_storage = false

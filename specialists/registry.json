@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "specialists": [
+    {"id": "meeting-intelligence", "version": "1.0.0", "status": "active", "path": "meeting-intelligence", "contexts": ["*"], "allowed_tools": ["evidence.search", "task.add", "memory.propose"], "prohibited_tools": ["external.write"], "memory_namespace": "meetings", "model_route": "routine"},
+    {"id": "project-resumption", "version": "1.0.0", "status": "active", "path": "project-resumption", "contexts": ["*"], "allowed_tools": ["evidence.search", "attention.queue", "context.handoff"], "prohibited_tools": ["external.write"], "memory_namespace": "projects", "model_route": "routine"},
+    {"id": "daily-report", "version": "1.0.0", "status": "active", "path": "daily-report", "contexts": ["inside-success"], "allowed_tools": ["evidence.search", "report.draft"], "prohibited_tools": ["report.publish", "external.write"], "memory_namespace": "reports", "model_route": "routine"},
+    {"id": "research-shopping", "version": "1.0.0", "status": "active", "path": "research-shopping", "contexts": ["personal"], "allowed_tools": ["evidence.search", "memory.propose"], "prohibited_tools": ["purchase", "external.write"], "memory_namespace": "research", "model_route": "difficult"},
+    {"id": "tax-finance", "version": "1.0.0", "status": "disabled", "path": "tax-finance", "contexts": ["personal"], "allowed_tools": ["evidence.search", "memory.propose"], "prohibited_tools": ["payment", "filing", "external.write"], "memory_namespace": "finance", "model_route": "review", "serious_mode": true}
+  ]
+}

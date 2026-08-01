@@ -1,0 +1,11 @@
+{
+  "title": "Synthetic relay",
+  "date": "2026-07-31T10:00:00+00:00",
+  "summary": "A bounded summary supplied intentionally by the user.",
+  "decisions": ["Keep writes disabled"],
+  "commitments": ["Review the preview"],
+  "unresolved_questions": ["Which source should be authorized next?"],
+  "selected_excerpts": [],
+  "context_labels": ["personal"],
+  "source_reference": "chatgpt://user-relay/synthetic"
+}

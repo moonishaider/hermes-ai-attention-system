@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "default_route": "routine",
+  "routes": {
+    "routine": {
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash",
+      "capabilities": ["chat", "tool_calls"],
+      "purpose": "Routine Hermes work"
+    },
+    "difficult": {
+      "provider": "deepseek",
+      "model": "deepseek-v4-pro",
+      "capabilities": ["chat", "tool_calls"],
+      "limitations": ["Responses API unavailable at compatibility check"],
+      "purpose": "Difficult reasoning after routing verification"
+    },
+    "vision": {
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "capabilities": ["vision", "chat"],
+      "purpose": "Explicitly requested screen and image understanding"
+    },
+    "review": {
+      "provider": "openai",
+      "model": "gpt-5.6-terra",
+      "capabilities": ["chat", "tool_calls"],
+      "purpose": "Rare direct-API high-stakes review"
+    }
+  },
+  "builder_only": {"provider": "openai", "model": "gpt-5.6-sol", "runtime_dependency": false},
+  "budget_usd_monthly": {"warning": 25.0, "soft": 40.0, "hard": 50.0, "stretch_requires_policy_change": 100.0}
+}

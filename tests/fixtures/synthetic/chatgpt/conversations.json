@@ -1,0 +1,11 @@
+[
+  {
+    "id": "synthetic-conversation",
+    "title": "Synthetic planning",
+    "create_time": 1785456000,
+    "mapping": {
+      "a": {"message": {"content": {"parts": ["This is synthetic historical context."]}}},
+      "b": {"message": {"content": {"parts": ["Please draft a safe checklist."]}}}
+    }
+  }
+]
