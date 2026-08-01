@@ -1,0 +1,117 @@
+# Project-local guardrails for a Codex session intentionally running with
+# danger-full-access and approval_policy="never".
+# These rules block common high-impact commands. AGENTS.md remains authoritative.
+
+prefix_rule(
+    pattern = [["rm", "rmdir", "unlink", "trash"]],
+    decision = "forbidden",
+    justification = "Deletion commands are forbidden. Quarantine project-owned files and preserve rollback history instead.",
+)
+
+prefix_rule(
+    pattern = [["sudo", "doas"]],
+    decision = "forbidden",
+    justification = "Elevated privileges are not permitted for this project.",
+)
+
+prefix_rule(
+    pattern = ["find"],
+    decision = "forbidden",
+    justification = "Use rg --files or a scoped project script; find can conceal broad deletion or traversal.",
+)
+
+prefix_rule(
+    pattern = ["git", "clean"],
+    decision = "forbidden",
+    justification = "Git clean can destroy untracked work.",
+)
+
+prefix_rule(
+    pattern = ["git", "reset", "--hard"],
+    decision = "forbidden",
+    justification = "Hard reset is forbidden. Preserve work and use a new branch or targeted patch.",
+)
+
+prefix_rule(
+    pattern = ["git", "checkout", "--"],
+    decision = "forbidden",
+    justification = "Broad checkout restore is forbidden.",
+)
+
+prefix_rule(
+    pattern = ["git", "restore", "."],
+    decision = "forbidden",
+    justification = "Broad restore is forbidden. Restore only a verified project file after reviewing the diff.",
+)
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "forbidden",
+    justification = "Direct pushes are forbidden. Use scripts/safe_git_push.sh, which validates the approved private personal remote and tracked files.",
+)
+
+prefix_rule(
+    pattern = ["git", "branch", ["-D", "-d", "--delete"]],
+    decision = "forbidden",
+    justification = "Branch deletion is not required during implementation; preserve rollback points.",
+)
+
+prefix_rule(
+    pattern = ["gh", "repo", ["create", "delete", "archive", "rename", "transfer"]],
+    decision = "forbidden",
+    justification = "Direct repository mutations are forbidden. Only the guarded private-repository creation script is permitted.",
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", ["create", "merge", "close", "reopen"]],
+    decision = "forbidden",
+    justification = "Do not mutate pull requests during this build.",
+)
+
+prefix_rule(
+    pattern = ["gh", "issue", ["create", "close", "reopen", "edit", "delete"]],
+    decision = "forbidden",
+    justification = "Do not mutate GitHub issues during this build.",
+)
+
+prefix_rule(
+    pattern = ["gh", "workflow", "run"],
+    decision = "forbidden",
+    justification = "Do not trigger external workflows from the implementation session.",
+)
+
+prefix_rule(
+    pattern = [["chmod", "chown"], ["-R", "--recursive"]],
+    decision = "forbidden",
+    justification = "Recursive ownership or permission changes are forbidden.",
+)
+
+prefix_rule(
+    pattern = [["dd", "mkfs", "newfs"]],
+    decision = "forbidden",
+    justification = "Disk and filesystem-writing utilities are forbidden.",
+)
+
+prefix_rule(
+    pattern = ["diskutil", ["eraseDisk", "partitionDisk", "eraseVolume", "deleteVolume"]],
+    decision = "forbidden",
+    justification = "Destructive disk operations are forbidden.",
+)
+
+prefix_rule(
+    pattern = [["shutdown", "reboot", "halt", "poweroff"]],
+    decision = "forbidden",
+    justification = "The project must not power off or restart the machine.",
+)
+
+prefix_rule(
+    pattern = [["killall", "pkill"]],
+    decision = "forbidden",
+    justification = "Broad process termination can disrupt unrelated work. Stop only a process started by this project using its exact PID.",
+)
+
+prefix_rule(
+    pattern = ["brew", ["uninstall", "cleanup", "autoremove"]],
+    decision = "forbidden",
+    justification = "System-wide package cleanup or uninstallation is outside project scope.",
+)

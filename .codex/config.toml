@@ -1,0 +1,21 @@
+# User-selected Codex builder configuration for this project.
+# Full Access removes normal filesystem/network containment. Project hooks, rules,
+# guarded scripts, AGENTS.md, Git checkpoints, and a private remote are compensating
+# controls; they are not equivalent to an OS sandbox.
+
+model = "gpt-5.6-sol"
+model_reasoning_effort = "medium"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+allow_login_shell = false
+web_search = "live"
+project_root_markers = [".hermes-ai-attention-project", ".git"]
+
+[features]
+hooks = true
+prevent_idle_sleep = true
+skill_mcp_dependency_install = false
+
+[shell_environment_policy]
+inherit = "core"
+exclude = ["*KEY*", "*SECRET*", "*TOKEN*", "*PASSWORD*", "AWS_*", "AZURE_*", "GOOGLE_*", "GH_TOKEN", "GITHUB_TOKEN", "OPENAI_API_KEY", "DEEPSEEK_API_KEY"]

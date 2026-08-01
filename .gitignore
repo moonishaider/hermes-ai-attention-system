@@ -1,0 +1,66 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.token
+secrets/
+credentials/
+
+# Real imported/private data
+runtime-data/
+data/private/
+imports/
+exports/
+context-inbox/private/
+chatgpt-export*/
+codex-history-cache/
+
+# Databases and backups
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+backups/
+
+# Logs and diagnostics
+logs/
+*.log
+diagnostics/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+build/
+coverage/
+
+# macOS/editor
+.DS_Store
+.vscode/
+.idea/
+
+# Project Codex configuration and safety controls are intentionally versioned.
+
+# Full Access build quarantine and local reports
+.workspace-quarantine/
+implementation/private/
+# Local Codex/Hermes secrets and runtime state
+auth.json
+credentials.json
+runtime/
+# Real histories and evidence
+codex-history*/
+source-cache/
+audit-private/
+# Local project config may contain user-specific settings
+config/local.*
