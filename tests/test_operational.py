@@ -116,7 +116,9 @@ class OperationalTests(unittest.TestCase):
         path = Path(self.temp.name) / ".env"
         path.write_text("DEEPSEEK_API_KEY=super-secret\n", encoding="utf-8")
         status = configured_keys(path)
-        self.assertEqual({"DEEPSEEK_API_KEY": True, "OPENAI_API_KEY": False}, status)
+        self.assertTrue(status["DEEPSEEK_API_KEY"])
+        self.assertFalse(status["OPENAI_API_KEY"])
+        self.assertFalse(status["MCP_GITHUB_PERSONAL_READONLY_API_KEY"])
         self.assertNotIn("super-secret", repr(status))
 
     def test_direct_model_routes_use_configured_endpoint_and_never_sol(self):

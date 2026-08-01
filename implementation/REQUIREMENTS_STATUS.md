@@ -11,7 +11,7 @@
 | MOD-001–011 | Operational | Native DeepSeek Flash plus direct Pro/Luna/Terra all passed live synthetic smokes; Sol remains builder-only; usage/cost ledger active |
 | ACT-001–012 | Restricted executor in shadow | Exact hash, TTL, idempotency, context/risk policy, kill switch, fixed Slack destination; no executor exposed to Hermes |
 | OPS-001–010 | Partial operational | Resumable onboarding, exact install, backups, restore drill, resource evidence, 25 tests; human gates remain |
-| GIT-001–009 | Partial operational | Private project published; disabled separate runtime OAuth entries, provenance schema, negative writes; live smoke pending |
+| GIT-001–009 | Operational | Private project published; separate personal and Inside Success MCPs live through `/readonly`, exact allowlists, metadata smokes, immutable provenance adapter, and negative write proof |
 | CDX-001–005 | Implemented | Protected controls, baseline commit `b8e8a6e`, implementation records, incremental ingestion |
 
 Completion requires code/configuration plus test evidence or an explicitly documented manual operational proof.

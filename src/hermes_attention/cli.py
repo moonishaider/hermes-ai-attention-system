@@ -64,7 +64,11 @@ def build_parser() -> argparse.ArgumentParser:
     onboarding.add_argument("--chatgpt-export", type=Path)
     onboarding.add_argument("--confirm-chatgpt-import", action="store_true")
     secret = commands.add_parser("secret", help="store one provider key through hidden input outside Git")
-    secret.add_argument("name", choices=("DEEPSEEK_API_KEY", "OPENAI_API_KEY"))
+    secret.add_argument("name", choices=(
+        "DEEPSEEK_API_KEY", "OPENAI_API_KEY",
+        "MCP_GITHUB_PERSONAL_READONLY_API_KEY", "MCP_GITHUB_INSIDE_SUCCESS_READONLY_API_KEY",
+        "SLACK_INSIDE_SUCCESS_CLIENT_SECRET", "SLACK_MITCHELL_CLIENT_SECRET",
+    ))
     smoke = commands.add_parser("model-smoke", help="run a minimal synthetic direct-API smoke")
     smoke.add_argument("route", choices=("routine", "difficult", "vision", "review"))
     return parser
