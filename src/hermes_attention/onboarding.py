@@ -91,7 +91,8 @@ class OnboardingOrchestrator:
         results.append(self._record("history", "complete", f"Codex bounded batch scanned={history['scanned']} inserted={history['inserted']} start={start_date}; ChatGPT {chatgpt_detail}"))
 
         keys = configured_keys()
-        results.append(self._record("model_secrets", "complete" if all(keys.values()) else "human_required", "configured=" + ",".join(key for key, present in keys.items() if present) + "; missing=" + ",".join(key for key, present in keys.items() if not present)))
+        provider_keys = {name: keys[name] for name in ("DEEPSEEK_API_KEY", "OPENAI_API_KEY")}
+        results.append(self._record("model_secrets", "complete" if all(provider_keys.values()) else "human_required", "configured=" + ",".join(key for key, present in provider_keys.items() if present) + "; missing=" + ",".join(key for key, present in provider_keys.items() if not present)))
         smoke_results = []
         client = DirectModelClient(self.paths.config_dir / "models.json", service.store)
         synthetic_image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="

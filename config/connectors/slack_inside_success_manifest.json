@@ -1,0 +1,32 @@
+{
+  "display_information": {
+    "name": "Hermes Inside Success Read Only",
+    "description": "Read-only Slack evidence source for Syed's local Hermes assistant"
+  },
+  "oauth_config": {
+    "redirect_urls": ["http://127.0.0.1:8765/callback"],
+    "scopes": {
+      "user": [
+        "search:read.public",
+        "search:read.private",
+        "search:read.mpim",
+        "search:read.im",
+        "search:read.files",
+        "files:read",
+        "search:read.users",
+        "channels:read",
+        "groups:read",
+        "mpim:read",
+        "channels:history",
+        "groups:history",
+        "mpim:history",
+        "im:history"
+      ]
+    }
+  },
+  "settings": {
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": true
+  }
+}

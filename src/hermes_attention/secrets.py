@@ -8,7 +8,14 @@ from pathlib import Path
 import tempfile
 
 
-ALLOWED_KEYS = {"DEEPSEEK_API_KEY", "OPENAI_API_KEY"}
+ALLOWED_KEYS = {
+    "DEEPSEEK_API_KEY",
+    "OPENAI_API_KEY",
+    "MCP_GITHUB_PERSONAL_READONLY_API_KEY",
+    "MCP_GITHUB_INSIDE_SUCCESS_READONLY_API_KEY",
+    "SLACK_INSIDE_SUCCESS_CLIENT_SECRET",
+    "SLACK_MITCHELL_CLIENT_SECRET",
+}
 
 
 def configured_keys(env_path: Path | None = None) -> dict[str, bool]:
