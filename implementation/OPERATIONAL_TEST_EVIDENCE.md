@@ -13,15 +13,16 @@ Checked: 1 August 2026
 | Hermes broad-tool negative inventory | Broad tools disabled; `hermes_attention` enabled |
 | Voice dependency imports | Passed |
 | Synthetic Edge TTS to local faster-whisper | Passed; 16,272 bytes; transcript not printed; 16.45 s; peak 399.8 MB |
-| Real Codex bounded ingestion | 12,000 scanned; 1,842 conversation items; 469 Inside Success; tool output/reasoning excluded |
-| Codex ingestion resources | 2.10 s; peak 117.9 MB |
+| Real Codex bounded ingestion | Additional 50×1,000-record pass completed; 9,525 total conversation items; 4,784 Inside Success/4,741 unknown; tool output/reasoning excluded |
+| Recorded larger Codex pass resources | 50,000 scanned in 74.1 s; peak 435.4 MB; no content printed |
 | SQLite backup to new file | Integrity `ok`; 1,842 evidence rows |
 | Screen adapter | Grant and single-use semantics passed; OS permission not requested |
 | Supervised action | Kill switch, destination, approval/hash, and negative destination tests passed with synthetic sender |
 | DeepSeek V4 Flash live smoke | Passed; 1,265 ms; 100 input/16 output tokens; estimated `$0.00001848` |
 | DeepSeek V4 Pro live smoke | Passed; 1,670 ms; 21 input/24 output tokens; estimated `$0.000030015` |
 | Hermes one-shot master assistant | Passed; called project status first and reported `external writes enabled: false` |
-| OpenAI Luna/Terra routes | Contract tests passed; credentialed live smokes pending |
+| GPT-5.6 Luna live vision smoke | Passed with synthetic 1-pixel image; 3,478 ms; 24 input/20 output tokens; estimated `$0.000144` |
+| GPT-5.6 Terra live review smoke | Passed; 2,310 ms; 22 input/9 output tokens; estimated `$0.00019` |
 | Connector inventories | Disabled with allowlists; live OAuth/tool-list smokes pending |
 
 Runtime data, audio, checkpoints, restore files, private evidence, and diagnostics are excluded from Git.
