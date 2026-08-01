@@ -14,6 +14,14 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from hermes_attention.service import AttentionService  # noqa: E402
+from hermes_attention.google_oauth_guard import install_google_oauth_scope_guard  # noqa: E402
+
+
+# Google Workspace MCP metadata advertises write-capable scopes even for a
+# read-only Hermes tool inventory.  Install the project-local guard before MCP
+# reauthorization can occur; recognized Google resources are fail-closed to
+# the immutable scope allowlist.
+install_google_oauth_scope_guard()
 
 
 def _call(method: str, **kwargs: Any) -> str:

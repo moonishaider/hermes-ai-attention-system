@@ -47,12 +47,12 @@
       "id": "google_work_readonly",
       "type": "google-workspace-mcp",
       "mode": "read-only",
-      "enabled": false,
+      "enabled": true,
       "account_boundary": "work Google account",
       "browser_profile": "Company Chrome",
       "endpoints": {"gmail": "https://gmailmcp.googleapis.com/mcp/v1", "drive": "https://drivemcp.googleapis.com/mcp/v1", "calendar": "https://calendarmcp.googleapis.com/mcp/v1"},
       "oauth_scopes": ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/calendar.calendarlist.readonly", "https://www.googleapis.com/auth/calendar.events.readonly"],
-      "tools": {"include": ["search_threads", "get_message", "get_thread", "list_labels", "list_calendars", "list_events", "get_event"], "exclude": ["create_draft", "label_message", "label_thread", "unlabel_message", "unlabel_thread", "create_event", "update_event", "delete_event", "respond_to_event"]}
+      "tools": {"include": ["search_threads", "get_message", "get_thread", "list_labels", "search_files", "list_recent_files", "get_file_metadata", "read_file_content", "list_calendars", "list_events", "get_event"], "exclude": ["create_draft", "label_message", "label_thread", "unlabel_message", "unlabel_thread", "copy_file", "create_file", "download_file_content", "create_event", "update_event", "delete_event", "respond_to_event", "suggest_time"]}
     },
     {
       "id": "google_personal_readonly",
@@ -63,7 +63,7 @@
       "browser_profile": "Profile 1",
       "endpoints": {"gmail": "https://gmailmcp.googleapis.com/mcp/v1", "drive": "https://drivemcp.googleapis.com/mcp/v1", "calendar": "https://calendarmcp.googleapis.com/mcp/v1"},
       "oauth_scopes": ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/calendar.calendarlist.readonly", "https://www.googleapis.com/auth/calendar.events.readonly"],
-      "tools": {"include": ["search_threads", "get_message", "get_thread", "list_labels", "list_calendars", "list_events", "get_event"], "exclude": ["create_draft", "label_message", "label_thread", "unlabel_message", "unlabel_thread", "create_event", "update_event", "delete_event", "respond_to_event"]}
+      "tools": {"include": ["search_threads", "get_message", "get_thread", "list_labels", "search_files", "list_recent_files", "get_file_metadata", "read_file_content", "list_calendars", "list_events", "get_event"], "exclude": ["create_draft", "label_message", "label_thread", "unlabel_message", "unlabel_thread", "copy_file", "create_file", "download_file_content", "create_event", "update_event", "delete_event", "respond_to_event", "suggest_time"]}
     },
     {
       "id": "zoom_readonly",

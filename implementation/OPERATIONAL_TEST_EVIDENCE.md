@@ -5,7 +5,7 @@ Checked: 2 August 2026
 | Check | Result |
 |---|---|
 | Safety preflight, persisted hook tests, command-rule tests | Passed |
-| Python unit, integration, security, history, action, model-route tests | 28 passed |
+| Python unit, integration, security, history, action, model-route tests | 29 passed |
 | Configuration doctor and JSON/TOML validation | Passed |
 | Versionable-file secret scan | Passed |
 | Git diff whitespace check | Passed |
@@ -23,7 +23,7 @@ Checked: 2 August 2026
 | Hermes one-shot master assistant | Passed; called project status first and reported `external writes enabled: false` |
 | GPT-5.6 Luna live vision smoke | Passed with synthetic 1-pixel image; 3,478 ms; 24 input/20 output tokens; estimated `$0.000144` |
 | GPT-5.6 Terra live review smoke | Passed; 2,310 ms; 22 input/9 output tokens; estimated `$0.00019` |
-| Connector inventories | GitHub personal/company plus Inside Success and Mitchell Slack live; Google and Zoom remain disabled pending separate consent/product setup |
+| Connector inventories | GitHub personal/company, Inside Success and Mitchell Slack, and work Gmail/Drive/Calendar live; personal Google and Zoom remain disabled |
 | GitHub personal MCP | Live through `/mcp/readonly`; authenticated `moonishaider`; private project metadata read; 14 exact read tools allowed |
 | GitHub personal negative write | `create_or_update_file` resolved to `BLOCKED_TOOL_UNAVAILABLE`; no network write attempted |
 | GitHub Inside Success MCP | Live through separate `/mcp/readonly`; 36 authorized repositories visible; metadata-only smoke passed; no approval pending |
@@ -36,6 +36,10 @@ Checked: 2 August 2026
 | Mitchell Slack MCP inventory | Connected in 3,186 ms; seven exact search/read tools; Slack MCP enabled and agent-app experience off |
 | Mitchell Slack read smoke | Synthetic zero-match channel search succeeded; 167-byte response hashed, source content not printed |
 | Mitchell Slack negative write | `slack_send_message` absent from discovery and excluded locally; blocked before request, with no Slack write executed |
+| Work Gmail OAuth/read smoke | Exact `gmail.readonly` token stored mode 600; `list_labels` metadata-only probe passed; four read tools exposed locally |
+| Work Drive OAuth/read smoke | Exact `drive.readonly` token stored mode 600; bounded recent-file probe passed; four read tools exposed locally |
+| Work Calendar OAuth/read smoke | Exact Calendar list/events read-only token stored mode 600; calendar-list probe passed; three read tools exposed locally |
+| Work Google negative writes | Gmail draft/label writes, Drive create/copy/download, and Calendar create/update/delete/respond/suggest tools excluded; registry tests reject representative writes before request |
 
 Runtime data, audio, checkpoints, restore files, private evidence, and diagnostics are excluded from Git.
 

@@ -6,10 +6,9 @@ The authorized POSIX `tr` normalization fix passed macOS Bash regression tests. 
 
 ## Manual gates
 
-- Enter provider keys through hidden local input and run low-cost route smoke tests. Hermes and the project plugin are installed.
-- Select exact GitHub, Slack, Google, and Zoom accounts and approve only read scopes.
+- Authorize the separate personal Google project/account and the Zoom account with only reviewed read scopes. Work Google, GitHub, and both Slack connections are live.
 - Supply an official ChatGPT export if historical backfill is wanted.
 - Decide whether to grant narrow macOS Microphone and Screen Recording permissions; adapters are ready.
 - Run real-data context/attention calibration and native live-microphone acceptance. The backup/restore drill passed.
 
-No local dev server, browser/computer control, live message/calendar/form action, OAuth flow, or macOS permission request was performed.
+No local dev server, live message/calendar/form action, or macOS permission request was performed. Authorized browser control was limited to account-scoped connector setup; no broad browser/computer control was enabled.

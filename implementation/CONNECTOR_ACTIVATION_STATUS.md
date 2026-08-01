@@ -8,7 +8,7 @@ Checked: 2 August 2026
 | GitHub company `Inside-Success` | Live, tested | Separate fine-grained token; provider `/readonly`; 14-tool allowlist; 36 authorized repositories visible; organization approval not pending; write tool unavailable |
 | Slack Inside Success | Live, inventory tested | Internal app `A0BMF36RS9X`; strict OAuth granted exactly 14 user read scopes; seven exact read/search MCP tools; zero bot scopes; Slack MCP enabled while agent-app experience remains off |
 | Slack Mitchell | Live, inventory tested | Internal app `A0BN85H7Y80`; strict OAuth granted exactly 14 user read scopes; seven exact read/search MCP tools; Profile 1 and Mitch Deutsch boundaries verified; Slack MCP enabled while agent-app experience remains off |
-| Google work Gmail/Drive/Calendar | Prepared, disabled | Developer Preview endpoints; Cloud OAuth client/account consent pending |
+| Google work Gmail/Drive/Calendar | Live, tested | Separate resource tokens with exact Gmail, Drive, and Calendar read-only scopes; explicit Hermes read-tool allowlists; write tools excluded |
 | Google personal Gmail/Drive/Calendar | Prepared, disabled | Separate logical entries; Cloud OAuth client/account consent pending |
 | Zoom | Registry only, disabled | Marketplace integration point, account scopes, product endpoint/license pending |
 
@@ -19,3 +19,5 @@ Slack's combined manifest creation/install wizard returned a misleading installa
 The first generic Hermes OAuth attempt inherited every scope advertised by Slack, including writes. That grant was revoked before use, its three local state files were preserved mode-600 under ignored quarantine, and the active files were recreated by the fail-closed strict-scope adapter. The live grant contains exactly the 14 reviewed read scopes. No Slack content was printed and no message, channel, reaction, canvas, list, or file write was attempted.
 
 Mitchell uses a distinct Slack app, client credential, token set, callback port, Hermes server name, and Profile 1 browser boundary. The live zero-match `slack_search_channels` smoke succeeded without printing source content. The write tool is absent from the discovered inventory and blocked by project policy before any external request.
+
+Work Google uses the organization-owned `hermes-ai-attention-work` Cloud project and a Web OAuth client stored outside Git with owner-only permissions. The three official Developer Preview MCP resources were authorized separately. Stored token scopes are exactly `gmail.readonly`, `drive.readonly`, and the two Calendar read-only scopes. Metadata-only probes passed for Gmail labels, recent Drive files, and Calendar lists without printing source content. Raw provider inventories include write-capable Gmail, Drive, and Calendar tools; Hermes exposes only the reviewed local read allowlists.

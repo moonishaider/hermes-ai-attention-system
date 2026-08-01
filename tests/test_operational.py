@@ -13,6 +13,7 @@ from hermes_attention.config import load_json
 from hermes_attention.domain import ActionState, RiskClass
 from hermes_attention.executor import ExecutionDenied, SlackDestination, SupervisedActionExecutor
 from hermes_attention.history import CodexHistoryBridge
+from hermes_attention.google_oauth_guard import APPROVED_SCOPES, select_google_scopes
 from hermes_attention.policy import PolicyEngine
 from hermes_attention.routing import ContextRouter
 from hermes_attention.runtime_models import DirectModelClient
@@ -50,6 +51,18 @@ class OperationalTests(unittest.TestCase):
         bridge = CodexHistoryBridge(self.store, ContextRouter(load_json(ROOT / "config/contexts.json")), home)
         self.assertEqual(3, bridge.ingest(maximum_records=3)["scanned"])
         self.assertEqual(3, bridge.ingest(maximum_records=3)["scanned"])
+
+    def test_google_oauth_scope_guard_is_read_only_and_resource_specific(self):
+        class Metadata:
+            def __init__(self, resource: str):
+                self.resource = resource
+
+        for host, scopes in APPROVED_SCOPES.items():
+            selected = select_google_scopes(Metadata(f"https://{host}/mcp"))
+            self.assertEqual(" ".join(scopes), selected)
+            self.assertNotIn("modify", selected)
+            self.assertNotIn("mail.google.com", selected)
+        self.assertIsNone(select_google_scopes(Metadata("https://example.com/mcp")))
 
     def test_codex_tool_output_is_not_ingested(self):
         home = Path(self.temp.name) / "codex"
