@@ -23,6 +23,7 @@ from hermes_attention.slack_oauth import (
     SlackOAuthConnection,
     SlackOAuthError,
     build_authorization_url,
+    load_connection,
     persist_hermes_oauth_state,
     validate_granted_scopes,
 )
@@ -173,6 +174,17 @@ class OperationalTests(unittest.TestCase):
         self.assertEqual(connection.scopes, validate_granted_scopes(connection.scopes, "search:read.public,channels:history"))
         with self.assertRaises(SlackOAuthError):
             validate_granted_scopes(connection.scopes, "search:read.public chat:write")
+
+    def test_slack_connections_are_isolated_and_use_distinct_callbacks(self):
+        inside = load_connection("inside-success")
+        mitchell = load_connection("mitchell")
+        self.assertNotEqual(inside.app_id, mitchell.app_id)
+        self.assertNotEqual(inside.client_id, mitchell.client_id)
+        self.assertNotEqual(inside.client_secret_env, mitchell.client_secret_env)
+        self.assertNotEqual(inside.server_name, mitchell.server_name)
+        self.assertNotEqual(inside.redirect_uri, mitchell.redirect_uri)
+        self.assertEqual(inside.scopes, mitchell.scopes)
+        self.assertFalse(any("write" in scope for scope in mitchell.scopes))
 
     def test_slack_oauth_persistence_is_mode_600_and_result_has_no_tokens(self):
         connection = SlackOAuthConnection(

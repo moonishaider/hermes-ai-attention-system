@@ -73,7 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
     smoke = commands.add_parser("model-smoke", help="run a minimal synthetic direct-API smoke")
     smoke.add_argument("route", choices=("routine", "difficult", "vision", "review"))
     slack_oauth = commands.add_parser("slack-oauth", help="run strict-scope OAuth for a reviewed Slack connection")
-    slack_oauth.add_argument("connection", choices=("inside-success",))
+    slack_oauth.add_argument("connection", choices=("inside-success", "mitchell"))
     slack_oauth.add_argument("--timeout", type=int, default=240)
     return parser
 

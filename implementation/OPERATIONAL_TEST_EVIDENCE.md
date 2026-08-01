@@ -1,11 +1,11 @@
 # Operational test evidence
 
-Checked: 1 August 2026
+Checked: 2 August 2026
 
 | Check | Result |
 |---|---|
 | Safety preflight, persisted hook tests, command-rule tests | Passed |
-| Python unit, integration, security, history, action, model-route tests | 25 passed |
+| Python unit, integration, security, history, action, model-route tests | 28 passed |
 | Configuration doctor and JSON/TOML validation | Passed |
 | Versionable-file secret scan | Passed |
 | Git diff whitespace check | Passed |
@@ -23,7 +23,7 @@ Checked: 1 August 2026
 | Hermes one-shot master assistant | Passed; called project status first and reported `external writes enabled: false` |
 | GPT-5.6 Luna live vision smoke | Passed with synthetic 1-pixel image; 3,478 ms; 24 input/20 output tokens; estimated `$0.000144` |
 | GPT-5.6 Terra live review smoke | Passed; 2,310 ms; 22 input/9 output tokens; estimated `$0.00019` |
-| Connector inventories | GitHub personal/company and Inside Success Slack live; remaining connectors disabled pending separate consent |
+| Connector inventories | GitHub personal/company plus Inside Success and Mitchell Slack live; Google and Zoom remain disabled pending separate consent/product setup |
 | GitHub personal MCP | Live through `/mcp/readonly`; authenticated `moonishaider`; private project metadata read; 14 exact read tools allowed |
 | GitHub personal negative write | `create_or_update_file` resolved to `BLOCKED_TOOL_UNAVAILABLE`; no network write attempted |
 | GitHub Inside Success MCP | Live through separate `/mcp/readonly`; 36 authorized repositories visible; metadata-only smoke passed; no approval pending |
@@ -32,6 +32,10 @@ Checked: 1 August 2026
 | Inside Success Slack MCP inventory | Connected in 3,200 ms; seven tools discovered, all search/read; MCP enabled while Slack agent-app experience remains off |
 | Inside Success Slack read smoke | Synthetic zero-match public-channel lookup succeeded; result content was not printed |
 | Inside Success Slack negative write | `slack_send_message` unavailable and blocked; no Slack message or write request executed |
+| Mitchell Slack strict OAuth | Exactly 14 reviewed read scopes granted with no missing scopes; token/client/meta state stored mode-600 outside Git |
+| Mitchell Slack MCP inventory | Connected in 3,186 ms; seven exact search/read tools; Slack MCP enabled and agent-app experience off |
+| Mitchell Slack read smoke | Synthetic zero-match channel search succeeded; 167-byte response hashed, source content not printed |
+| Mitchell Slack negative write | `slack_send_message` absent from discovery and excluded locally; blocked before request, with no Slack write executed |
 
 Runtime data, audio, checkpoints, restore files, private evidence, and diagnostics are excluded from Git.
 
