@@ -6,8 +6,9 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from typing import Any
 
-from .domain import EvidenceItem, Provenance
+from .domain import ConfidenceState, EvidenceItem, Provenance
 from .routing import ContextRouter
+from .security import detect_prompt_injection, redact_secrets
 
 
 GITHUB_WRITE_TOKENS = {
@@ -60,8 +61,9 @@ def normalize_github_item(
         "line_end": payload.get("line_end"),
         "number": payload.get("number"),
     }
-    content = str(payload.get("content") or payload.get("body") or payload.get("message") or payload.get("title") or "")
+    content, _ = redact_secrets(str(payload.get("content") or payload.get("body") or payload.get("message") or payload.get("title") or ""))
     timestamp = str(payload.get("updated_at") or payload.get("created_at") or datetime.now(UTC).isoformat())
+    revision = str(payload.get("sha") or payload.get("updated_at") or native_id)
     provenance = Provenance(
         source_system="github",
         connection_id=connection_id,
@@ -73,14 +75,15 @@ def normalize_github_item(
         container=repository,
         author=str(payload.get("author") or payload.get("actor") or "unknown"),
         uri=payload.get("url") or payload.get("html_url"),
-        revision=str(payload.get("sha") or payload.get("updated_at") or native_id),
+        revision=revision,
         permission_ref="github-readonly",
         metadata=metadata,
     )
     return EvidenceItem(
-        evidence_id=f"github:{sha256(f'{owner}/{repository}/{object_type}/{native_id}'.encode()).hexdigest()}",
+        evidence_id=f"github:{sha256(f'{owner}/{repository}/{object_type}/{native_id}/{revision}'.encode()).hexdigest()}",
         title=str(payload.get("title") or payload.get("path") or f"{owner}/{repository} {object_type}"),
         content=content,
         provenance=provenance,
         contexts=router.classify(provenance),
+        confidence_state=ConfidenceState.UNCERTAIN if detect_prompt_injection(content) else ConfidenceState.INFERRED,
     )

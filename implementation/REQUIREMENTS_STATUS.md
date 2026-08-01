@@ -16,4 +16,4 @@
 
 Completion requires code/configuration plus test evidence or an explicitly documented manual operational proof.
 
-Current automated evidence: 13 passing stdlib `unittest` cases; configuration doctor, repository secret scan, `git diff --check`, safety preflight, and safety-control verifier. See `implementation/MILESTONE_01_WORKING_CORE.md`.
+Current automated evidence: 14 passing stdlib `unittest` cases; configuration doctor, repository secret scan, `git diff --check`, safety preflight, and safety-control verifier. See `implementation/MILESTONE_01_WORKING_CORE.md`.

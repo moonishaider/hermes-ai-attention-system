@@ -10,8 +10,9 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator
 from zipfile import ZipFile
 
-from .domain import EvidenceItem, Provenance
+from .domain import ConfidenceState, EvidenceItem, Provenance
 from .routing import ContextRouter
+from .security import detect_prompt_injection, redact_secrets
 from .storage import Store
 
 
@@ -90,7 +91,7 @@ class CodexHistoryBridge:
             for line_number, record in iter_jsonl(path, start_line=start_line):
                 final_line = line_number + 1
                 scanned += 1
-                text = _bounded_text(record)
+                text, _ = redact_secrets(_bounded_text(record))
                 if not text:
                     continue
                 timestamp = str(record.get("timestamp") or record.get("created_at") or datetime.now(UTC).isoformat())
@@ -114,6 +115,7 @@ class CodexHistoryBridge:
                     content=text,
                     provenance=provenance,
                     contexts=contexts,
+                    confidence_state=ConfidenceState.UNCERTAIN if detect_prompt_injection(text) else ConfidenceState.INFERRED,
                 )
                 if self.store.add_evidence(item):
                     inserted += 1
@@ -182,7 +184,7 @@ class ChatGPTExportImporter:
                 continue
             conversation_id = str(conversation.get("id") or conversation.get("conversation_id") or "unknown")
             messages = [_chatgpt_message_text(node) for node in (conversation.get("mapping") or {}).values()]
-            content = "\n\n".join(message for message in messages if message)[:100_000]
+            content, _ = redact_secrets("\n\n".join(message for message in messages if message)[:100_000])
             if not content:
                 continue
             timestamp = datetime.fromtimestamp(created, UTC).isoformat()
@@ -198,12 +200,14 @@ class ChatGPTExportImporter:
                 revision=sha256(content.encode()).hexdigest(),
                 permission_ref="owner-provided-export",
             )
+            revision = sha256(content.encode()).hexdigest()
             item = EvidenceItem(
-                evidence_id=f"chatgpt:{conversation_id}",
+                evidence_id=f"chatgpt:{conversation_id}:{revision[:16]}",
                 title=str(conversation.get("title") or "ChatGPT conversation"),
                 content=content,
                 provenance=provenance,
                 contexts=self.router.classify(provenance),
+                confidence_state=ConfidenceState.UNCERTAIN if detect_prompt_injection(content) else ConfidenceState.INFERRED,
             )
             if self.store.add_evidence(item):
                 inserted += 1
@@ -237,16 +241,17 @@ class ContextRelayImporter:
             revision=sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest(),
             permission_ref="explicit-context-relay",
         )
-        content = "\n\n".join(
+        content, _ = redact_secrets("\n\n".join(
             str(payload.get(field, ""))
             for field in ("summary", "decisions", "commitments", "unresolved_questions", "selected_excerpts")
             if payload.get(field)
-        )
+        ))
         item = EvidenceItem(
             evidence_id=f"chatgpt-relay:{relay_id}",
             title=str(payload["title"]),
             content=content,
             provenance=provenance,
             contexts=self.router.classify(provenance, hints=tuple(payload["context_labels"])),
+            confidence_state=ConfidenceState.UNCERTAIN if detect_prompt_injection(content) else ConfidenceState.INFERRED,
         )
         return self.store.add_evidence(item)
