@@ -1,0 +1,9 @@
+{
+  "sha": "0123456789abcdef0123456789abcdef01234567",
+  "path": "docs/example.md",
+  "content": "Synthetic repository evidence",
+  "branch": "main",
+  "visibility": "private",
+  "updated_at": "2026-07-31T09:00:00Z",
+  "url": "https://github.example.invalid/moonishaider/example/blob/main/docs/example.md"
+}

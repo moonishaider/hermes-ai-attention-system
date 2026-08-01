@@ -1,0 +1,11 @@
+{
+  "id": "replace-me",
+  "version": "0.1.0",
+  "status": "disabled",
+  "contexts": ["unknown"],
+  "allowed_tools": ["evidence.search"],
+  "prohibited_tools": ["external.write"],
+  "memory_namespace": "replace-me",
+  "model_route": "routine",
+  "serious_mode": false
+}
