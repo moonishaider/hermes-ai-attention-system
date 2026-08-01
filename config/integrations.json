@@ -58,7 +58,7 @@
       "id": "google_personal_readonly",
       "type": "google-workspace-mcp",
       "mode": "read-only",
-      "enabled": false,
+      "enabled": true,
       "account_boundary": "personal Google account",
       "browser_profile": "Profile 1",
       "endpoints": {"gmail": "https://gmailmcp.googleapis.com/mcp/v1", "drive": "https://drivemcp.googleapis.com/mcp/v1", "calendar": "https://calendarmcp.googleapis.com/mcp/v1"},

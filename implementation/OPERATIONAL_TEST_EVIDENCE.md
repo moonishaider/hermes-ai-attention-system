@@ -23,7 +23,7 @@ Checked: 2 August 2026
 | Hermes one-shot master assistant | Passed; called project status first and reported `external writes enabled: false` |
 | GPT-5.6 Luna live vision smoke | Passed with synthetic 1-pixel image; 3,478 ms; 24 input/20 output tokens; estimated `$0.000144` |
 | GPT-5.6 Terra live review smoke | Passed; 2,310 ms; 22 input/9 output tokens; estimated `$0.00019` |
-| Connector inventories | GitHub personal/company, Inside Success and Mitchell Slack, and work Gmail/Drive/Calendar live; personal Google and Zoom remain disabled |
+| Connector inventories | GitHub personal/company, both Slack workspaces, and work/personal Gmail/Drive/Calendar live; Zoom remains disabled |
 | GitHub personal MCP | Live through `/mcp/readonly`; authenticated `moonishaider`; private project metadata read; 14 exact read tools allowed |
 | GitHub personal negative write | `create_or_update_file` resolved to `BLOCKED_TOOL_UNAVAILABLE`; no network write attempted |
 | GitHub Inside Success MCP | Live through separate `/mcp/readonly`; 36 authorized repositories visible; metadata-only smoke passed; no approval pending |
@@ -40,6 +40,10 @@ Checked: 2 August 2026
 | Work Drive OAuth/read smoke | Exact `drive.readonly` token stored mode 600; bounded recent-file probe passed; four read tools exposed locally |
 | Work Calendar OAuth/read smoke | Exact Calendar list/events read-only token stored mode 600; calendar-list probe passed; three read tools exposed locally |
 | Work Google negative writes | Gmail draft/label writes, Drive create/copy/download, and Calendar create/update/delete/respond/suggest tools excluded; registry tests reject representative writes before request |
+| Personal Gmail OAuth/read smoke | Isolated personal client; exact `gmail.readonly` token mode 600; `list_labels` metadata-only probe passed |
+| Personal Drive OAuth/read smoke | Exact `drive.readonly` token mode 600; bounded recent-file probe passed without printing content |
+| Personal Calendar OAuth/read smoke | Exact Calendar list/events read-only token mode 600; calendar-list probe passed after selecting only the two reviewed permissions |
+| Personal Google negative writes | Same explicit Gmail/Drive/Calendar write exclusions as work; registry assertions reject representative personal writes before request |
 
 Runtime data, audio, checkpoints, restore files, private evidence, and diagnostics are excluded from Git.
 

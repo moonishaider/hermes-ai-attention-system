@@ -97,12 +97,13 @@ class CoreTests(unittest.TestCase):
         assert_read_only_tool_inventory(integrations.tool_inventory("github_personal_readonly")["include"])
         with self.assertRaises(PermissionError):
             assert_read_only_tool_inventory(["get_file_contents", "create_issue"])
-        integrations.assert_tool("google_work_readonly", "search_threads")
-        integrations.assert_tool("google_work_readonly", "read_file_content")
-        integrations.assert_tool("google_work_readonly", "list_events")
-        for write_tool in ("create_draft", "create_file", "create_event", "delete_event"):
-            with self.assertRaises(PermissionError):
-                integrations.assert_tool("google_work_readonly", write_tool)
+        for google_connection in ("google_work_readonly", "google_personal_readonly"):
+            integrations.assert_tool(google_connection, "search_threads")
+            integrations.assert_tool(google_connection, "read_file_content")
+            integrations.assert_tool(google_connection, "list_events")
+            for write_tool in ("create_draft", "create_file", "create_event", "delete_event"):
+                with self.assertRaises(PermissionError):
+                    integrations.assert_tool(google_connection, write_tool)
         self.assertFalse(PolicyEngine().allow_external_tool("read-only", "delete_file").allowed)
 
     def test_security_and_extraction(self):
