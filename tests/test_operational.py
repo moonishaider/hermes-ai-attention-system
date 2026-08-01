@@ -18,6 +18,13 @@ from hermes_attention.runtime_models import DirectModelClient
 from hermes_attention.screen import OneShotScreenCapture
 from hermes_attention.overlay import OverlayEvent, OverlayEventBus
 from hermes_attention.secrets import configured_keys
+from hermes_attention.slack_oauth import (
+    SlackOAuthConnection,
+    SlackOAuthError,
+    build_authorization_url,
+    persist_hermes_oauth_state,
+    validate_granted_scopes,
+)
 from hermes_attention.storage import Store
 
 
@@ -146,6 +153,45 @@ class OperationalTests(unittest.TestCase):
             result = client.smoke("vision", image_data_url=image)
         self.assertTrue(result["success"])
         self.assertNotIn("text", result)
+
+    def test_slack_oauth_url_and_grant_are_strictly_read_only(self):
+        connection = SlackOAuthConnection(
+            name="synthetic", app_id="A_TEST", client_id="C_TEST", client_secret_env="TEST_SECRET",
+            server_name="slack_test", server_url="https://mcp.slack.com/mcp",
+            resource="https://mcp.slack.com",
+            authorization_endpoint="https://slack.com/oauth/v2_user/authorize",
+            token_endpoint="https://slack.com/api/oauth.v2.user.access",
+            redirect_uri="http://127.0.0.1:8765/callback",
+            scopes=("search:read.public", "channels:history"),
+        )
+        url = build_authorization_url(connection, "state", "x" * 72)
+        self.assertIn("search%3Aread.public", url)
+        self.assertNotIn("chat%3Awrite", url)
+        self.assertEqual(connection.scopes, validate_granted_scopes(connection.scopes, "search:read.public channels:history"))
+        self.assertEqual(connection.scopes, validate_granted_scopes(connection.scopes, "search:read.public,channels:history"))
+        with self.assertRaises(SlackOAuthError):
+            validate_granted_scopes(connection.scopes, "search:read.public chat:write")
+
+    def test_slack_oauth_persistence_is_mode_600_and_result_has_no_tokens(self):
+        connection = SlackOAuthConnection(
+            name="synthetic", app_id="A_TEST", client_id="C_TEST", client_secret_env="TEST_SECRET",
+            server_name="slack_test", server_url="https://mcp.slack.com/mcp",
+            resource="https://mcp.slack.com",
+            authorization_endpoint="https://slack.com/oauth/v2_user/authorize",
+            token_endpoint="https://slack.com/api/oauth.v2.user.access",
+            redirect_uri="http://127.0.0.1:8765/callback",
+            scopes=("search:read.public",),
+        )
+        token_dir = Path(self.temp.name) / "tokens"
+        result = persist_hermes_oauth_state(connection, "client-secret", {
+            "ok": True, "access_token": "access-secret", "refresh_token": "refresh-secret",
+            "scope": "search:read.public", "expires_in": 3600,
+        }, token_dir=token_dir)
+        self.assertTrue(result["stored"])
+        self.assertNotIn("access-secret", repr(result))
+        self.assertNotIn("client-secret", repr(result))
+        for path in token_dir.iterdir():
+            self.assertEqual(0o600, path.stat().st_mode & 0o777)
 
 
 if __name__ == "__main__":

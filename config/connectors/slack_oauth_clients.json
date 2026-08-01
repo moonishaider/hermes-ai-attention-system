@@ -1,0 +1,31 @@
+{
+  "connections": {
+    "inside-success": {
+      "app_id": "A0BMF36RS9X",
+      "client_id": "1647940711699.11729108876337",
+      "client_secret_env": "SLACK_INSIDE_SUCCESS_CLIENT_SECRET",
+      "server_name": "slack_inside_success_readonly",
+      "server_url": "https://mcp.slack.com/mcp",
+      "resource": "https://mcp.slack.com",
+      "authorization_endpoint": "https://slack.com/oauth/v2_user/authorize",
+      "token_endpoint": "https://slack.com/api/oauth.v2.user.access",
+      "redirect_uri": "http://127.0.0.1:8765/callback",
+      "scopes": [
+        "search:read.public",
+        "search:read.private",
+        "search:read.mpim",
+        "search:read.im",
+        "search:read.files",
+        "files:read",
+        "search:read.users",
+        "channels:read",
+        "groups:read",
+        "mpim:read",
+        "channels:history",
+        "groups:history",
+        "mpim:history",
+        "im:history"
+      ]
+    }
+  }
+}
