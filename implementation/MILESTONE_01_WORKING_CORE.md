@@ -19,7 +19,7 @@
 
 ## Automated evidence
 
-- `13` tests passed with Python 3.11 stdlib `unittest`.
+- `14` tests passed with Python 3.11 stdlib `unittest`.
 - Configuration doctor: passed.
 - Secret scan: passed.
 - Git diff whitespace check: passed.
