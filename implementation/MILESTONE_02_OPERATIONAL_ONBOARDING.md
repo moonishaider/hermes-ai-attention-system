@@ -24,4 +24,3 @@ During PortAudio installation, Homebrew automatically removed its pre-existing r
 ## Remaining human-only gates
 
 Provider credentials are next. Connector OAuth then proceeds one connection at a time. Microphone and Screen Recording permissions remain unrequested. No ChatGPT export is selected. Real calibration and the first destination-locked Slack publish remain semantic/external-action approvals.
-

@@ -52,4 +52,3 @@ def prompt_and_store(key_name: str, env_path: Path | None = None) -> None:
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
-

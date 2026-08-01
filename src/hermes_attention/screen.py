@@ -34,4 +34,3 @@ class OneShotScreenCapture:
         if result.returncode != 0 or not result.stdout.startswith(b"\x89PNG"):
             raise RuntimeError("capture cancelled, permission denied, or no PNG returned")
         return result.stdout
-
