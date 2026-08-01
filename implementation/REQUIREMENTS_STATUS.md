@@ -8,7 +8,7 @@
 | MEM-001–012 | Implemented locally | SQLite/FTS evidence, proposed memory, tasks, audit, checkpoints, contradictions |
 | SPC-001–008 | Implemented | Persistent registry, five examples, disabled serious-mode module, reusable template/scaffolder |
 | ATT-001–010 | Partial operational | Queue, handoff, report, overlay controls, one-shot screen adapter; macOS capture acceptance pending |
-| MOD-001–011 | Implemented, live credentials pending | Native routine DeepSeek plus direct Pro/Luna/Terra routes, usage/cost ledger, contract tests; live smokes pending |
+| MOD-001–011 | Partial operational | Native DeepSeek Flash and direct Pro passed live; Luna/Terra direct contracts pass but await OpenAI key; usage/cost ledger active |
 | ACT-001–012 | Restricted executor in shadow | Exact hash, TTL, idempotency, context/risk policy, kill switch, fixed Slack destination; no executor exposed to Hermes |
 | OPS-001–010 | Partial operational | Resumable onboarding, exact install, backups, restore drill, resource evidence, 25 tests; human gates remain |
 | GIT-001–009 | Partial operational | Private project published; disabled separate runtime OAuth entries, provenance schema, negative writes; live smoke pending |

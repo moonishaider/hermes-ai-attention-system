@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 import json
 import os
 from pathlib import Path
+import ssl
 import time
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -56,6 +57,17 @@ class DirectModelClient:
                         return value.strip()
         return ""
 
+    @staticmethod
+    def _tls_context() -> ssl.SSLContext:
+        """Use an existing trusted CA bundle; never disable certificate validation."""
+        candidates = []
+        if os.environ.get("SSL_CERT_FILE"):
+            candidates.append(Path(os.environ["SSL_CERT_FILE"]))
+        candidates.append(Path("/etc/ssl/cert.pem"))
+        candidates.extend((Path.home() / ".hermes/hermes-agent/.venv/lib").glob("python*/site-packages/certifi/cacert.pem"))
+        bundle = next((path for path in candidates if path.is_file()), None)
+        return ssl.create_default_context(cafile=str(bundle)) if bundle else ssl.create_default_context()
+
     def generate(self, route: str, prompt: str, *, image_data_url: str | None = None, feature: str = "runtime") -> dict[str, Any]:
         spec = self.config["routes"].get(route)
         if not spec:
@@ -92,7 +104,7 @@ class DirectModelClient:
                 spec["endpoint"], data=json.dumps(body).encode(), method="POST",
                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
             )
-            with urlopen(request, timeout=self.timeout_seconds) as response:
+            with urlopen(request, timeout=self.timeout_seconds, context=self._tls_context()) as response:
                 payload = json.loads(response.read())
             usage = payload.get("usage") or {}
             received = bool(payload)

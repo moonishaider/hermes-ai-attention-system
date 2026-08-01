@@ -131,6 +131,7 @@ class OperationalTests(unittest.TestCase):
         self.assertEqual("deepseek-v4-pro", result["model"])
         self.assertNotIn("sol", repr(result).casefold())
         self.assertEqual("https://api.deepseek.com/chat/completions", opened.call_args.args[0].full_url)
+        self.assertIn("context", opened.call_args.kwargs)
 
     def test_smoke_record_does_not_return_provider_text(self):
         class Response:
