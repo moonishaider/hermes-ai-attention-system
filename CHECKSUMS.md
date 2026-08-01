@@ -53,7 +53,7 @@ SHA-256 checksums for the handoff package. `CHECKSUMS.md` itself is excluded.
 - `7088ec5b2c1da6369c2f4c612a1b952ed960972f89d684ffe3cd88321d4b24d8`  `docs/27_GITHUB_INTEGRATION_AND_REPOSITORY_CONTEXT.md`  (5301 bytes)
 - `e02281b578321ad9bea6274665f9e4f3c767eb0d6fa8ea542a1c888052261964`  `docs/28_TWO_PROMPT_CODEX_EXECUTION.md`  (2696 bytes)
 - `fd092bb4a88ce384b8945872297104559f3bbded628680af5ce64b74c1e099dc`  `scripts/preflight_safety.sh`  (2985 bytes)
-- `cd3984d491353e5080e858d7c304284067af246d2f066c9d56628bf2c06aff39`  `scripts/safe_create_private_repo.sh`  (1797 bytes)
+- `f126ed947740ecd3db3dcc1c1da09b7b0afb5d895224508d6c7f2e8be0e03b61`  `scripts/safe_create_private_repo.sh`  (1955 bytes)
 - `bf040430a647faed9034d48710c540ac93736776b44ffb3bc0a86ad489657585`  `scripts/safe_git_push.sh`  (2851 bytes)
 - `b5417924ca55296c34e1007e7a25f296163e6fa0c28b6eaa6c792657510edb2d`  `scripts/test_safety_hook.py`  (3438 bytes)
 - `9e5dcd3c75aa4f10fffc01ddf537f4a2d749ac7bdd429301e585e52969575162`  `scripts/validate_handoff_package.sh`  (1803 bytes)

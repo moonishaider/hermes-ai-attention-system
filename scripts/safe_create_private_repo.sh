@@ -15,7 +15,9 @@ REPO="${1:-hermes-ai-attention-system}"
 command -v gh >/dev/null 2>&1 || { echo "GitHub CLI is required." >&2; exit 2; }
 
 LOGIN="$(gh api user --jq .login 2>/dev/null || true)"
-[[ "${LOGIN,,}" == "${OWNER,,}" ]] || {
+LOGIN_NORMALIZED="$(printf '%s' "$LOGIN" | tr '[:upper:]' '[:lower:]')"
+OWNER_NORMALIZED="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
+[[ "$LOGIN_NORMALIZED" == "$OWNER_NORMALIZED" ]] || {
   echo "Refusing creation: active GitHub identity is '${LOGIN:-unknown}', expected '$OWNER'." >&2
   echo "Switch the GitHub CLI to the personal account before retrying." >&2
   exit 3
