@@ -15,6 +15,7 @@ from .onboarding import OnboardingOrchestrator
 from .runtime_models import DirectModelClient
 from .secrets import configured_keys, prompt_and_store
 from .service import AttentionService
+from .slack_oauth import SlackOAuthError, strict_slack_oauth_login
 
 
 def emit(value: object) -> None:
@@ -71,6 +72,9 @@ def build_parser() -> argparse.ArgumentParser:
     ))
     smoke = commands.add_parser("model-smoke", help="run a minimal synthetic direct-API smoke")
     smoke.add_argument("route", choices=("routine", "difficult", "vision", "review"))
+    slack_oauth = commands.add_parser("slack-oauth", help="run strict-scope OAuth for a reviewed Slack connection")
+    slack_oauth.add_argument("connection", choices=("inside-success",))
+    slack_oauth.add_argument("--timeout", type=int, default=240)
     return parser
 
 
@@ -94,6 +98,13 @@ def main(argv: list[str] | None = None) -> int:
             chatgpt_export=arguments.chatgpt_export, confirm_chatgpt_import=arguments.confirm_chatgpt_import,
         ))
         return 0
+    if arguments.command == "slack-oauth":
+        try:
+            emit(strict_slack_oauth_login(arguments.connection, timeout_seconds=arguments.timeout))
+            return 0
+        except SlackOAuthError as exc:
+            emit({"ok": False, "error": str(exc), "secret_printed": False, "token_printed": False})
+            return 1
 
     service = AttentionService()
     try:

@@ -14,3 +14,5 @@ Current official remote routes checked 1 August 2026:
 No broad build-time GitHub credential may be reused at runtime. Company Chrome is reserved for Inside Success. Profile 1 is used for personal and Mitchell/client authorization.
 
 The two Slack manifests are intentionally separate and contain only read/search/history user scopes. They contain no `chat:write`, conversation creation, reaction write, canvas write, bot, command, webhook, or admin scope. Fixed loopback callback ports let Hermes use Slack's confidential OAuth flow without a local development server; the callback listener exists only during the interactive consent transaction.
+
+The pinned MCP SDK follows the MCP scope-selection strategy by replacing an explicitly configured scope with every scope in Slack's protected-resource metadata, including writes. The project-owned `slack-oauth` command therefore makes the reviewed allowlist authoritative, validates the callback state and PKCE exchange, rejects every extra granted scope, and atomically creates Hermes-compatible mode-600 token state. This is the required route for Slack; do not use generic `hermes mcp login` for these connections.
