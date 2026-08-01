@@ -1,0 +1,20 @@
+{
+  "project_repository": {
+    "owner": "moonishaider",
+    "preferred_name": "hermes-ai-attention-system",
+    "visibility": "private",
+    "writes": "implementation-only-through-guarded-scripts"
+  },
+  "hermes_sources": [
+    {
+      "owner": "moonishaider",
+      "initial_mode": "read-only",
+      "future_writes": "preview-and-approval-only"
+    },
+    {
+      "owner": "inside-success",
+      "initial_mode": "read-only",
+      "future_writes": "disabled-until-explicit-policy-change"
+    }
+  ]
+}

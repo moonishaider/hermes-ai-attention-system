@@ -1,0 +1,31 @@
+{
+  "description": "Full Access safety checks for the Hermes AI Attention project.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/env bash -lc 'root=\"$PWD\"; while [ \"$root\" != / ] && [ ! -f \"$root/.hermes-ai-attention-project\" ]; do root=\"$(dirname \"$root\")\"; done; if [ ! -f \"$root/.hermes-ai-attention-project\" ]; then printf '%s\\n' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Project safety marker not found.\"}}'; exit 0; fi; exec /usr/bin/python3 \"$root/.codex/hooks/pre_tool_use_policy.py\"'",
+            "timeout": 10,
+            "statusMessage": "Checking project safety boundary"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/env bash -lc 'root=\"$PWD\"; while [ \"$root\" != / ] && [ ! -f \"$root/.hermes-ai-attention-project\" ]; do root=\"$(dirname \"$root\")\"; done; if [ ! -f \"$root/.hermes-ai-attention-project\" ]; then exit 0; fi; exec /usr/bin/python3 \"$root/.codex/hooks/subagent_context.py\"'",
+            "timeout": 10,
+            "statusMessage": "Loading project safety context for subagent"
+          }
+        ]
+      }
+    ]
+  }
+}
