@@ -1,4 +1,15 @@
 name: hermes-attention
 version: 0.1.0
 description: Provenance-first attention, retrieval, task, handoff, and action-preview tools.
-entrypoint: __init__.py
+author: Hermes AI Attention project
+kind: standalone
+provides_tools:
+  - hermes_attention_status
+  - hermes_attention_search
+  - hermes_attention_queue
+  - hermes_attention_handoff
+  - hermes_attention_add_task
+  - hermes_attention_propose_action
+  - hermes_attention_request_screen
+  - hermes_attention_daily_report
+  - hermes_attention_routed_reasoning

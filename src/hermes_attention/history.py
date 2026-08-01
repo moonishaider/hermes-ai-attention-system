@@ -67,31 +67,90 @@ def _bounded_text(value: Any, limit: int = 12_000) -> str:
     return ""
 
 
+def _codex_message_text(record: dict[str, Any]) -> str:
+    """Extract only human/assistant conversation text, never tool output or reasoning."""
+    envelope_type = record.get("type")
+    if envelope_type in {"user_message", "assistant_message"}:
+        return _bounded_text(record.get("content"), 12_000)
+    payload = record.get("payload")
+    if not isinstance(payload, dict):
+        return ""
+    payload_type = payload.get("type")
+    if envelope_type == "response_item" and payload_type == "message":
+        role = payload.get("role")
+        if role not in {"user", "assistant"}:
+            return ""
+        parts = payload.get("content")
+        if not isinstance(parts, list):
+            return ""
+        return "\n".join(
+            str(part.get("text", ""))
+            for part in parts
+            if isinstance(part, dict) and part.get("type") in {"input_text", "output_text"}
+        )[:12_000]
+    if envelope_type == "event_msg" and payload_type in {"user_message", "agent_message"}:
+        return _bounded_text(payload.get("message"), 12_000)
+    return ""
+
+
+def _record_timestamp(record: dict[str, Any]) -> datetime | None:
+    value = record.get("timestamp") or record.get("created_at") or record.get("time")
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(value, UTC)
+    if isinstance(value, str) and value:
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    return None
+
+
+def _codex_workspace(path: Path) -> str | None:
+    """Read only the early session metadata needed for deterministic context routing."""
+    for index, (_, record) in enumerate(iter_jsonl(path)):
+        payload = record.get("payload")
+        if isinstance(payload, dict) and isinstance(payload.get("cwd"), str):
+            return payload["cwd"][:2_000]
+        if index >= 49:
+            break
+    return None
+
+
 class CodexHistoryBridge:
     def __init__(self, store: Store, router: ContextRouter, codex_home: Path | None = None) -> None:
         self.store = store
         self.router = router
         self.codex_home = (codex_home or discover_codex_home()).resolve()
 
-    def preview(self) -> dict[str, Any]:
+    def preview(self, *, start_date: str = "2026-03-01") -> dict[str, Any]:
         files = codex_history_candidates(self.codex_home)
         return {
             "codex_home": str(self.codex_home),
             "files": len(files),
             "bytes": sum(path.stat().st_size for path in files),
+            "start_date": start_date,
             "read_only": True,
         }
 
-    def ingest(self, *, maximum_records: int = 500) -> dict[str, int]:
+    def ingest(self, *, maximum_records: int = 500, start_date: str = "2026-03-01") -> dict[str, int | str]:
         inserted = duplicate = scanned = 0
+        threshold = datetime.fromisoformat(start_date).replace(tzinfo=UTC)
         for path in codex_history_candidates(self.codex_home):
             source_key = f"codex:{path.relative_to(self.codex_home)}"
+            workspace = _codex_workspace(path)
             start_line = int(self.store.get_checkpoint(source_key) or 0)
             final_line = start_line
             for line_number, record in iter_jsonl(path, start_line=start_line):
+                if scanned >= maximum_records:
+                    break
                 final_line = line_number + 1
                 scanned += 1
-                text, _ = redact_secrets(_bounded_text(record))
+                record_time = _record_timestamp(record)
+                if record_time and record_time < threshold:
+                    if scanned >= maximum_records:
+                        break
+                    continue
+                text, _ = redact_secrets(_codex_message_text(record))
                 if not text:
                     continue
                 timestamp = str(record.get("timestamp") or record.get("created_at") or datetime.now(UTC).isoformat())
@@ -103,6 +162,7 @@ class CodexHistoryBridge:
                     source_timestamp=timestamp,
                     retrieved_at=datetime.now(UTC).isoformat(),
                     account_id="local-codex",
+                    workspace=workspace,
                     container=str(path.relative_to(self.codex_home)),
                     uri=f"codex://{path.relative_to(self.codex_home)}#{line_number + 1}",
                     revision=sha256(json.dumps(record, sort_keys=True, default=str).encode()).hexdigest(),
@@ -121,12 +181,10 @@ class CodexHistoryBridge:
                     inserted += 1
                 else:
                     duplicate += 1
-                if scanned >= maximum_records:
-                    break
             self.store.set_checkpoint(source_key, str(final_line))
             if scanned >= maximum_records:
                 break
-        return {"scanned": scanned, "inserted": inserted, "duplicates": duplicate}
+        return {"scanned": scanned, "inserted": inserted, "duplicates": duplicate, "start_date": start_date}
 
 
 def _chatgpt_message_text(node: dict[str, Any]) -> str:

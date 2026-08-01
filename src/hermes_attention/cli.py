@@ -11,6 +11,9 @@ import sys
 from .config import ProjectPaths, validate_project_configuration
 from .history import ChatGPTExportImporter, CodexHistoryBridge, ContextRelayImporter
 from .overlay import run_tk_overlay
+from .onboarding import OnboardingOrchestrator
+from .runtime_models import DirectModelClient
+from .secrets import configured_keys, prompt_and_store
 from .service import AttentionService
 
 
@@ -36,11 +39,12 @@ def build_parser() -> argparse.ArgumentParser:
     codex = commands.add_parser("codex-history", help="preview or ingest Codex history read-only")
     codex.add_argument("action", choices=("preview", "ingest"))
     codex.add_argument("--maximum-records", type=int, default=500)
+    codex.add_argument("--start-date", default="2026-03-01")
 
     chatgpt = commands.add_parser("chatgpt-export", help="preview or import an official ChatGPT export")
     chatgpt.add_argument("action", choices=("preview", "import"))
     chatgpt.add_argument("path", type=Path)
-    chatgpt.add_argument("--start-date", default="2026-04-01")
+    chatgpt.add_argument("--start-date", default="2026-03-01")
     chatgpt.add_argument("--confirmed", action="store_true")
 
     relay = commands.add_parser("context-relay", help="ingest one explicit ChatGPT context relay")
@@ -53,6 +57,16 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("date")
 
     commands.add_parser("overlay", help="run the optional local Tk overlay; reads JSON events from stdin")
+    onboarding = commands.add_parser("onboard", help="run or inspect resumable automation-first onboarding")
+    onboarding.add_argument("action", choices=("run", "status"), default="run", nargs="?")
+    onboarding.add_argument("--history-batch", type=int, default=500)
+    onboarding.add_argument("--start-date", default="2026-03-01")
+    onboarding.add_argument("--chatgpt-export", type=Path)
+    onboarding.add_argument("--confirm-chatgpt-import", action="store_true")
+    secret = commands.add_parser("secret", help="store one provider key through hidden input outside Git")
+    secret.add_argument("name", choices=("DEEPSEEK_API_KEY", "OPENAI_API_KEY"))
+    smoke = commands.add_parser("model-smoke", help="run a minimal synthetic direct-API smoke")
+    smoke.add_argument("route", choices=("routine", "difficult", "vision", "review"))
     return parser
 
 
@@ -65,6 +79,17 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if errors else 0
     if arguments.command == "overlay":
         return run_tk_overlay()
+    if arguments.command == "secret":
+        prompt_and_store(arguments.name)
+        emit({"stored": True, "name": arguments.name, "path": "~/.hermes/.env", "secret_printed": False})
+        return 0
+    if arguments.command == "onboard":
+        orchestrator = OnboardingOrchestrator()
+        emit(orchestrator.status() if arguments.action == "status" else orchestrator.run(
+            history_batch=arguments.history_batch, start_date=arguments.start_date,
+            chatgpt_export=arguments.chatgpt_export, confirm_chatgpt_import=arguments.confirm_chatgpt_import,
+        ))
+        return 0
 
     service = AttentionService()
     try:
@@ -76,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
             emit(service.attention_queue(context_id=arguments.context, limit=arguments.limit))
         elif arguments.command == "codex-history":
             bridge = CodexHistoryBridge(service.store, service.router)
-            emit(bridge.preview() if arguments.action == "preview" else bridge.ingest(maximum_records=arguments.maximum_records))
+            emit(bridge.preview(start_date=arguments.start_date) if arguments.action == "preview" else bridge.ingest(maximum_records=arguments.maximum_records, start_date=arguments.start_date))
         elif arguments.command == "chatgpt-export":
             importer = ChatGPTExportImporter(service.store, service.router)
             if arguments.action == "preview":
@@ -89,6 +114,9 @@ def main(argv: list[str] | None = None) -> int:
             emit(service.context_handoff(arguments.context))
         elif arguments.command == "daily-report":
             emit(service.daily_report_draft(arguments.date))
+        elif arguments.command == "model-smoke":
+            image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=" if arguments.route == "vision" else None
+            emit(DirectModelClient(service.paths.config_dir / "models.json", service.store).smoke(arguments.route, image_data_url=image))
         return 0
     finally:
         service.close()

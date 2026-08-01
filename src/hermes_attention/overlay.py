@@ -60,6 +60,7 @@ def run_tk_overlay() -> int:
 
     controls = tk.Frame(root, bg="#111827")
     controls.pack(fill="x", padx=16, pady=8)
+    tk.Button(controls, text="Approve", command=lambda: print(json.dumps({"control": "approve"}), flush=True)).pack(side="left")
     tk.Button(controls, text="Cancel", command=lambda: print(json.dumps({"control": "cancel"}), flush=True)).pack(side="left")
     tk.Button(controls, text="Mute", command=lambda: print(json.dumps({"control": "mute"}), flush=True)).pack(side="left", padx=8)
     tk.Button(controls, text="Dismiss", command=root.withdraw).pack(side="right")

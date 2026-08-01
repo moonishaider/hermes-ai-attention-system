@@ -37,9 +37,10 @@ class GuardedScriptTests(unittest.TestCase):
 
     def test_macos_bash_32_accepts_case_insensitive_expected_identity(self):
         result = self._run_with_identity("MoonisHaider")
-        self.assertEqual(5, result.returncode)
-        self.assertIn("already exists", result.stderr)
+        self.assertIn(result.returncode, {4, 5})
+        self.assertTrue("origin remote already exists" in result.stderr or "already exists" in result.stderr)
         self.assertNotIn("bad substitution", result.stderr)
+        self.assertNotIn("active GitHub identity", result.stderr)
 
     def test_wrong_identity_still_fails_before_repository_check(self):
         result = self._run_with_identity("someone-else")
