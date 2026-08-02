@@ -59,3 +59,7 @@ The public research smoke returned six cited search results for a harmless keybo
 - Authorize Zoom read-only and inspect its inventory now that normal TLS reaches the endpoint.
 - Select the exact Inside Success Slack destination and approve one exact payload before any test send.
 - Import the official ChatGPT ZIP after it arrives and is identified.
+
+## Voice packaging correction
+
+The first supervised `/voice on` attempt found that earlier dependency checks targeted an unused `.venv` while the installed Hermes launcher runs `hermes-agent/venv`. The orchestrator now validates the actual runtime. The same reviewed voice package versions were installed there; Hermes entered live recording and began local faster-whisper preparation. The run was cancelled before processing ambient audio. A deliberate spoken end-to-end sample remains the next gate.

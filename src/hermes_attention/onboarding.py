@@ -85,7 +85,10 @@ class OnboardingOrchestrator:
         enabled = plugin.is_file() and launcher.is_file() and "HERMES_ENABLE_PROJECT_PLUGINS=1" in launcher.read_text(encoding="utf-8")
         results.append(self._record("plugin", "complete" if enabled else "failed", "project plugin is enabled only by guarded launcher" if enabled else "project plugin launcher is incomplete"))
 
-        python = Path.home() / ".hermes/hermes-agent/.venv/bin/python"
+        # The installed Hermes launcher executes ``hermes-agent/venv``.  A
+        # source checkout may also contain ``.venv``, but validating that
+        # unused environment would produce a false operational success.
+        python = Path.home() / ".hermes/hermes-agent/venv/bin/python"
         voice_ok = False
         if python.is_file():
             check = subprocess.run([str(python), "-c", "import sounddevice, faster_whisper, edge_tts, pvporcupine"], capture_output=True, text=True)
