@@ -6,13 +6,13 @@ Activation does not equal real-data acceptance. `implementation/CURRENT_OPERATIO
 
 | Logical connection | State | Verified boundary |
 |---|---|---|
-| GitHub personal `moonishaider` | Live, metadata-smoked | Separate fine-grained token; provider `/readonly`; 14-tool Hermes allowlist; authenticated owner and private project metadata verified; write tool unavailable |
-| GitHub company `Inside-Success` | Live, metadata-smoked | Separate fine-grained token; provider `/readonly`; 14-tool allowlist; 36 authorized repositories visible; organization approval not pending; write tool unavailable |
-| Slack Inside Success | Live, inventory tested | Internal app `A0BMF36RS9X`; strict OAuth granted exactly 14 user read scopes; seven exact read/search MCP tools; zero bot scopes; Slack MCP enabled while agent-app experience remains off |
-| Slack Mitchell | Live, inventory tested | Internal app `A0BN85H7Y80`; strict OAuth granted exactly 14 user read scopes; seven exact read/search MCP tools; Profile 1 and Mitch Deutsch boundaries verified; Slack MCP enabled while agent-app experience remains off |
-| Google work Gmail/Drive/Calendar | Live, metadata-smoked | Separate resource tokens with exact Gmail, Drive, and Calendar read-only scopes; explicit Hermes read-tool allowlists; write tools excluded |
-| Google personal Gmail/Drive/Calendar | Live, metadata-smoked | Separate personal Cloud project, Web client, resource tokens, exact read-only scopes, and read-tool allowlists; sole test user is `moonishaider12@gmail.com` |
-| Zoom | Work identity/license/endpoint/scopes verified; disabled | Zoom Marketplace app creation blocked by provider-side Cloudflare 526 on 2026-08-02; retry, authorize exact four read scopes, inspect `tools/list`, then run metadata-only smoke |
+| GitHub personal `moonishaider` | Live, bounded real acceptance passed | Separate fine-grained token; provider `/readonly`; accepted project-resumption retrieval; write tool unavailable |
+| GitHub company `Inside-Success` | Live, bounded real acceptance passed | Separate token and `/readonly` provider; accepted source-backed report draft; no company write tool |
+| Slack Inside Success | Live, bounded cross-context/report acceptance passed | Exact read scopes/tools; no bot or send tool; accepted cross-context and report-draft use |
+| Slack Mitchell | Live, mixed acceptance | Participated in accepted cross-context use; a separate focused query timed out at 180 seconds; no send tool |
+| Google work Gmail/Drive/Calendar | Reauthorization required | Prior metadata smokes and exact read allowlists stand, but all three access tokens expired without refresh tokens |
+| Google personal Gmail/Drive/Calendar | Reauthorization required | Prior isolated metadata smokes stand; all three access tokens expired without refresh tokens |
+| Zoom | Normal TLS healthy; OAuth pending; disabled | Official endpoint returned HTTP 401 over normal verified TLS on retry; exact work-account OAuth and post-auth inventory remain |
 
 All remote content remains untrusted evidence. Account identity, tool inventory, provider read-only policy, Hermes include list, and a metadata-only smoke must pass separately for every activated connection.
 
@@ -24,4 +24,4 @@ Mitchell uses a distinct Slack app, client credential, token set, callback port,
 
 Work Google uses the organization-owned `hermes-ai-attention-work` Cloud project and a Web OAuth client stored outside Git with owner-only permissions. The three official Developer Preview MCP resources were authorized separately. Stored token scopes are exactly `gmail.readonly`, `drive.readonly`, and the two Calendar read-only scopes. Metadata-only probes passed for Gmail labels, recent Drive files, and Calendar lists without printing source content. Raw provider inventories include write-capable Gmail, Drive, and Calendar tools; Hermes exposes only the reviewed local read allowlists.
 
-Personal Google uses the separate no-organization `hermes-ai-attention-personal` Cloud project, external testing audience, and `Hermes AI Attention - Personal Read Only` app. The Web client, downloaded credential file, environment values, and three OAuth token files are stored outside Git with owner-only permissions. The sole test user is `moonishaider12@gmail.com`. Gmail, Drive, and Calendar metadata-only probes passed; no email, file, or event content was printed and no write tool was invoked.
+Personal Google uses the separate no-organization `hermes-ai-attention-personal` Cloud project, external testing audience, and `Hermes AI Attention - Personal Read Only` app. Credentials and token files remain outside Git with owner-only permissions. The previous Gmail, Drive, and Calendar metadata smokes passed, but they are historical evidence until reauthorization. No write tool was invoked.

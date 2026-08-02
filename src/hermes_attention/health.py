@@ -75,7 +75,7 @@ def startup_health(service: Any) -> dict[str, Any]:
             secret_name = "MCP_GITHUB_PERSONAL_READONLY_API_KEY" if "personal" in name else "MCP_GITHUB_INSIDE_SUCCESS_READONLY_API_KEY"
             base["state"] = "configured-live-smoked" if configured_keys().get(secret_name) else "credential-required"
         elif name == "zoom_readonly":
-            base["state"] = "external-blocker-disabled" if not record.get("enabled") else "configured-unverified"
+            base["state"] = "oauth-required-disabled" if not record.get("enabled") else "configured-unverified"
         elif name == "chatgpt_export_backfill":
             base["state"] = "awaiting-user-selected-official-export"
         else:
@@ -128,7 +128,7 @@ def startup_health(service: Any) -> dict[str, Any]:
         },
         "warnings": [
             name for name, value in connectors.items()
-            if value.get("state") in {"reauthorization-required", "expires-soon", "credential-required", "external-blocker-disabled"}
+            if value.get("state") in {"reauthorization-required", "expires-soon", "credential-required", "oauth-required-disabled"}
         ],
         "secrets_printed": False,
         "private_content_printed": False,

@@ -2,16 +2,19 @@
 
 ## Voice and visible status
 
-Hermes provides native voice mode. Configure the chosen supported TTS provider outside Git, then start voice with Hermes `/voice`. Keep a text transcript/status surface visible. The optional local overlay can be started only deliberately with `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m hermes_attention.cli overlay`; it reads JSON status events from standard input, provides mute/cancel/dismiss controls, and does not capture the screen. Stop it when the session ends.
+Hermes native voice is configured for local faster-whisper STT and Edge TTS. Start daily use with `./scripts/launch_daily_hermes.sh`, then use Hermes `/voice on`; Ctrl+B is push-to-talk and spoken stop phrases/keyboard interruption remain the native cancellation path. The bundled free openWakeWord `Hey Hermes` detector remains off until the real microphone acceptance succeeds, then `/wake on` may enable it deliberately. The overlay displays heard text, current status, streamed reply, context/source, and mute/cancel/dismiss controls; it never captures the screen. The launcher stops it when Hermes exits.
+
+Grant Microphone permission only to the exact process macOS presents for this guarded launch. Test a short non-sensitive phrase, transcription, Flash reply, Edge playback, mute/interruption, and warm/cold latency. If local faster-whisper is not conversationally usable, benchmark one supported low-cost cloud STT before changing the default; keep local as fallback.
 
 ## Screen viewing
 
 1. Ask the assistant to prepare a screen-view request with an explicit reason and context.
 2. Verify its state says `awaiting-explicit-local-capture` and `capture_performed=false`.
-3. Syed manually grants the narrow macOS Screen Recording permission to the chosen Hermes application only if desired.
+3. Syed manually grants narrow macOS Screen Recording permission only when the one-shot test is ready.
 4. Capture only the intended window/region through the reviewed `OneShotScreenCapture` adapter. Its macOS interactive selector is the visible capture indicator, its grant token is consumed before capture, and it writes no image file or automatic retention record.
-5. Use GPT-5.6 Luna for the supplied image. Do not enable continuous viewing, broad computer control, or automatic retention.
-6. Revoke the macOS permission when no longer needed. The adapter is implemented and tested locally but is not registered as an unrestricted Hermes/computer-use tool.
+5. The prepared acceptance command is `PYTHONPATH=src python3 scripts/run_screen_acceptance.py --reason "Prompt 4 one-time reviewed window" --context personal --confirmed-one-shot`. It opens the system interactive selector, sends only the in-memory PNG to GPT-5.6 Luna, and retains no pixels.
+6. Do not enable continuous viewing, broad computer control, Accessibility permission, or automatic screenshot retention.
+7. Revoke the macOS permission when no longer needed. The adapter is not registered as an unrestricted Hermes/computer-use tool.
 
 ## Supervised action testing
 

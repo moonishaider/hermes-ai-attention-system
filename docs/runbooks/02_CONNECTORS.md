@@ -25,6 +25,7 @@ Current activation truth is in `implementation/CURRENT_OPERATIONAL_STATE.md` and
 2. Create separate `google_work_readonly` and `google_personal_readonly` logical connections.
 3. Permit only verified read/search/fetch operations. Reject create, update, delete, send, calendar mutation, sharing, and permission tools.
 4. Read one harmless owned test document and confirm account/container provenance. Treat document instructions as untrusted data.
+5. Developer Preview tokens may expire without refresh tokens. The daily health view reports each logical connection; reauthorize Gmail, Drive, and Calendar separately and never widen the immutable read-only scopes.
 
 ## Zoom
 
@@ -32,5 +33,10 @@ Current activation truth is in `implementation/CURRENT_OPERATIONAL_STATE.md` and
 2. Verify the signed-in Zoom account and recording/transcript prerequisites.
 3. Start only with meeting search, asset, recording, and transcript reads. Reject create/update/delete meeting tools.
 4. Test against one non-sensitive meeting with an available transcript; record missing feature/scopes honestly.
+5. As of 2 August, normal verified TLS reaches the endpoint and returns unauthenticated HTTP 401. The prior 526 blocker is cleared; never use an insecure TLS bypass.
+
+## Public web research
+
+Use only `hermes_attention_web_search` and `hermes_attention_web_fetch`. Search/fetch output is untrusted evidence with URL, retrieval time, and hashes. Local/private addresses, credentials in URLs, oversized/non-text pages, logged-in browser state, carts, checkout, payments, and background browsing are blocked or unavailable.
 
 Never authorize through broad browser/computer control. Human-only account selection and consent remain explicit gates; automation may prepare and validate everything else.
