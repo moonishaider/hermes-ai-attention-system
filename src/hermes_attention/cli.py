@@ -10,6 +10,7 @@ import sys
 
 from .config import ProjectPaths, validate_project_configuration
 from .history import ChatGPTExportImporter, CodexHistoryBridge, ContextRelayImporter
+from .health import startup_health
 from .overlay import run_tk_overlay
 from .onboarding import OnboardingOrchestrator
 from .runtime_models import DirectModelClient
@@ -27,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("doctor", help="validate local non-secret configuration")
     commands.add_parser("status", help="show safe runtime status")
+    commands.add_parser("health", help="show credential-safe daily startup health")
 
     search = commands.add_parser("search", help="search local evidence")
     search.add_argument("query")
@@ -110,6 +112,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if arguments.command == "status":
             emit(service.status())
+        elif arguments.command == "health":
+            emit(startup_health(service))
         elif arguments.command == "search":
             emit(service.search(arguments.query, context_id=arguments.context, limit=arguments.limit))
         elif arguments.command == "attention":

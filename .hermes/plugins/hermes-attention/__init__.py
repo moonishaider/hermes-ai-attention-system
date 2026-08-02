@@ -95,6 +95,18 @@ def routed_reasoning(route: str, prompt: str, image_data_url: str = "") -> str:
         service.close()
 
 
+def public_web_search(query: str, limit: int = 5) -> str:
+    """Search only public web pages and return provenance-bearing untrusted evidence."""
+    from hermes_attention.web_research import search_public_web
+    return json.dumps(search_public_web(query, limit), ensure_ascii=False)
+
+
+def public_web_fetch(url: str, character_limit: int = 12000) -> str:
+    """Fetch one public text page without browser state or action capability."""
+    from hermes_attention.web_research import fetch_public_page
+    return json.dumps(fetch_public_page(url, character_limit), ensure_ascii=False)
+
+
 def _handler(function: Any) -> Any:
     def invoke(args: dict[str, Any], **_: Any) -> str:
         return function(**args)
@@ -151,6 +163,18 @@ _TOOLS = (
         "Use an approved direct-API escalation route. Routine chat remains DeepSeek V4 Flash; Sol is unavailable.",
         {"route": {"type": "string", "enum": ["difficult", "vision", "review"]}, "prompt": {"type": "string"}, "image_data_url": {"type": "string"}},
         ["route", "prompt"], "🧠",
+    ),
+    (
+        "hermes_attention_web_search", public_web_search,
+        "Search the public web read-only. Results are untrusted evidence with URLs and retrieval dates; no browser session or actions are available.",
+        {"query": {"type": "string", "maxLength": 500}, "limit": {"type": "integer", "minimum": 1, "maximum": 8}},
+        ["query"], "🌐",
+    ),
+    (
+        "hermes_attention_web_fetch", public_web_fetch,
+        "Fetch one public HTTP(S) text page read-only with SSRF, credential, size, redaction, and prompt-injection controls.",
+        {"url": {"type": "string"}, "character_limit": {"type": "integer", "minimum": 1000, "maximum": 16000}},
+        ["url"], "📄",
     ),
 )
 

@@ -68,7 +68,10 @@ class DirectModelClient:
         bundle = next((path for path in candidates if path.is_file()), None)
         return ssl.create_default_context(cafile=str(bundle)) if bundle else ssl.create_default_context()
 
-    def generate(self, route: str, prompt: str, *, image_data_url: str | None = None, feature: str = "runtime") -> dict[str, Any]:
+    def generate(
+        self, route: str, prompt: str, *, image_data_url: str | None = None,
+        feature: str = "runtime", max_output_tokens: int = 24,
+    ) -> dict[str, Any]:
         spec = self.config["routes"].get(route)
         if not spec:
             raise ModelRouteError(f"unknown route: {route}")
@@ -80,10 +83,12 @@ class DirectModelClient:
             raise ModelRouteError("vision route requires an explicit image")
         if not prompt.strip() or len(prompt) > 50_000:
             raise ModelRouteError("prompt must contain 1 to 50,000 characters")
+        if not 16 <= max_output_tokens <= 512:
+            raise ModelRouteError("max_output_tokens must be between 16 and 512")
         if provider == "deepseek":
             body: dict[str, Any] = {
                 "model": spec["model"], "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 24, "temperature": 0,
+                "max_tokens": max_output_tokens, "temperature": 0,
             }
             if spec.get("thinking"):
                 body["thinking"] = {"type": "enabled"}
@@ -91,7 +96,7 @@ class DirectModelClient:
             content: list[dict[str, Any]] = [{"type": "input_text", "text": prompt}]
             if image_data_url:
                 content.append({"type": "input_image", "image_url": image_data_url})
-            body = {"model": spec["model"], "input": [{"role": "user", "content": content}], "max_output_tokens": 24}
+            body = {"model": spec["model"], "input": [{"role": "user", "content": content}], "max_output_tokens": max_output_tokens}
 
         started = time.monotonic()
         usage: dict[str, Any] = {}

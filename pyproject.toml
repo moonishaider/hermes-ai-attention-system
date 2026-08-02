@@ -12,6 +12,9 @@ license = {text = "Proprietary"}
 authors = [{name = "Syed Moonis Haider"}]
 dependencies = []
 
+[project.optional-dependencies]
+web = ["ddgs==9.14.4"]
+
 [project.scripts]
 hermes-attention = "hermes_attention.cli:main"
 
