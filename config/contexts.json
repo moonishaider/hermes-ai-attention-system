@@ -7,8 +7,10 @@
       "browser_profile": "Company Chrome",
       "rules": [
         {"field": "workspace", "contains": "inside success", "weight": 0.9},
+        {"field": "workspace", "contains": "new-casting-dashboard-main", "weight": 0.98},
         {"field": "github_owner", "equals": "Inside-Success", "weight": 1.0},
-        {"field": "connection_id", "contains": "inside_success", "weight": 1.0}
+        {"field": "connection_id", "contains": "inside_success", "weight": 1.0},
+        {"field": "account_id", "equals": "syed.haider@insidesuccess.com", "weight": 1.0}
       ]
     },
     {
@@ -26,7 +28,9 @@
       "browser_profile": "Profile 1",
       "rules": [
         {"field": "github_owner", "equals": "moonishaider", "weight": 1.0},
-        {"field": "connection_id", "contains": "personal", "weight": 0.9}
+        {"field": "connection_id", "contains": "personal", "weight": 0.9},
+        {"field": "account_id", "equals": "moonishaider12@gmail.com", "weight": 1.0},
+        {"field": "workspace", "contains": "jarvis/jarvis-imp", "weight": 0.95}
       ]
     },
     {"id": "mixed", "label": "Mixed - confirmation required", "browser_profile": null, "rules": []},

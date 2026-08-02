@@ -75,7 +75,7 @@ class CoreTests(unittest.TestCase):
             self.store.add_evidence(replace(item, provenance=replace(item.provenance, connection_id="other")))
 
     def test_action_preview_is_non_executing_and_fail_closed(self):
-        policy = PolicyEngine(external_writes_enabled=False)
+        policy = PolicyEngine(external_writes_enabled=False, kill_switch=False)
         controller = ActionController(self.store, policy)
         proposal = controller.propose(
             action_type="send_message", context_id="inside-success", risk_class=RiskClass.A2,

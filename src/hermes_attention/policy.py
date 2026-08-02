@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+import os
 from typing import Any
 
 from .domain import ActionProposal, RiskClass, stable_hash
@@ -36,9 +37,9 @@ class PolicyDecision:
 
 
 class PolicyEngine:
-    def __init__(self, *, external_writes_enabled: bool = False) -> None:
+    def __init__(self, *, external_writes_enabled: bool = False, kill_switch: bool | None = None) -> None:
         self.external_writes_enabled = external_writes_enabled
-        self.kill_switch = False
+        self.kill_switch = (os.environ.get("HERMES_ACTIONS_KILL_SWITCH", "1") != "0") if kill_switch is None else kill_switch
 
     @staticmethod
     def tool_is_mutating(tool_name: str) -> bool:
@@ -46,10 +47,10 @@ class PolicyEngine:
         return any(token in WRITE_VERBS for token in tokens)
 
     def allow_external_tool(self, connection_mode: str, tool_name: str) -> PolicyDecision:
-        if self.kill_switch:
-            return PolicyDecision(False, "global action kill switch is active", "kill-switch")
         if connection_mode == "read-only" and self.tool_is_mutating(tool_name):
             return PolicyDecision(False, "write-capable tool is absent from a read-only connection", "readonly-tool")
+        if self.kill_switch and connection_mode != "read-only":
+            return PolicyDecision(False, "global action kill switch is active", "kill-switch")
         return PolicyDecision(True, "tool permitted by connection mode", "allowed")
 
     def validate_proposal(self, proposal: ActionProposal, *, now: datetime | None = None) -> PolicyDecision:

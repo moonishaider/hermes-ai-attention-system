@@ -9,8 +9,9 @@ import unittest
 from unittest.mock import patch
 
 from hermes_attention.actions import ActionController
+from hermes_attention.acceptance import AcceptanceCase, classification_snapshot, reclassify_codex_contexts, summarize_private_result
 from hermes_attention.config import load_json
-from hermes_attention.domain import ActionState, RiskClass
+from hermes_attention.domain import ActionState, ConfidenceState, ContextLabel, EvidenceItem, Provenance, RiskClass
 from hermes_attention.executor import ExecutionDenied, SlackDestination, SupervisedActionExecutor
 from hermes_attention.history import CodexHistoryBridge
 from hermes_attention.onboarding import summarize_connectors
@@ -63,6 +64,44 @@ class OperationalTests(unittest.TestCase):
         self.assertIn("registry_enabled=1/2", detail)
         self.assertIn("pending=pending_read", detail)
         self.assertIn("live health remains subject to per-connector smoke tests", detail)
+
+    def test_acceptance_summary_never_contains_private_answer_or_raw_refs(self):
+        case = AcceptanceCase("synthetic", "test", ("codex",), ("personal",))
+        response = json.dumps({
+            "case_id": "synthetic", "status_checked": True, "writes_disabled": True,
+            "success": True, "answer": "private answer marker",
+            "claims": [{"claim": "private claim marker", "source_refs": ["private://ref"], "confidence": 0.8, "label_state": "inferred"}],
+            "sources": [{"system": "codex", "connection_id": "codex_local_readonly", "ref": "private://ref", "date": "2026-08-02", "context": "personal"}],
+            "leakage_detected": False, "failure_reason": None,
+        })
+        summary = summarize_private_result(case, response, {"model": "test", "estimated_cost_usd": 0.1}, 12, 0)
+        self.assertTrue(summary["accepted"])
+        self.assertNotIn("private answer marker", repr(summary))
+        self.assertNotIn("private claim marker", repr(summary))
+        self.assertNotIn("private://ref", repr(summary))
+        self.assertEqual(1, len(summary["source_ref_hashes"]))
+        wrapped = summarize_private_result(case, "Preamble\n" + response + "\nTrailing", {}, 12, 0)
+        self.assertTrue(wrapped["accepted"])
+        self.assertTrue(wrapped["json_object_valid"])
+        self.assertFalse(wrapped["json_prefix_valid"])
+        self.assertGreater(wrapped["preamble_bytes"], 0)
+
+    def test_codex_reclassification_preserves_genuine_unknowns(self):
+        router = ContextRouter(load_json(ROOT / "config/contexts.json"))
+        for source_id, workspace in (("known", "/work/new-casting-dashboard-main"), ("ambiguous", "/work/course pipeline/phase 2")):
+            self.store.add_evidence(EvidenceItem(
+                evidence_id=source_id, title="Synthetic", content="bounded",
+                provenance=Provenance(
+                    source_system="codex", connection_id="codex_local_readonly", source_id=source_id,
+                    source_timestamp="2026-08-02T00:00:00Z", retrieved_at="2026-08-02T00:00:01Z",
+                    account_id="local-codex", workspace=workspace,
+                ),
+                contexts=(ContextLabel("unknown", 1.0, "baseline", "rules-v1"),),
+                confidence_state=ConfidenceState.INFERRED,
+            ))
+        result = reclassify_codex_contexts(self.store, router)
+        self.assertEqual(1, result["changed"])
+        self.assertEqual({"inside-success": 1, "unknown": 1}, classification_snapshot(self.store)["by_context"])
 
     def test_google_oauth_scope_guard_is_read_only_and_resource_specific(self):
         class Metadata:
@@ -123,7 +162,7 @@ class OperationalTests(unittest.TestCase):
             self.assertIn(field, encoded)
 
     def test_supervised_executor_fails_closed_then_fixed_destination_executes(self):
-        policy = PolicyEngine(external_writes_enabled=True)
+        policy = PolicyEngine(external_writes_enabled=True, kill_switch=False)
         controller = ActionController(self.store, policy)
         destination = SlackDestination("T_FIXED", "C_FIXED")
         proposal = controller.propose(
@@ -145,6 +184,13 @@ class OperationalTests(unittest.TestCase):
                 os.environ.pop("HERMES_ACTIONS_KILL_SWITCH", None)
             else:
                 os.environ["HERMES_ACTIONS_KILL_SWITCH"] = previous
+
+    def test_default_action_kill_switch_blocks_writes_but_not_reads(self):
+        with patch.dict(os.environ, {"HERMES_ACTIONS_KILL_SWITCH": "1"}):
+            policy = PolicyEngine()
+            self.assertTrue(policy.kill_switch)
+            self.assertTrue(policy.allow_external_tool("read-only", "search_evidence").allowed)
+            self.assertFalse(policy.allow_external_tool("read-write", "send_message").allowed)
 
     def test_secret_status_never_returns_values(self):
         path = Path(self.temp.name) / ".env"
