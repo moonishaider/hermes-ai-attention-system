@@ -4,7 +4,7 @@
 
 **Prompt 4 rollback checkpoint:** `015948b`
 
-**Implemented through:** `731af5f` plus the current acceptance-documentation change
+**Implemented through:** `b87012c` plus the current voice-acceptance documentation change
 
 **Purpose:** This is the single current source of truth. Historical milestone records are evidence of what was true when written, not the present status.
 
@@ -22,7 +22,7 @@
 | Area | Evidence level | Current truth |
 |---|---|---|
 | Safety and repository | Live and acceptance-tested | Marked root, hooks/rules, preflight, command negatives, config doctor, secret scan, backup/restore, and 39 tests pass. Private remote is `moonishaider/hermes-ai-attention-system`; Prompt 4 rollback is `015948b`. |
-| Daily launch and health | Implemented locally, awaiting voice acceptance | `scripts/launch_daily_hermes.sh` runs preflight, prints credential-safe health, starts the local overlay, launches Hermes with only the trusted project plugin, and tears the overlay down on exit. It creates no server, service, or launch agent. |
+| Daily launch and health | Implemented locally; voice path accepted | `scripts/launch_daily_hermes.sh` runs preflight, prints credential-safe health, starts the local overlay, launches Hermes with only the trusted project plugin, and tears the overlay down on exit. It creates no server, service, or launch agent. The native microphone-to-spoken-reply path is accepted; the complete launcher's visual/control path still needs one supervised daily-use pass. |
 | Model routes | Live and representative-task tested | Flash, Pro, Luna, and Terra each passed bounded representative tasks. Flash and Luna tied on deterministic routine quality; Luna was slightly faster in the tiny sample but about 14x more expensive, so Flash remains default. Sol remains builder-only. |
 | GitHub personal/company | Live and acceptance-tested for bounded retrieval | Separate `/readonly` connections and 14-tool allowlists remain intact. Personal GitHub participated in two accepted project-resumption runs; company GitHub participated in an accepted source-backed daily-report draft. Write tools remain unavailable. |
 | Slack Inside Success/Mitchell | Live with mixed acceptance evidence | Both strict read-only connections participated in an accepted cross-context case with citations and no reported leakage. Inside Success also participated in the accepted report draft. A focused Mitchell live query timed out at 180 seconds; local Codex-only Mitchell open loops passed earlier. |
@@ -32,7 +32,7 @@
 | Zoom | Externally blocked on OAuth, not TLS | A normal-TLS retry now reaches the official endpoint and returns HTTP 401, which clears the earlier Cloudflare 526 certificate blocker. Zoom remains disabled until the exact work account and four read scopes are authorized and its post-auth inventory is checked. |
 | Attention, handoffs, reports | Partially live and acceptance-tested | Cross-context search, project resumption, and a source-backed daily-report draft passed. Same-day brief/work attribution and personal upcoming obligations did not pass because current evidence or Google authorization was insufficient; the system failed closed instead of inventing facts. |
 | Specialists and memory | Implemented and deterministic-tested | Persistent registry loading, context restrictions, namespace-scoped memory proposals, and disabled serious-mode tax/finance behavior pass. Tax/finance remains disabled. |
-| Voice and overlay | Live through microphone capture; full loop acceptance pending | A first live start exposed and fixed a `.venv` versus runtime `venv` validation error. Hermes native voice now enters recording and local transcription in the actual runtime environment. A deliberate spoken phrase, model reply, Edge playback, interruption/mute, and warm/cold measurement remain. |
+| Voice and overlay | Voice live and acceptance-tested; overlay controls partially accepted | A deliberate microphone phrase passed local faster-whisper transcription, DeepSeek Flash response, and audible Edge TTS. Syed selected the British male `en-GB-RyanNeural` voice. Direct synthesis measured 2.04 s first-call and 1.43 s repeat latency; bounded early-stop and zero-volume playback paths exited cleanly. Native barge-in plus visible overlay mute/cancel still need one supervised pass. |
 | Screen viewing | Implemented locally, awaiting real acceptance | The one-shot adapter consumes one grant, uses the interactive system picker, and stores no screenshot automatically. Screen Recording permission and exactly one Luna acceptance capture remain. |
 | Inside Success daily publish | Shadow/preview only | A real evidence-backed draft exists, but no destination is selected, the executor is kill-switched, and no generic send tool is exposed. Nothing has been sent. |
 | Safe web/shopping research | Live and acceptance-tested for bounded public research | Pinned `ddgs==9.14.4` search plus guarded public-page fetch return URLs/dates/hashes, flag prompt injection, redact secrets, and block local/credential URLs. A Logitech research smoke returned six cited results and safely fetched one official page. No browser session, cart, checkout, payment, or background browsing exists. |
@@ -40,7 +40,7 @@
 
 ## Acceptance result in one sentence
 
-Hermes can currently save time on source-backed project resumption, cross-context evidence gathering, Inside Success report drafting, and public product research, but it cannot yet be called fully accepted for daily briefs, personal obligations, live voice/screen use, Google-backed queries, Zoom, ChatGPT backfill, or Slack publishing.
+Hermes can currently save time on source-backed project resumption, cross-context evidence gathering, Inside Success report drafting, public product research, and live spoken interaction, but it cannot yet be called fully accepted for daily briefs, personal obligations, screen use, Google-backed queries, Zoom, ChatGPT backfill, or Slack publishing.
 
 ## Non-negotiable boundaries
 

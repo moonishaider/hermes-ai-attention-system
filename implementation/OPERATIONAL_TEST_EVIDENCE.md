@@ -52,7 +52,8 @@ Checked: 2 August 2026
 | Public web/shopping | Six cited search results and one official product-page fetch; URL/date/hash/untrusted labels present; browser/cart/checkout/payment unavailable |
 | Google freshness | All six Developer Preview resource tokens are expired without refresh tokens; reauthorization required and reported by startup health |
 | Zoom TLS retry | Normal TLS reached the official endpoint and returned HTTP 401; no certificate bypass; OAuth remains pending and connector disabled |
-| Hermes voice runtime | Corrected orchestrator from unused `.venv` to actual `venv`; native `/voice on` entered recording and local STT preparation; deliberate spoken end-to-end acceptance remains |
+| Hermes voice runtime | Corrected orchestrator from unused `.venv` to actual `venv`; deliberate microphone → local faster-whisper → DeepSeek Flash → audible Edge TTS loop passed |
+| Hermes voice choice and latency | Syed selected `en-GB-RyanNeural`; first/repeat direct synthesis measured 2.04/1.43 s; bounded 1.5 s early-stop and zero-volume playback exited cleanly; native barge-in and overlay button pass remain |
 
 Runtime data, audio, checkpoints, restore files, private evidence, and diagnostics are excluded from Git.
 

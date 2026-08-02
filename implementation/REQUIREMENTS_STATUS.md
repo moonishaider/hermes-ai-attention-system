@@ -2,7 +2,7 @@
 
 | Group | Status | Evidence |
 |---|---|---|
-| PRD-001–010 | Partial operational | Safe daily launcher, source-backed resumption/report/cross-context use, and public research pass; voice, screen, Google-dependent daily use, and external actions remain gated |
+| PRD-001–010 | Partial operational | Safe daily launcher, source-backed resumption/report/cross-context use, public research, and live voice pass; screen, Google-dependent daily use, and external actions remain gated |
 | CTX-001–008 | Implemented locally | Provenance-first multi-label router, profile metadata, fail-closed action policy |
 | SRC-001–012 | Partial operational | Codex/GitHub/Slack and public web have bounded real acceptance; Google tokens require reauthorization; ChatGPT awaits export; Zoom TLS recovered but OAuth is pending |
 | MEM-001–012 | Implemented locally | SQLite/FTS evidence, proposed memory, tasks, audit, checkpoints, contradictions |
@@ -18,4 +18,4 @@ Completion requires code/configuration plus test evidence or an explicitly docum
 
 Evidence-level definitions and the current dated truth are in `implementation/CURRENT_OPERATIONAL_STATE.md`; this table is requirement-group rollup only.
 
-Current evidence is summarized in `implementation/PROMPT_04_ACCEPTANCE_REPORT.md`: 39 passing tests, safety/config/secret checks, bounded real-data cases, representative model evaluation, classification calibration, public-web acceptance, backup/restore, and resource accounting. Google, Zoom, ChatGPT export, microphone, screen, and exact Slack destination/action approval remain explicit gates.
+Current evidence is summarized in `implementation/PROMPT_04_ACCEPTANCE_REPORT.md`: 39 passing tests, safety/config/secret checks, bounded real-data cases, representative model evaluation, classification calibration, public-web acceptance, live microphone-to-spoken-reply acceptance, backup/restore, and resource accounting. Google, Zoom, ChatGPT export, screen, native barge-in/overlay controls, and exact Slack destination/action approval remain explicit gates.
