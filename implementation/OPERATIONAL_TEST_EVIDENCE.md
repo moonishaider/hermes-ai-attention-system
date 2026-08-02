@@ -5,7 +5,7 @@ Checked: 2 August 2026
 | Check | Result |
 |---|---|
 | Safety preflight, persisted hook tests, command-rule tests | Passed |
-| Python unit, integration, security, history, action, model-route tests | 30 passed |
+| Python unit, integration, security, history, action, model-route, health, specialist, and web tests | 39 passed |
 | Configuration doctor and JSON/TOML validation | Passed |
 | Versionable-file secret scan | Passed |
 | Git diff whitespace check | Passed |
@@ -45,6 +45,13 @@ Checked: 2 August 2026
 | Personal Drive OAuth/read smoke | Exact `drive.readonly` token mode 600; bounded recent-file probe passed without printing content |
 | Personal Calendar OAuth/read smoke | Exact Calendar list/events read-only token mode 600; calendar-list probe passed after selecting only the two reviewed permissions |
 | Personal Google negative writes | Same explicit Gmail/Drive/Calendar write exclusions as work; registry assertions reject representative personal writes before request |
+| Prompt 4 real acceptance | Cross-context, project resumption, and Inside Success report draft accepted with all claims cited and no reported leakage; focused Mitchell query timed out; Google/current-day cases failed closed |
+| Codex classification | Unknown reduced from 49.1244% to 47.0728% by one verified workspace rule; 198 records changed; ambiguous projects remain unknown |
+| Acceptance resources | Repeated project-resumption case passed in 103.8 s; maximum RSS 175,472,640 bytes (about 167.3 MiB) |
+| Representative model quality | Six of six bounded tasks passed deterministic grounding/misattribution criteria; Flash retained as default because Luna tied quality at about 14x cost |
+| Public web/shopping | Six cited search results and one official product-page fetch; URL/date/hash/untrusted labels present; browser/cart/checkout/payment unavailable |
+| Google freshness | All six Developer Preview resource tokens are expired without refresh tokens; reauthorization required and reported by startup health |
+| Zoom TLS retry | Normal TLS reached the official endpoint and returned HTTP 401; no certificate bypass; OAuth remains pending and connector disabled |
 
 Runtime data, audio, checkpoints, restore files, private evidence, and diagnostics are excluded from Git.
 

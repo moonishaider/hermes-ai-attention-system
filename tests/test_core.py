@@ -50,9 +50,28 @@ class CoreTests(unittest.TestCase):
     def test_project_configuration_and_registry(self):
         self.assertEqual([], validate_project_configuration(self.paths))
         registry = SpecialistRegistry(ROOT / "specialists")
-        self.assertEqual("meeting-intelligence", registry.activate("meeting-intelligence", "mitchell").specialist_id)
+        meeting = registry.activate("meeting-intelligence", "mitchell")
+        self.assertEqual("meeting-intelligence", meeting.specialist_id)
+        self.assertEqual("meetings", meeting.memory_namespace)
+        report = registry.activate("daily-report", "inside-success")
+        self.assertEqual("reports", report.memory_namespace)
+        with self.assertRaises(PermissionError):
+            registry.activate("daily-report", "personal")
+        serious = registry.specialists["tax-finance"]
+        self.assertTrue(serious.serious_mode)
+        self.assertEqual("review", serious.model_route)
+        self.assertIn("payment", serious.prohibited_tools)
         with self.assertRaises(PermissionError):
             registry.activate("tax-finance", "personal")
+
+    def test_memory_proposals_remain_context_and_namespace_scoped(self):
+        self.store.propose_memory("m1", "work memory", "reports", "inside-success", (), 0.8)
+        self.store.propose_memory("m2", "personal memory", "research", "personal", (), 0.7)
+        work = self.store.connection.execute(
+            "SELECT memory_id FROM memory_proposals WHERE context_id=? AND namespace=?",
+            ("inside-success", "reports"),
+        ).fetchall()
+        self.assertEqual(["m1"], [row["memory_id"] for row in work])
 
     def test_context_routing_unknown_mixed_and_profiles(self):
         personal = self.router.classify(self.provenance())

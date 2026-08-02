@@ -8,11 +8,13 @@ from hashlib import sha256
 from html.parser import HTMLParser
 import ipaddress
 import json
+from pathlib import Path
 import socket
+import ssl
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, urljoin, urlsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
 from .security import detect_prompt_injection, redact_secrets
 
@@ -61,6 +63,23 @@ def _validate_public_url(value: str) -> str:
 class _SafeRedirects(HTTPRedirectHandler):
     def redirect_request(self, req: Request, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> Request | None:
         return super().redirect_request(req, fp, code, msg, headers, _validate_public_url(urljoin(req.full_url, newurl)))
+
+
+def _tls_context() -> ssl.SSLContext:
+    """Use normal certificate verification with a platform or certifi CA bundle."""
+    candidates: list[Path] = []
+    try:
+        import certifi
+        candidates.append(Path(certifi.where()))
+    except ImportError:
+        pass
+    candidates.extend((
+        Path("/etc/ssl/cert.pem"),
+        Path("/opt/homebrew/etc/openssl@3/cert.pem"),
+        Path.home() / ".hermes/hermes-agent/venv/lib/python3.11/site-packages/certifi/cacert.pem",
+    ))
+    bundle = next((path for path in candidates if path.is_file()), None)
+    return ssl.create_default_context(cafile=str(bundle)) if bundle else ssl.create_default_context()
 
 
 class _TextExtractor(HTMLParser):
@@ -135,7 +154,7 @@ def fetch_public_page(url: str, character_limit: int = MAX_RETURN_CHARS) -> dict
     character_limit = min(max(int(character_limit), 1_000), MAX_RETURN_CHARS)
     request = Request(safe_url, headers={"User-Agent": "HermesAttention/0.1 read-only research"})
     try:
-        with build_opener(_SafeRedirects()).open(request, timeout=15) as response:
+        with build_opener(_SafeRedirects(), HTTPSHandler(context=_tls_context())).open(request, timeout=15) as response:
             final_url = _validate_public_url(response.geturl())
             content_type = (response.headers.get_content_type() or "").casefold()
             if content_type not in {"text/html", "text/plain", "application/xhtml+xml", "application/json"}:

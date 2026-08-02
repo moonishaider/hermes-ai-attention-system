@@ -2,13 +2,13 @@
 
 1. Confirm the shell is in the marked repository root with `pwd` and `./scripts/preflight_safety.sh`.
 2. Run `./scripts/verify_safety_controls.sh`.
-3. Use Python 3.11 or newer. No package installation is required for the core.
+3. Use Python 3.11 or newer. The core is stdlib-only; public search uses the reviewed optional `ddgs==9.14.4` pin in the Hermes virtual environment.
 4. Run `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 scripts/config_doctor.py`.
 5. Run `./scripts/run_tests.sh` and `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 scripts/secret_scan.py`.
 6. Official Hermes `v0.19.1` is installed outside the repository; do not copy credentials into Git.
-7. The reviewed `.hermes/plugins/hermes-attention` plugin is enabled only by `scripts/launch_hermes.sh`.
+7. The reviewed `.hermes/plugins/hermes-attention` plugin is enabled only by the guarded launch scripts.
 8. Project Hermes configuration and SOUL are merged into the existing Hermes home with timestamped backups. Never overwrite the only copy.
-9. Launch from the marked root with `./scripts/launch_hermes.sh`. This project does not require or permit a local dev server.
-10. Call project status first. Confirm `external_writes_enabled=false`, the kill switch is active, expected contexts/routes are present, and connector health matches `implementation/CURRENT_OPERATIONAL_STATE.md`.
+9. Use `./scripts/launch_daily_hermes.sh` for the health view, overlay, and interactive Hermes session, or `./scripts/launch_hermes.sh` for Hermes without the overlay. Neither starts a dev server or persistent service.
+10. The daily launcher prints health first. Confirm `external_writes_enabled=false`, `kill_switch=true`, expected routes, token warnings, Codex checkpoint, and connector state.
 
-API keys remain outside Git in owner-readable Hermes secret storage. DeepSeek Flash/Pro and OpenAI Luna/Terra passed connectivity smokes; Prompt 4 representative-quality evidence is still required. Do not silently substitute Sol or alter routing from connectivity evidence alone.
+API keys remain outside Git in owner-readable Hermes secret storage. DeepSeek Flash/Pro and OpenAI Luna/Terra passed representative bounded tests; Flash remains the routine default and Sol remains builder-only.

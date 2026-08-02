@@ -1,6 +1,6 @@
 # Hermes AI Attention implementation
 
-This repository contains a stdlib-only Python core and a real Hermes project plugin. It is intentionally local-first: SQLite/FTS stores derived evidence, tasks, memory proposals, action previews, audits, usage, and incremental checkpoints. Six of seven remote logical connector groups are now enabled read-only; their exact evidence level and remaining acceptance gates are authoritative in `implementation/CURRENT_OPERATIONAL_STATE.md`.
+This repository contains a local-first Python core and a real Hermes project plugin. SQLite/FTS stores derived evidence, tasks, memory proposals, action previews, audits, usage, and incremental checkpoints. A single dated truth is maintained in `implementation/CURRENT_OPERATIONAL_STATE.md`; measured Prompt 4 results are in `implementation/PROMPT_04_ACCEPTANCE_REPORT.md`.
 
 ## Safe local checks
 
@@ -18,14 +18,22 @@ Inspect status without a server:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m hermes_attention.cli status
+HERMES_ACTIONS_KILL_SWITCH=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m hermes_attention.cli health
 ```
 
-No dev server is part of this implementation or runbook. The optional voice/status overlay is a local Tk process and must only be launched deliberately after the overlay runbook is reviewed.
+Daily launch after the remaining permission gates:
+
+```bash
+./scripts/launch_daily_hermes.sh
+```
+
+This prints health, starts the local overlay, and launches Hermes in the trusted project. No dev server, daemon, service, or launch agent is created.
 
 ## Boundaries
 
 - The Hermes plugin exposes evidence, task, handoff, screen-request, and exact-preview tools; the restricted Slack executor exists outside the plugin, remains kill-switched, destination-unconfigured, and shadow-only.
-- Runtime GitHub, Slack, and Google read-only connections are live. Zoom remains disabled and externally blocked. Provider inventory is never treated as acceptance evidence by itself.
+- GitHub and Slack have bounded real acceptance. Google requires token reauthorization; Zoom requires OAuth and remains disabled. Provider inventory is never treated as acceptance by itself.
+- Public web research is read-only and citation-bearing; logged-in browsing, carts, checkout, and payment are unavailable.
 - Imported histories and runtime databases remain gitignored.
 - ChatGPT supports official export backfill and explicit context relay, not continuous account synchronization.
 - The root handoff `README.md` is protected; implementation commands live here and in `docs/runbooks/`.

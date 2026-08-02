@@ -1,49 +1,47 @@
 # Current Operational State
 
-**Authoritative as of:** 2 August 2026  
-**Repository checkpoint:** `015948b`  
-**Purpose:** This is the single current source of truth. Historical milestone records remain useful evidence but may describe earlier states.
+**Authoritative as of:** 2 August 2026
+
+**Prompt 4 rollback checkpoint:** `015948b`
+
+**Implemented through:** `731af5f` plus the current acceptance-documentation change
+
+**Purpose:** This is the single current source of truth. Historical milestone records are evidence of what was true when written, not the present status.
 
 ## Evidence levels
 
 - **Live and acceptance-tested:** exercised against bounded real data with source/context and leakage checks.
-- **Live but metadata-smoked:** authenticated and read-only inventory/metadata probes passed; usefulness on real content is not yet accepted.
-- **Implemented locally, awaiting real acceptance:** code and synthetic/contract tests pass, but a supervised real-world test is outstanding.
-- **Shadow/preview only:** deliberately cannot perform the external action in normal Hermes runtime.
-- **Externally blocked:** prepared correctly but blocked by a provider or required human artifact.
-- **Intentionally deferred:** excluded from this milestone for safety, scope, or lack of demonstrated need.
+- **Live but metadata-smoked:** authenticated inventory or metadata probes passed; real usefulness is not yet accepted.
+- **Implemented locally, awaiting real acceptance:** code and deterministic tests pass; a supervised real test remains.
+- **Shadow/preview only:** deliberately unable to perform the external action in normal Hermes runtime.
+- **Externally blocked:** prepared but waiting on a provider, credential, permission, or official artifact.
+- **Intentionally deferred:** excluded for safety or lack of demonstrated need.
 
 ## Current status
 
 | Area | Evidence level | Current truth |
 |---|---|---|
-| Safety and repository | Live and acceptance-tested | Marked root, project hooks/rules, safety preflight, command-policy negatives, guarded private push, backup/restore, config doctor, secret scan, and 30 tests pass. Private remote is `moonishaider/hermes-ai-attention-system`. |
-| Hermes runtime | Live but metadata-smoked | Official Hermes `0.19.1 (2026.7.30)` is installed. The guarded launcher enables only the reviewed project plugin. Project status was called first and external writes remain disabled. Daily-use acceptance is pending. |
-| Model routes | Live but synthetic-quality-smoked | DeepSeek V4 Flash/Pro and GPT-5.6 Luna/Terra direct routes pass small synthetic calls. Representative quality, citation, tool-use, latency, and cost evaluation remains pending. Sol is builder-only. |
-| GitHub personal/company | Live but metadata-smoked | Two separate `/readonly` connections, 14 tools each, owner boundaries, private visibility, and negative write-tool tests pass. Bounded real retrieval acceptance is pending. |
-| Slack Inside Success/Mitchell | Live but metadata-smoked | Separate apps/tokens/browser boundaries; exactly 14 read scopes and seven read/search tools each. Agent-app experiences and send tools are off. Bounded real retrieval acceptance is pending. |
-| Google work/personal | Live but metadata-smoked | Separate Gmail, Drive, and Calendar resource tokens and read allowlists are active. Metadata probes pass. Real retrieval acceptance and token-expiry health reporting remain pending. |
-| Codex history | Live and acceptance-tested for ingestion | Incremental, bounded ingestion with checkpoints, cutoff, secret redaction, tool-output exclusion, and resource measurements passes. Context quality has a large unknown baseline and requires Prompt 4 calibration. |
-| ChatGPT history | Externally blocked | Official export importer and explicit relay are implemented. Syed requested the export; the ZIP has not arrived or been selected. No continuous account-sync API is claimed. |
-| Zoom | Externally blocked | Work identity/license and the exact four read scopes/tools are prepared. Zoom Marketplace returned provider-side TLS/Cloudflare 526; Zoom remains disabled. |
-| Attention, handoffs, reports, specialists, memory | Implemented locally, awaiting real acceptance | Local engines and synthetic tests pass. Prompt 4 must prove bounded real-data usefulness, source labeling, serious-mode restrictions, and cross-context isolation. |
-| Voice and overlay | Implemented locally, awaiting real acceptance | Dependencies and synthetic TTS-to-STT pass; overlay controls exist. Microphone permission and real interruption/mute/latency acceptance are pending. |
-| Screen viewing | Implemented locally, awaiting real acceptance | One-shot interactive adapter consumes a single grant and retains no file automatically. Screen Recording permission and exactly one Luna acceptance capture are pending. |
-| Inside Success daily publish | Shadow/preview only | Destination-locked executor, hash/TTL/idempotency/audit/kill-switch tests pass synthetically. No destination is selected, no real sender is exposed, and nothing has been sent. |
-| Safe web/shopping research | Intentionally deferred until Prompt 4 implementation | No logged-in browser, cart, checkout, payment, or background browsing is enabled. A read-only cited search/fetch path remains to be implemented and accepted. |
-| Persistent service/launch agent | Intentionally deferred | Daily launch remains deliberate and local. No persistent service or launch agent will be created without a separate decision. |
+| Safety and repository | Live and acceptance-tested | Marked root, hooks/rules, preflight, command negatives, config doctor, secret scan, backup/restore, and 39 tests pass. Private remote is `moonishaider/hermes-ai-attention-system`; Prompt 4 rollback is `015948b`. |
+| Daily launch and health | Implemented locally, awaiting voice acceptance | `scripts/launch_daily_hermes.sh` runs preflight, prints credential-safe health, starts the local overlay, launches Hermes with only the trusted project plugin, and tears the overlay down on exit. It creates no server, service, or launch agent. |
+| Model routes | Live and representative-task tested | Flash, Pro, Luna, and Terra each passed bounded representative tasks. Flash and Luna tied on deterministic routine quality; Luna was slightly faster in the tiny sample but about 14x more expensive, so Flash remains default. Sol remains builder-only. |
+| GitHub personal/company | Live and acceptance-tested for bounded retrieval | Separate `/readonly` connections and 14-tool allowlists remain intact. Personal GitHub participated in two accepted project-resumption runs; company GitHub participated in an accepted source-backed daily-report draft. Write tools remain unavailable. |
+| Slack Inside Success/Mitchell | Live with mixed acceptance evidence | Both strict read-only connections participated in an accepted cross-context case with citations and no reported leakage. Inside Success also participated in the accepted report draft. A focused Mitchell live query timed out at 180 seconds; local Codex-only Mitchell open loops passed earlier. |
+| Google work/personal | Externally blocked on reauthorization | Prior metadata smokes and exact read-only scopes remain valid evidence, but all six Developer Preview resource access tokens expired and contain no refresh token. They must be reauthorized before current Gmail/Drive/Calendar acceptance; startup health reports the warning. |
+| Codex history | Live and acceptance-tested | 187 source files, 64,000 checkpointed lines, bounded ingestion, redaction, tool-output exclusion, and project-resumption retrieval pass. Deterministic calibration reduced unknown from 49.1244% to 47.0728% by reclassifying 198 records from one verified workspace mapping. Genuine ambiguity remains unknown. |
+| ChatGPT history | Externally blocked | The official export was requested but no matching ZIP is present. Importer and explicit relay are ready. No continuous ChatGPT account-sync API is claimed. |
+| Zoom | Externally blocked on OAuth, not TLS | A normal-TLS retry now reaches the official endpoint and returns HTTP 401, which clears the earlier Cloudflare 526 certificate blocker. Zoom remains disabled until the exact work account and four read scopes are authorized and its post-auth inventory is checked. |
+| Attention, handoffs, reports | Partially live and acceptance-tested | Cross-context search, project resumption, and a source-backed daily-report draft passed. Same-day brief/work attribution and personal upcoming obligations did not pass because current evidence or Google authorization was insufficient; the system failed closed instead of inventing facts. |
+| Specialists and memory | Implemented and deterministic-tested | Persistent registry loading, context restrictions, namespace-scoped memory proposals, and disabled serious-mode tax/finance behavior pass. Tax/finance remains disabled. |
+| Voice and overlay | Implemented locally, awaiting real acceptance | Hermes native streaming voice, local faster-whisper, Edge TTS, free bundled wake word, and the visible overlay are prepared. Microphone permission and real interruption/mute warm-versus-cold acceptance remain. |
+| Screen viewing | Implemented locally, awaiting real acceptance | The one-shot adapter consumes one grant, uses the interactive system picker, and stores no screenshot automatically. Screen Recording permission and exactly one Luna acceptance capture remain. |
+| Inside Success daily publish | Shadow/preview only | A real evidence-backed draft exists, but no destination is selected, the executor is kill-switched, and no generic send tool is exposed. Nothing has been sent. |
+| Safe web/shopping research | Live and acceptance-tested for bounded public research | Pinned `ddgs==9.14.4` search plus guarded public-page fetch return URLs/dates/hashes, flag prompt injection, redact secrets, and block local/credential URLs. A Logitech research smoke returned six cited results and safely fetched one official page. No browser session, cart, checkout, payment, or background browsing exists. |
+| Persistent service/launch agent | Intentionally deferred | Daily launch is deliberate and local. No persistent service or launch agent exists. |
 
-## Prompt 4 acceptance gates
+## Acceptance result in one sentence
 
-1. Run bounded real-data retrieval and context-leakage acceptance across the six live logical connector groups plus Codex.
-2. Measure and improve deterministic Codex classification without forcing ambiguous evidence.
-3. Run representative model-quality evaluation; retain routing unless evidence supports a reviewed change.
-4. Complete one-at-a-time Microphone and Screen Recording gates.
-5. Preview/import the official ChatGPT export only after the ZIP arrives and Syed identifies it.
-6. Retry Zoom once through normal TLS; keep disabled on failure.
-7. Ask Syed to select the exact Inside Success Slack destination before preparing any live-action approval.
-8. Add a read-only, cited, prompt-injection-aware web research path.
+Hermes can currently save time on source-backed project resumption, cross-context evidence gathering, Inside Success report drafting, and public product research, but it cannot yet be called fully accepted for daily briefs, personal obligations, live voice/screen use, Google-backed queries, Zoom, ChatGPT backfill, or Slack publishing.
 
 ## Non-negotiable boundaries
 
-No local development server, unrestricted browser/computer control, YOLO mode, generic Slack send, broad filesystem tool, account/admin mutation, company/client write, silent OAuth widening, TLS bypass, payment/checkout, permanent deletion, or launch agent is enabled. Runtime source content is untrusted evidence and must retain source, account, context, date, and confidence labels.
+No local development server, unrestricted browser/computer control, YOLO mode, generic Slack send, broad filesystem tool, account/admin mutation, company/client write, silent OAuth widening, TLS bypass, payment/checkout, permanent deletion, or launch agent is enabled. Retrieved content is untrusted evidence and must retain source, account, context, date, and confidence labels.

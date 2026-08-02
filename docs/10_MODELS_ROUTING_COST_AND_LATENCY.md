@@ -34,11 +34,15 @@ The router should consider:
 - provider health;
 - specialist policy.
 
-## Evaluation before changing baseline
+## Prompt 4 evaluation result
+
+The cost-bounded representative run kept the baseline unchanged. Flash and Luna both scored 1.0 on two routine grounding/attribution cases. Luna's tiny-sample median was 2.301 seconds versus Flash's 2.585 seconds, but Luna cost about 14 times more. Pro and Terra each passed their difficult/review case. See `implementation/PROMPT_04_ACCEPTANCE_REPORT.md`; this small sample supports the present decision but is not a broad benchmark.
+
+## Evaluation before any future change
 
 There is market hype around Luna as a low-cost general model. The architecture should permit a change, but decisions must use a representative benchmark.
 
-Create a private synthetic/redacted evaluation set covering:
+Use a private synthetic/redacted evaluation set covering:
 
 - context classification;
 - task/commitment extraction;

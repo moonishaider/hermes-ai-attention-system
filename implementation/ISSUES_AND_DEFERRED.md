@@ -8,10 +8,11 @@ The authorized POSIX `tr` normalization fix passed macOS Bash regression tests. 
 
 ## Manual gates
 
-- Zoom work identity, licensing, endpoint, scopes, and four-tool allowlist are verified. App creation is temporarily blocked by a Zoom Marketplace Cloudflare 526 host-certificate error observed on 2026-08-02; retry only through normal TLS and never bypass certificate validation. Work/personal Google, GitHub, and both Slack connections are live.
+- Zoom normal TLS now reaches the official endpoint and returns the expected unauthenticated HTTP 401. The certificate blocker is cleared; exact work-account OAuth and post-auth inventory remain. Never bypass certificate validation.
+- All six Google Developer Preview resource tokens expired without refresh tokens. Reauthorize one resource/account at a time with the immutable read-only scope guard before treating Google as live.
 - The one-shot screen adapter and fixed-destination Slack executor are implemented and covered by synthetic negative/positive tests, but neither is exposed for unrestricted runtime use. Screen Recording permission and the first exact destination/action approval remain human-only gates.
 - Syed requested the official ChatGPT export; wait for the notification and ask him only to download or identify the ZIP. Do not follow the email link or download it silently.
 - Decide whether to grant narrow macOS Microphone and Screen Recording permissions; adapters are ready.
-- Run real-data context/attention calibration and native live-microphone acceptance. The backup/restore drill passed.
+- Native live-microphone and one-shot screen acceptance remain human-permission gates. Bounded real-data calibration is complete, with documented misses and latency limitations.
 
 No local dev server, live message/calendar/form action, or macOS permission request was performed. Authorized browser control was limited to account-scoped connector setup; no broad browser/computer control was enabled.
