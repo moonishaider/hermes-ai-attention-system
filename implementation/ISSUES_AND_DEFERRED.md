@@ -6,7 +6,7 @@ The authorized POSIX `tr` normalization fix passed macOS Bash regression tests. 
 
 ## Manual gates
 
-- Authorize the Zoom account with only reviewed read scopes. Work/personal Google, GitHub, and both Slack connections are live.
+- Zoom work identity, licensing, endpoint, scopes, and four-tool allowlist are verified. App creation is temporarily blocked by a Zoom Marketplace Cloudflare 526 host-certificate error observed on 2026-08-02; retry only through normal TLS and never bypass certificate validation. Work/personal Google, GitHub, and both Slack connections are live.
 - Supply an official ChatGPT export if historical backfill is wanted.
 - Decide whether to grant narrow macOS Microphone and Screen Recording permissions; adapters are ready.
 - Run real-data context/attention calibration and native live-microphone acceptance. The backup/restore drill passed.

@@ -23,7 +23,7 @@ Checked: 2 August 2026
 | Hermes one-shot master assistant | Passed; called project status first and reported `external writes enabled: false` |
 | GPT-5.6 Luna live vision smoke | Passed with synthetic 1-pixel image; 3,478 ms; 24 input/20 output tokens; estimated `$0.000144` |
 | GPT-5.6 Terra live review smoke | Passed; 2,310 ms; 22 input/9 output tokens; estimated `$0.00019` |
-| Connector inventories | GitHub personal/company, both Slack workspaces, and work/personal Gmail/Drive/Calendar live; Zoom remains disabled |
+| Connector inventories | GitHub personal/company, both Slack workspaces, and work/personal Gmail/Drive/Calendar live. Zoom Profile 2 identity, license, endpoint, four current read scopes/tools, and negative write policy verified; activation remains disabled while Zoom Marketplace returns provider-side 526. |
 | GitHub personal MCP | Live through `/mcp/readonly`; authenticated `moonishaider`; private project metadata read; 14 exact read tools allowed |
 | GitHub personal negative write | `create_or_update_file` resolved to `BLOCKED_TOOL_UNAVAILABLE`; no network write attempted |
 | GitHub Inside Success MCP | Live through separate `/mcp/readonly`; 36 authorized repositories visible; metadata-only smoke passed; no approval pending |
