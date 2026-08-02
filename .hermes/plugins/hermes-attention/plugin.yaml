@@ -13,3 +13,5 @@ provides_tools:
   - hermes_attention_request_screen
   - hermes_attention_daily_report
   - hermes_attention_routed_reasoning
+  - hermes_attention_web_search
+  - hermes_attention_web_fetch
