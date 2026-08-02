@@ -5,11 +5,10 @@
 3. Use Python 3.11 or newer. No package installation is required for the core.
 4. Run `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 scripts/config_doctor.py`.
 5. Run `./scripts/run_tests.sh` and `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 scripts/secret_scan.py`.
-6. Install official Hermes `v0.19.1` separately following its official instructions; do not copy credentials into this repository.
-7. Review `.hermes/plugins/hermes-attention`, then set `HERMES_ENABLE_PROJECT_PLUGINS=true` only in the deliberate Hermes launch environment.
-8. Merge `hermes/config.example.yaml` into the existing Hermes configuration; do not overwrite it. Keep computer, browser, terminal, and MCP connectors disabled initially.
-9. Compare `hermes/SOUL.md` with any existing Hermes home `SOUL.md`. Copy or merge it manually only after review.
-10. Launch Hermes from the marked project root using the normal installed command. This project does not require or permit a local dev server.
-11. In Hermes, call only the status tool first. Confirm `external_writes_enabled=false`, expected contexts, disabled connectors, and budget status.
+6. Official Hermes `v0.19.1` is installed outside the repository; do not copy credentials into Git.
+7. The reviewed `.hermes/plugins/hermes-attention` plugin is enabled only by `scripts/launch_hermes.sh`.
+8. Project Hermes configuration and SOUL are merged into the existing Hermes home with timestamped backups. Never overwrite the only copy.
+9. Launch from the marked root with `./scripts/launch_hermes.sh`. This project does not require or permit a local dev server.
+10. Call project status first. Confirm `external_writes_enabled=false`, the kill switch is active, expected contexts/routes are present, and connector health matches `implementation/CURRENT_OPERATIONAL_STATE.md`.
 
-API keys are entered only into the provider’s supported secret store or environment outside Git. Add DeepSeek first for routine/difficult routes, then OpenAI for Luna/Terra. Run one synthetic, low-token direct API smoke test per route and record model ID, date, success, latency, and cost locally. If V4 Pro lacks the required endpoint, keep difficult routing disabled or use its documented chat-completions path; do not silently substitute Sol.
+API keys remain outside Git in owner-readable Hermes secret storage. DeepSeek Flash/Pro and OpenAI Luna/Terra passed connectivity smokes; Prompt 4 representative-quality evidence is still required. Do not silently substitute Sol or alter routing from connectivity evidence alone.

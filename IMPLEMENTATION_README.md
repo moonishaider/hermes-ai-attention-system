@@ -1,6 +1,6 @@
 # Hermes AI Attention implementation
 
-This repository now contains a stdlib-only Python core and a real Hermes project plugin. It is intentionally local-first: SQLite/FTS stores derived evidence, tasks, memory proposals, action previews, audits, usage, and incremental checkpoints. External connectors are disabled until the relevant account is manually authorized.
+This repository contains a stdlib-only Python core and a real Hermes project plugin. It is intentionally local-first: SQLite/FTS stores derived evidence, tasks, memory proposals, action previews, audits, usage, and incremental checkpoints. Six of seven remote logical connector groups are now enabled read-only; their exact evidence level and remaining acceptance gates are authoritative in `implementation/CURRENT_OPERATIONAL_STATE.md`.
 
 ## Safe local checks
 
@@ -24,8 +24,9 @@ No dev server is part of this implementation or runbook. The optional voice/stat
 
 ## Boundaries
 
-- The Hermes plugin exposes evidence, task, handoff, screen-request, and exact-preview tools; no external executor exists.
-- Runtime GitHub, Slack, Google, and Zoom connections begin disabled and read-only.
+- The Hermes plugin exposes evidence, task, handoff, screen-request, and exact-preview tools; the restricted Slack executor exists outside the plugin, remains kill-switched, destination-unconfigured, and shadow-only.
+- Runtime GitHub, Slack, and Google read-only connections are live. Zoom remains disabled and externally blocked. Provider inventory is never treated as acceptance evidence by itself.
 - Imported histories and runtime databases remain gitignored.
 - ChatGPT supports official export backfill and explicit context relay, not continuous account synchronization.
 - The root handoff `README.md` is protected; implementation commands live here and in `docs/runbooks/`.
+- Historical milestone records may describe earlier states; `implementation/CURRENT_OPERATIONAL_STATE.md` is the dated current authority.

@@ -2,14 +2,16 @@
 
 Checked: 2 August 2026
 
+Activation does not equal real-data acceptance. `implementation/CURRENT_OPERATIONAL_STATE.md` is authoritative for that distinction.
+
 | Logical connection | State | Verified boundary |
 |---|---|---|
-| GitHub personal `moonishaider` | Live, tested | Separate fine-grained token; provider `/readonly`; 14-tool Hermes allowlist; authenticated owner and private project metadata verified; write tool unavailable |
-| GitHub company `Inside-Success` | Live, tested | Separate fine-grained token; provider `/readonly`; 14-tool allowlist; 36 authorized repositories visible; organization approval not pending; write tool unavailable |
+| GitHub personal `moonishaider` | Live, metadata-smoked | Separate fine-grained token; provider `/readonly`; 14-tool Hermes allowlist; authenticated owner and private project metadata verified; write tool unavailable |
+| GitHub company `Inside-Success` | Live, metadata-smoked | Separate fine-grained token; provider `/readonly`; 14-tool allowlist; 36 authorized repositories visible; organization approval not pending; write tool unavailable |
 | Slack Inside Success | Live, inventory tested | Internal app `A0BMF36RS9X`; strict OAuth granted exactly 14 user read scopes; seven exact read/search MCP tools; zero bot scopes; Slack MCP enabled while agent-app experience remains off |
 | Slack Mitchell | Live, inventory tested | Internal app `A0BN85H7Y80`; strict OAuth granted exactly 14 user read scopes; seven exact read/search MCP tools; Profile 1 and Mitch Deutsch boundaries verified; Slack MCP enabled while agent-app experience remains off |
-| Google work Gmail/Drive/Calendar | Live, tested | Separate resource tokens with exact Gmail, Drive, and Calendar read-only scopes; explicit Hermes read-tool allowlists; write tools excluded |
-| Google personal Gmail/Drive/Calendar | Live, tested | Separate personal Cloud project, Web client, resource tokens, exact read-only scopes, and read-tool allowlists; sole test user is `moonishaider12@gmail.com` |
+| Google work Gmail/Drive/Calendar | Live, metadata-smoked | Separate resource tokens with exact Gmail, Drive, and Calendar read-only scopes; explicit Hermes read-tool allowlists; write tools excluded |
+| Google personal Gmail/Drive/Calendar | Live, metadata-smoked | Separate personal Cloud project, Web client, resource tokens, exact read-only scopes, and read-tool allowlists; sole test user is `moonishaider12@gmail.com` |
 | Zoom | Work identity/license/endpoint/scopes verified; disabled | Zoom Marketplace app creation blocked by provider-side Cloudflare 526 on 2026-08-02; retry, authorize exact four read scopes, inspect `tools/list`, then run metadata-only smoke |
 
 All remote content remains untrusted evidence. Account identity, tool inventory, provider read-only policy, Hermes include list, and a metadata-only smoke must pass separately for every activated connection.
