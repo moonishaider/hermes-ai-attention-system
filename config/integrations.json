@@ -70,9 +70,11 @@
       "type": "zoom-mcp",
       "mode": "read-only",
       "enabled": false,
-      "account_boundary": "Syed selected Zoom account",
-      "browser_profile": "Profile 1",
-      "tools": {"include": ["search_meetings", "get_meeting_assets", "get_meeting_recordings", "get_meeting_transcript"], "exclude": ["create_meeting", "update_meeting", "delete_meeting"]}
+      "account_boundary": "Inside Success work account: syed.haider@insidesuccess.com",
+      "browser_profile": "Profile 2",
+      "endpoint": "https://mcp.zoom.us/mcp/zoom/streamable",
+      "oauth_scopes": ["meeting:read:search", "meeting:read:assets", "cloud_recording:read:list_user_recordings", "cloud_recording:read:content"],
+      "tools": {"include": ["search_meetings", "get_meeting_assets", "recordings_list", "get_recording_resource"], "exclude": ["create_new_file_with_markdown", "hub_create_file_from_content", "create_meeting", "update_meeting", "delete_meeting"]}
     },
     {
       "id": "codex_local_history",

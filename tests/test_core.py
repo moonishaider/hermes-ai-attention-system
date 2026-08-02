@@ -104,6 +104,11 @@ class CoreTests(unittest.TestCase):
             for write_tool in ("create_draft", "create_file", "create_event", "delete_event"):
                 with self.assertRaises(PermissionError):
                     integrations.assert_tool(google_connection, write_tool)
+        for read_tool in ("search_meetings", "get_meeting_assets", "recordings_list", "get_recording_resource"):
+            integrations.assert_tool("zoom_readonly", read_tool)
+        for write_tool in ("create_new_file_with_markdown", "hub_create_file_from_content", "create_meeting"):
+            with self.assertRaises(PermissionError):
+                integrations.assert_tool("zoom_readonly", write_tool)
         self.assertFalse(PolicyEngine().allow_external_tool("read-only", "delete_file").allowed)
 
     def test_security_and_extraction(self):

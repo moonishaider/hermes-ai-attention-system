@@ -10,7 +10,7 @@ Checked: 2 August 2026
 | Slack Mitchell | Live, inventory tested | Internal app `A0BN85H7Y80`; strict OAuth granted exactly 14 user read scopes; seven exact read/search MCP tools; Profile 1 and Mitch Deutsch boundaries verified; Slack MCP enabled while agent-app experience remains off |
 | Google work Gmail/Drive/Calendar | Live, tested | Separate resource tokens with exact Gmail, Drive, and Calendar read-only scopes; explicit Hermes read-tool allowlists; write tools excluded |
 | Google personal Gmail/Drive/Calendar | Live, tested | Separate personal Cloud project, Web client, resource tokens, exact read-only scopes, and read-tool allowlists; sole test user is `moonishaider12@gmail.com` |
-| Zoom | Registry only, disabled | Marketplace integration point, account scopes, product endpoint/license pending |
+| Zoom | Work identity/license/endpoint/scopes verified; disabled | Zoom Marketplace app creation blocked by provider-side Cloudflare 526 on 2026-08-02; retry, authorize exact four read scopes, inspect `tools/list`, then run metadata-only smoke |
 
 All remote content remains untrusted evidence. Account identity, tool inventory, provider read-only policy, Hermes include list, and a metadata-only smoke must pass separately for every activated connection.
 
