@@ -2,6 +2,10 @@
 
 Checked: 1 August 2026
 
+## Current operational update — 2 August 2026
+
+The resumable state schema is now version 2. It reports connector registry activation by exact logical ID, excludes local history adapters from the remote-connector count, and never equates registry enablement with live provider health. ChatGPT export selection, Microphone permission, and Screen Recording permission are separate human-required steps rather than being hidden inside a generic final blocker. A live rerun passed all four model routes, ingested another bounded Codex batch, and reported six of seven remote logical connections enabled with only Zoom pending.
+
 ## Completed
 
 - Installed official Hermes Agent `v0.19.1 (2026.7.30)` from tag `v2026.7.30`, commit `cc4cab2f592e60a197e796506de9168f74baf3ea` under `~/.hermes`.

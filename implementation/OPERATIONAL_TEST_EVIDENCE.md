@@ -5,7 +5,7 @@ Checked: 2 August 2026
 | Check | Result |
 |---|---|
 | Safety preflight, persisted hook tests, command-rule tests | Passed |
-| Python unit, integration, security, history, action, model-route tests | 29 passed |
+| Python unit, integration, security, history, action, model-route tests | 30 passed |
 | Configuration doctor and JSON/TOML validation | Passed |
 | Versionable-file secret scan | Passed |
 | Git diff whitespace check | Passed |
@@ -24,6 +24,7 @@ Checked: 2 August 2026
 | GPT-5.6 Luna live vision smoke | Passed with synthetic 1-pixel image; 3,478 ms; 24 input/20 output tokens; estimated `$0.000144` |
 | GPT-5.6 Terra live review smoke | Passed; 2,310 ms; 22 input/9 output tokens; estimated `$0.00019` |
 | Connector inventories | GitHub personal/company, both Slack workspaces, and work/personal Gmail/Drive/Calendar live. Zoom Profile 2 identity, license, endpoint, four current read scopes/tools, and negative write policy verified; activation remains disabled while Zoom Marketplace returns provider-side 526. |
+| Resumable onboarding | Real schema-v2 pass on 2026-08-02: project/Hermes/plugin/voice dependencies complete; bounded Codex batch scanned 500 and inserted 126 incremental records; all four direct model smokes passed; registry reports 6/7 remote connectors enabled with only Zoom pending; ChatGPT export and macOS microphone/screen permissions remain explicit human gates. |
 | GitHub personal MCP | Live through `/mcp/readonly`; authenticated `moonishaider`; private project metadata read; 14 exact read tools allowed |
 | GitHub personal negative write | `create_or_update_file` resolved to `BLOCKED_TOOL_UNAVAILABLE`; no network write attempted |
 | GitHub Inside Success MCP | Live through separate `/mcp/readonly`; 36 authorized repositories visible; metadata-only smoke passed; no approval pending |

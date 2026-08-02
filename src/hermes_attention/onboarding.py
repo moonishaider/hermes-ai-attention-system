@@ -10,7 +10,7 @@ from pathlib import Path
 import subprocess
 from typing import Any
 
-from .config import ProjectPaths, validate_project_configuration
+from .config import ProjectPaths, load_json, validate_project_configuration
 from .history import ChatGPTExportImporter, CodexHistoryBridge
 from .runtime_models import DirectModelClient
 from .secrets import configured_keys
@@ -25,8 +25,23 @@ class StepResult:
     checked_at: str
 
 
+def summarize_connectors(integrations: dict[str, Any]) -> tuple[str, str]:
+    """Return a credential-safe registry summary without claiming live OAuth health."""
+    sources = integrations.get("external_sources", [])
+    remote = [item for item in sources if item.get("type") not in {"local-jsonl", "official-export"}]
+    enabled = sorted(str(item.get("id")) for item in remote if item.get("enabled") is True)
+    pending = sorted(str(item.get("id")) for item in remote if item.get("enabled") is not True)
+    detail = f"registry_enabled={len(enabled)}/{len(remote)}"
+    if enabled:
+        detail += "; enabled=" + ",".join(enabled)
+    if pending:
+        detail += "; pending=" + ",".join(pending)
+    detail += "; live health remains subject to per-connector smoke tests"
+    return ("complete" if remote and not pending else "human_required"), detail
+
+
 class OnboardingOrchestrator:
-    STEPS = ("project", "hermes", "plugin", "voice", "history", "model_secrets", "model_smokes", "connectors", "screen_permission", "final")
+    STEPS = ("project", "hermes", "plugin", "voice", "microphone_permission", "history", "chatgpt_export", "model_secrets", "model_smokes", "connectors", "screen_permission", "final")
 
     def __init__(self, paths: ProjectPaths | None = None) -> None:
         self.paths = paths or ProjectPaths.discover()
@@ -36,12 +51,15 @@ class OnboardingOrchestrator:
 
     def _load(self) -> dict[str, Any]:
         if not self.state_path.is_file():
-            return {"schema_version": 1, "steps": {}}
+            return {"schema_version": 2, "steps": {}}
         try:
             value = json.loads(self.state_path.read_text(encoding="utf-8"))
-            return value if isinstance(value, dict) else {"schema_version": 1, "steps": {}}
+            if isinstance(value, dict):
+                value["schema_version"] = 2
+                return value
+            return {"schema_version": 2, "steps": {}}
         except json.JSONDecodeError:
-            return {"schema_version": 1, "steps": {}}
+            return {"schema_version": 2, "steps": {}}
 
     def _record(self, step: str, state: str, detail: str) -> StepResult:
         result = StepResult(step, state, detail, datetime.now(UTC).isoformat())
@@ -73,6 +91,7 @@ class OnboardingOrchestrator:
             check = subprocess.run([str(python), "-c", "import sounddevice, faster_whisper, edge_tts, pvporcupine"], capture_output=True, text=True)
             voice_ok = check.returncode == 0
         results.append(self._record("voice", "complete" if voice_ok else "failed", "voice, TTS, and wake dependencies import" if voice_ok else "voice dependency import failed"))
+        results.append(self._record("microphone_permission", "human_required", "voice dependencies are ready; macOS Microphone permission has not been requested"))
 
         service = AttentionService(paths=self.paths)
         chatgpt_detail = "official export not selected"
@@ -88,7 +107,9 @@ class OnboardingOrchestrator:
         except Exception:
             service.close()
             raise
-        results.append(self._record("history", "complete", f"Codex bounded batch scanned={history['scanned']} inserted={history['inserted']} start={start_date}; ChatGPT {chatgpt_detail}"))
+        results.append(self._record("history", "complete", f"Codex bounded batch scanned={history['scanned']} inserted={history['inserted']} start={start_date}"))
+        chatgpt_state = "complete" if chatgpt_export else "human_required"
+        results.append(self._record("chatgpt_export", chatgpt_state, f"ChatGPT {chatgpt_detail}; explicit context relay remains available"))
 
         keys = configured_keys()
         provider_keys = {name: keys[name] for name in ("DEEPSEEK_API_KEY", "OPENAI_API_KEY")}
@@ -102,10 +123,12 @@ class OnboardingOrchestrator:
         service.close()
         smokes_complete = len(smoke_results) == 4 and all(item["success"] for item in smoke_results)
         results.append(self._record("model_smokes", "complete" if smokes_complete else ("failed" if smoke_results and any(not item["success"] for item in smoke_results) else "blocked"), json.dumps(smoke_results, sort_keys=True)))
-        results.append(self._record("connectors", "human_required", "OAuth connections not yet authorized"))
+        connector_state, connector_detail = summarize_connectors(load_json(self.paths.config_dir / "integrations.json"))
+        results.append(self._record("connectors", connector_state, connector_detail))
         results.append(self._record("screen_permission", "human_required", "one-shot adapter ready; macOS permission not requested"))
-        results.append(self._record("final", "blocked", "waiting on human-only credential and OAuth gates"))
-        return {"complete": False, "resumable": True, "state_path": str(self.state_path), "results": [asdict(item) for item in results]}
+        pending = [item.step for item in results if item.state in {"human_required", "blocked", "failed"}]
+        results.append(self._record("final", "complete" if not pending else "blocked", "all onboarding steps complete" if not pending else "pending=" + ",".join(pending)))
+        return {"complete": not pending, "resumable": True, "state_path": str(self.state_path), "results": [asdict(item) for item in results]}
 
     def status(self) -> dict[str, Any]:
         return {"resumable": True, "state_path": str(self.state_path), **self.state}
