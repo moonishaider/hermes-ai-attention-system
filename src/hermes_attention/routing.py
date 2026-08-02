@@ -8,7 +8,7 @@ from typing import Any
 from .domain import ContextLabel, Provenance
 
 
-CLASSIFIER_VERSION = "rules-v1"
+CLASSIFIER_VERSION = "rules-v2"
 
 
 @dataclass(frozen=True, slots=True)
