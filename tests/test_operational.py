@@ -5,8 +5,10 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import threading
+from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from hermes_attention.actions import ActionController
 from hermes_attention.acceptance import AcceptanceCase, classification_snapshot, reclassify_codex_contexts, summarize_private_result
@@ -15,6 +17,7 @@ from hermes_attention.domain import ActionState, ConfidenceState, ContextLabel, 
 from hermes_attention.executor import ExecutionDenied, SlackDestination, SupervisedActionExecutor
 from hermes_attention.history import CodexHistoryBridge
 from hermes_attention.health import _token_health
+from hermes_attention.hermes_voice_compat import _play_darwin_afplay_only
 from hermes_attention.model_quality import QualityTask, deterministic_quality
 from hermes_attention.onboarding import summarize_connectors
 from hermes_attention.google_oauth_guard import APPROVED_SCOPES, select_google_scopes
@@ -47,6 +50,47 @@ class OperationalTests(unittest.TestCase):
     def tearDown(self):
         self.store.close()
         self.temp.cleanup()
+
+    def test_macos_barge_in_does_not_restart_interrupted_audio_with_fallback(self):
+        class InterruptedAfplay:
+            returncode = -15
+
+            def wait(self, timeout=None):
+                return self.returncode
+
+            def kill(self):
+                raise AssertionError("an already interrupted player must not be killed again")
+
+        calls = []
+        proc = InterruptedAfplay()
+
+        def popen(command, **kwargs):
+            calls.append((command, kwargs))
+            return proc
+
+        fake_subprocess = SimpleNamespace(
+            Popen=popen,
+            DEVNULL=object(),
+            TimeoutExpired=TimeoutError,
+        )
+        voice_mode = SimpleNamespace(
+            os=SimpleNamespace(path=SimpleNamespace(isfile=lambda _: True)),
+            logger=Mock(),
+            subprocess=fake_subprocess,
+            _playback_lock=threading.Lock(),
+            _active_playback=None,
+        )
+        env_calls = []
+
+        def env_factory(**kwargs):
+            env_calls.append(kwargs)
+            return {"PATH": "/usr/bin"}
+
+        self.assertFalse(_play_darwin_afplay_only(voice_mode, "/tmp/test.mp3", env_factory))
+        self.assertEqual(1, len(calls))
+        self.assertEqual(["/usr/bin/afplay", "/tmp/test.mp3"], calls[0][0])
+        self.assertEqual([{"inherit_credentials": False}], env_calls)
+        self.assertIsNone(voice_mode._active_playback)
 
     def test_history_batch_is_strictly_bounded(self):
         home = Path(self.temp.name) / "codex"
