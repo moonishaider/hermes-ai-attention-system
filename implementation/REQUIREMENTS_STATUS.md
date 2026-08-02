@@ -10,10 +10,10 @@
 | ATT-001–010 | Partial operational | Queue, handoff, report, overlay controls, one-shot screen adapter; macOS capture acceptance pending |
 | MOD-001–011 | Operational | Native DeepSeek Flash plus direct Pro/Luna/Terra all passed live synthetic smokes; Sol remains builder-only; usage/cost ledger active |
 | ACT-001–012 | Restricted executor in shadow | Exact hash, TTL, idempotency, context/risk policy, kill switch, fixed Slack destination; no executor exposed to Hermes |
-| OPS-001–010 | Partial operational | Resumable onboarding, exact install, backups, restore drill, resource evidence, 29 tests; Zoom, ChatGPT export, and macOS permission gates remain |
+| OPS-001–010 | Partial operational | Resumable onboarding, exact install, backups, restore drill, resource evidence, 30 tests; Zoom, ChatGPT export, and macOS microphone/screen permission gates remain |
 | GIT-001–009 | Operational | Private project published; separate personal and Inside Success MCPs live through `/readonly`, exact allowlists, metadata smokes, immutable provenance adapter, and negative write proof |
 | CDX-001–005 | Implemented | Protected controls, baseline commit `b8e8a6e`, implementation records, incremental ingestion |
 
 Completion requires code/configuration plus test evidence or an explicitly documented manual operational proof.
 
-Current automated evidence: 29 passing tests; configuration doctor, secret scan, diff check, safety verification, synthetic voice, real bounded Codex ingestion, backup integrity drill, two isolated Slack connectors, and six isolated work/personal Google read-only resource connectors. See `implementation/OPERATIONAL_TEST_EVIDENCE.md`.
+Current automated evidence: 30 passing tests; configuration doctor, secret scan, diff check, safety verification, synthetic voice, real bounded Codex ingestion, backup integrity drill, two isolated Slack connectors, and six isolated work/personal Google read-only resource connectors. The onboarding state distinguishes completed dependencies from the ChatGPT export and macOS permission gates and reports Zoom as the sole pending remote connector. See `implementation/OPERATIONAL_TEST_EVIDENCE.md`.

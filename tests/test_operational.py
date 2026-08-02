@@ -13,6 +13,7 @@ from hermes_attention.config import load_json
 from hermes_attention.domain import ActionState, RiskClass
 from hermes_attention.executor import ExecutionDenied, SlackDestination, SupervisedActionExecutor
 from hermes_attention.history import CodexHistoryBridge
+from hermes_attention.onboarding import summarize_connectors
 from hermes_attention.google_oauth_guard import APPROVED_SCOPES, select_google_scopes
 from hermes_attention.policy import PolicyEngine
 from hermes_attention.routing import ContextRouter
@@ -51,6 +52,17 @@ class OperationalTests(unittest.TestCase):
         bridge = CodexHistoryBridge(self.store, ContextRouter(load_json(ROOT / "config/contexts.json")), home)
         self.assertEqual(3, bridge.ingest(maximum_records=3)["scanned"])
         self.assertEqual(3, bridge.ingest(maximum_records=3)["scanned"])
+
+    def test_onboarding_connector_summary_is_resumable_and_honest(self):
+        state, detail = summarize_connectors({"external_sources": [
+            {"id": "live_read", "type": "remote-mcp", "enabled": True},
+            {"id": "pending_read", "type": "remote-mcp", "enabled": False},
+            {"id": "local_history", "type": "local-jsonl", "enabled": True},
+        ]})
+        self.assertEqual("human_required", state)
+        self.assertIn("registry_enabled=1/2", detail)
+        self.assertIn("pending=pending_read", detail)
+        self.assertIn("live health remains subject to per-connector smoke tests", detail)
 
     def test_google_oauth_scope_guard_is_read_only_and_resource_specific(self):
         class Metadata:
