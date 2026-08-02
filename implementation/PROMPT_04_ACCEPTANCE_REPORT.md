@@ -54,7 +54,7 @@ The public research smoke returned six cited search results for a harmless keybo
 ## Remaining acceptance gates
 
 - Reauthorize Google Developer Preview resources, then rerun work/personal acceptance and check the personal Gmail export notification.
-- Complete one supervised native barge-in plus visible overlay mute/cancel pass; the microphone-to-spoken-reply loop and bounded TTS controls are accepted.
+- Complete one supervised visible-overlay mute/cancel pass; the microphone-to-spoken-reply loop, automatic TTS, and speaker-only native barge-in are accepted.
 - Complete one explicit one-shot screen capture and Luna interpretation after Screen Recording permission.
 - Authorize Zoom read-only and inspect its inventory now that normal TLS reaches the endpoint.
 - Select the exact Inside Success Slack destination and approve one exact payload before any test send.
@@ -64,4 +64,6 @@ The public research smoke returned six cited search results for a harmless keybo
 
 The first supervised `/voice on` attempt found that earlier dependency checks targeted an unused `.venv` while the installed Hermes launcher runs `hermes-agent/venv`. The orchestrator now validates the actual runtime and the reviewed pinned voice packages are installed there.
 
-A later deliberate sample passed the complete native path: live microphone capture, local faster-whisper transcription, DeepSeek Flash response, and audible Edge TTS. Syed compared the installed British male Thomas and Ryan voices and selected `en-GB-RyanNeural`; the prior Hermes configuration was preserved in timestamped owner-only backups before each change. Direct Ryan synthesis measured 2.04 seconds on the first request and 1.43 seconds on the repeat. A long sample stopped at a 1.5-second bound and a zero-volume playback completed without a residual player process. These prove bounded TTS stop/mute mechanics, not native speech barge-in or the overlay buttons; those two UI controls remain one supervised acceptance pass.
+A later deliberate sample passed the complete native path: live microphone capture, local faster-whisper transcription, DeepSeek Flash response, and audible Edge TTS. Syed compared the installed British male Thomas and Ryan voices and selected `en-GB-RyanNeural`; the prior Hermes configuration was preserved in timestamped owner-only backups before each change. Direct Ryan synthesis measured 2.04 seconds on the first request and 1.43 seconds on the repeat. A long sample stopped at a 1.5-second bound and a zero-volume playback completed without a residual player process.
+
+The first continuous-mode attempt exposed `voice.auto_tts: false`: Hermes accepted speech but ordinary replies were silent, causing repeated recordings rather than a meaningful interruption test. After a new owner-only backup, automatic TTS was enabled. A single-turn speaker test became audible, then a realistic no-headphones run logged `Audio playback interrupted`, submitted the captured interjection as a new voice turn, and generated the requested shorter follow-up. Voice mode was explicitly disabled and the session exited afterward. Native speaker-only barge-in is therefore accepted; only the visible overlay mute/cancel buttons remain unaccepted.
