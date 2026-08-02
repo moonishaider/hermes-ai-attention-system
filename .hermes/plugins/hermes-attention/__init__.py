@@ -15,6 +15,7 @@ if str(SRC) not in sys.path:
 
 from hermes_attention.service import AttentionService  # noqa: E402
 from hermes_attention.google_oauth_guard import install_google_oauth_scope_guard  # noqa: E402
+from hermes_attention.hermes_voice_compat import install_voice_playback_interrupt_guard  # noqa: E402
 
 
 # Google Workspace MCP metadata advertises write-capable scopes even for a
@@ -22,6 +23,11 @@ from hermes_attention.google_oauth_guard import install_google_oauth_scope_guard
 # reauthorization can occur; recognized Google resources are fail-closed to
 # the immutable scope allowlist.
 install_google_oauth_scope_guard()
+
+# Hermes 0.19.1 restarts interrupted macOS afplay output through its ffplay
+# fallback. Apply a process-local project guard so a successful voice barge-in
+# ends playback instead of replaying it. No installed Hermes file is edited.
+install_voice_playback_interrupt_guard()
 
 
 def _call(method: str, **kwargs: Any) -> str:
