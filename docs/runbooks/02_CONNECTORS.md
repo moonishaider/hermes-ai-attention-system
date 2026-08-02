@@ -1,6 +1,6 @@
 # Connector authorization runbook
 
-Complete one connection at a time. Before OAuth, write down the intended account, workspace/organization, logical connection ID, read-only tool allowlist, and expected browser profile. Stop if the consent screen shows a different account or any write/admin scope.
+Current activation truth is in `implementation/CURRENT_OPERATIONAL_STATE.md` and `implementation/CONNECTOR_ACTIVATION_STATUS.md`. For any authorization or reauthorization, complete one connection at a time: verify account/workspace, logical ID, read allowlist, and browser profile; stop on any mismatch or write/admin scope.
 
 ## GitHub
 
@@ -17,7 +17,7 @@ Complete one connection at a time. Before OAuth, write down the intended account
 1. Create/select the intended internal Slack app and correct workspace. The official hosted MCP requires confidential OAuth.
 2. Request only scopes required by verified search/fetch reads. Reject message, canvas, channel-management, or other mutation scopes.
 3. Keep Company Chrome for Inside Success; do not authorize Mitchell or personal Slack in that connection.
-4. Run a read-only search for a harmless known term, inspect provenance, then disable the connector until calibration is complete.
+4. Run only bounded read searches during calibration, inspect provenance, and keep every write/agent-app experience disabled.
 
 ## Google Workspace
 
@@ -33,4 +33,4 @@ Complete one connection at a time. Before OAuth, write down the intended account
 3. Start only with meeting search, asset, recording, and transcript reads. Reject create/update/delete meeting tools.
 4. Test against one non-sensitive meeting with an available transcript; record missing feature/scopes honestly.
 
-Never authorize through broad browser/computer control. Syed completes consent dialogs manually and reports the resulting read-only connection state for verification.
+Never authorize through broad browser/computer control. Human-only account selection and consent remain explicit gates; automation may prepare and validate everything else.
