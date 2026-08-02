@@ -54,7 +54,7 @@ Checked: 2 August 2026
 | Zoom TLS retry | Normal TLS reached the official endpoint and returned HTTP 401; no certificate bypass; OAuth remains pending and connector disabled |
 | Hermes voice runtime | Corrected orchestrator from unused `.venv` to actual `venv`; deliberate microphone → local faster-whisper → DeepSeek Flash → audible Edge TTS loop passed |
 | Hermes voice choice and latency | Syed selected `en-GB-RyanNeural`; first/repeat direct synthesis measured 2.04/1.43 s; bounded 1.5 s early-stop and zero-volume playback exited cleanly |
-| Hermes automatic TTS and barge-in | Corrected `voice.auto_tts` from false to true after an owner-only backup; MacBook-speaker reply was audible. The interjection was captured and handled, but Syed confirmed speech did not stop immediately because interrupted `afplay` fell through to `ffplay`. A process-local macOS guard and regression test now prevent restart; live retest and overlay buttons remain. |
+| Hermes automatic TTS and barge-in | Corrected `voice.auto_tts` from false to true after an owner-only backup; MacBook-speaker reply was audible. After the process-local macOS fallback guard, the corrected no-headphones retest interrupted playback at 14:52:50 and Syed confirmed Ryan stopped immediately, accepted the correction, and did not replay. Continuous listening remained active as designed; a later “great” → “grade” local-Whisper error is retained as an STT limitation. Overlay buttons remain. |
 
 Runtime data, audio, checkpoints, restore files, private evidence, and diagnostics are excluded from Git.
 

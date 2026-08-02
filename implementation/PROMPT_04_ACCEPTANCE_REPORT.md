@@ -54,7 +54,7 @@ The public research smoke returned six cited search results for a harmless keybo
 ## Remaining acceptance gates
 
 - Reauthorize Google Developer Preview resources, then rerun work/personal acceptance and check the personal Gmail export notification.
-- Retest immediate speaker-only barge-in with the macOS fallback guard, then complete one supervised visible-overlay mute/cancel pass. The microphone-to-spoken-reply loop and automatic TTS are accepted.
+- Complete one supervised visible-overlay mute/cancel pass. The microphone-to-spoken-reply loop, automatic TTS, and immediate speaker-only barge-in are accepted.
 - Complete one explicit one-shot screen capture and Luna interpretation after Screen Recording permission.
 - Authorize Zoom read-only and inspect its inventory now that normal TLS reaches the endpoint.
 - Select the exact Inside Success Slack destination and approve one exact payload before any test send.
@@ -68,4 +68,6 @@ A later deliberate sample passed the complete native path: live microphone captu
 
 The first continuous-mode attempt exposed `voice.auto_tts: false`: Hermes accepted speech but ordinary replies were silent, causing repeated recordings rather than a meaningful interruption test. After a new owner-only backup, automatic TTS was enabled and a single-turn speaker test became audible.
 
-A realistic no-headphones run logged `Audio playback interrupted`, submitted the captured interjection as a new voice turn, and generated the requested shorter follow-up. Syed's direct observation nevertheless established that the original speech did not stop immediately. Code review found the exact cause: Hermes 0.19.1 terminates macOS `afplay`, interprets its nonzero interrupted exit as a player failure, and falls through to `ffplay`, restarting the audio. The trusted project plugin now applies a process-local macOS guard that uses only `afplay` for the attempt and treats interruption as final; it does not edit the installed Hermes checkout or system audio settings. The regression test passes, but live immediate-cut acceptance must be repeated before barge-in is marked operational.
+A realistic no-headphones run initially logged `Audio playback interrupted`, submitted the captured interjection as a new voice turn, and generated the requested shorter follow-up, but Syed's direct observation established that the original speech had not stopped immediately. Code review found the exact cause: Hermes 0.19.1 terminates macOS `afplay`, interprets its nonzero interrupted exit as a player failure, and falls through to `ffplay`, restarting the audio. The trusted project plugin now applies a process-local macOS guard that uses only `afplay` for the attempt and treats interruption as final; it does not edit the installed Hermes checkout or system audio settings.
+
+The corrected no-headphones retest passed on 2026-08-02. Metadata-only telemetry recorded the first reply, `Audio playback interrupted` at 14:52:50, a 4.7-second captured correction, a second DeepSeek Flash turn, and no fallback replay or residual audio process. Syed confirmed Ryan stopped immediately and then answered the correction. Continuous mode correctly kept listening afterward; local Whisper misheard Syed's later “great” as “grade,” which produced a confusing extra response. This is an STT accuracy limitation, not a barge-in failure.
