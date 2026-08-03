@@ -27,6 +27,8 @@ Hermes opens Apple's visible region selector. Drag over only the window or regio
 
 Healthy startup ends at the Hermes prompt with the overlay showing **Hermes ready; external actions killed**. The health output should show the approved Flash/Pro/Luna/Terra routes, refreshable Google accounts, `external_actions.enabled: false`, `kill_switch: true`, and no generic Slack sender.
 
+The launcher uses Hermes's pinned Python 3.11 runtime directly, so double-clicking it does not depend on Terminal's PATH or Apple's older system Python.
+
 ## Normal limitations
 
 - A simple reply normally starts quickly. Source-backed multi-service work can take roughly one to three minutes; Hermes should show that it is checking sources rather than guessing.

@@ -16,6 +16,7 @@ The audit also found that accepted one-shot screen understanding was not reachab
 - The live Hermes tool search found `hermes_attention_view_screen_once`; capture was deliberately not invoked because Prompt 4 already completed the supervised real screen test and Prompt 5 forbids redundant broad acceptance.
 - Existing overlay acceptance remains authoritative for Cancel, Mute/Unmute, and Dismiss; deterministic tests were rerun. Codex did not drive the macOS buttons because `AGENTS.md` forbids build-time computer control.
 - The double-click wrapper was syntax-checked, executable, and exercised with the canonical launch path.
+- A Finder-style minimal-environment test exposed Apple Python 3.9 on PATH. The canonical launcher now invokes Hermes's installed Python 3.11 runtime by exact path for refresh, health, overlay, and control processes; the same minimal-environment launch then passed.
 
 ## One representative daily task
 
