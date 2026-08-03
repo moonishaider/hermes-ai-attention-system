@@ -5,7 +5,7 @@ Checked: 4 August 2026
 | Check | Result |
 |---|---|
 | Safety preflight, persisted hook tests, command-rule tests | Passed |
-| Python unit, integration, security, history, action, model-route, health, specialist, voice-compatibility, web, Google direct-read, and Zoom OAuth tests | 48 passed |
+| Python unit, integration, security, history, action, model-route, health, specialist, voice-compatibility, web, Google direct-read, and Zoom OAuth tests | 55 passed |
 | Configuration doctor and JSON/TOML validation | Passed |
 | Versionable-file secret scan | Passed |
 | Git diff whitespace check | Passed |
@@ -51,7 +51,7 @@ Checked: 4 August 2026
 | Acceptance resources | Repeated project-resumption case passed in 103.8 s; maximum RSS 175,472,640 bytes (about 167.3 MiB) |
 | Representative model quality | Six of six bounded tasks passed deterministic grounding/misattribution criteria; Flash retained as default because Luna tied quality at about 14x cost |
 | Public web/shopping | Six cited search results and one official product-page fetch; URL/date/hash/untrusted labels present; browser/cart/checkout/payment unavailable |
-| Google freshness | Work and personal exact-scope tokens are short-lived without refresh tokens, so startup health warns before expiry. Personal standard-API fallback is live; reauthorization remains periodically necessary. |
+| Google freshness | Work and personal each use one exact-scope offline grant. Both forced refreshes passed, all six standard-API metadata smokes passed, and startup/direct calls refresh automatically. Personal returned no refresh-token lifetime field after the app moved to In production. |
 | Personal Google direct acceptance | The MCP probe now rejects protocol error blocks instead of reporting false success. Standard Gmail, Drive, and Calendar APIs returned bounded metadata successfully through host-locked GET-only tools. Personal-obligations acceptance passed with 6/6 cited claims, 5 confirmed and 1 inferred, mixed evidence labeled, no reported leakage, 68.4 s latency, and $0.00308 estimated model cost. |
 | Zoom OAuth/inventory/read acceptance | Secretless public-client PKCE succeeded with exactly four read scopes and refreshable owner-only token state. Shared-access widening stayed unchecked. Live discovery found 12 raw tools, including two writes that are filtered out; four reviewed reads are exposed. After a metadata-only smoke, a bounded recent work-meeting case passed with 3/3 cited confirmed claims, no reported leakage, 65.5 s latency, and $0.00523 estimated model cost. |
 | Hermes voice runtime | Corrected orchestrator from unused `.venv` to actual `venv`; deliberate microphone → local faster-whisper → DeepSeek Flash → audible Edge TTS loop passed |

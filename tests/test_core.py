@@ -116,7 +116,11 @@ class CoreTests(unittest.TestCase):
         assert_read_only_tool_inventory(integrations.tool_inventory("github_personal_readonly")["include"])
         with self.assertRaises(PermissionError):
             assert_read_only_tool_inventory(["get_file_contents", "create_issue"])
-        for read_tool in ("search_threads", "read_file_content", "list_events"):
+        for read_tool in (
+            "hermes_attention_work_gmail_search",
+            "hermes_attention_work_drive_recent",
+            "hermes_attention_work_calendar_events",
+        ):
             integrations.assert_tool("google_work_readonly", read_tool)
         for read_tool in (
             "hermes_attention_personal_gmail_search",

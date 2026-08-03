@@ -24,7 +24,8 @@ from hermes_attention.hermes_voice_compat import _play_darwin_afplay_only, overl
 from hermes_attention.model_quality import QualityTask, deterministic_quality
 from hermes_attention.onboarding import summarize_connectors
 from hermes_attention.google_oauth_guard import APPROVED_SCOPES, select_google_scopes, validated_read_probe_blocks
-from hermes_attention.google_direct import GoogleDirectError, PersonalGoogleDirect, validate_google_api_url
+from hermes_attention.google_direct import GoogleDirectError, PersonalGoogleDirect, WorkGoogleDirect, validate_google_api_url
+from hermes_attention.google_offline_oauth import GOOGLE_READONLY_SCOPES, GoogleOfflineTokenManager
 from hermes_attention.policy import PolicyEngine
 from hermes_attention.routing import ContextRouter
 from hermes_attention.runtime_models import DirectModelClient
@@ -256,6 +257,50 @@ class OperationalTests(unittest.TestCase):
             validated_read_probe_blocks(SimpleNamespace(isError=True, content=["permission denied"]))
         self.assertEqual(["metadata"], validated_read_probe_blocks(SimpleNamespace(isError=False, content=["metadata"])))
 
+    def test_google_offline_grant_is_combined_readonly_refreshable_and_private(self):
+        token_root = Path(self.temp.name) / "tokens"
+        token_root.mkdir(mode=0o700)
+        for resource in ("gmail", "drive", "calendar"):
+            client = token_root / f"google_personal_{resource}_readonly.client.json"
+            client.write_text(json.dumps({
+                "client_id": "synthetic-client", "client_secret": "synthetic-secret",
+                "redirect_uris": ["http://127.0.0.1:8765/callback"],
+            }), encoding="utf-8")
+            os.chmod(client, 0o600)
+            old = token_root / f"google_personal_{resource}_readonly.json"
+            old.write_text('{"old":true}\n', encoding="utf-8")
+            os.chmod(old, 0o600)
+        now = [1000.0]
+
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self):
+                return json.dumps({"access_token": "refreshed-access", "expires_in": 3600, "scope": " ".join(GOOGLE_READONLY_SCOPES)}).encode()
+
+        manager = GoogleOfflineTokenManager(token_root, opener=lambda *args, **kwargs: Response(), now=lambda: now[0])
+        authorization = manager.authorization_request("personal", login_hint="person@example.com")
+        self.assertIn("access_type=offline", authorization["url"])
+        self.assertIn("prompt=consent", authorization["url"])
+        self.assertFalse(any("write" in scope or "modify" in scope for scope in GOOGLE_READONLY_SCOPES))
+        installed = manager.install_account_token("personal", {
+            "access_token": "initial-access", "refresh_token": "private-refresh", "expires_in": 10,
+            "refresh_token_expires_in": 604800,
+            "scope": " ".join(GOOGLE_READONLY_SCOPES), "token_type": "Bearer",
+        }, backup_root=Path(self.temp.name) / "backup")
+        self.assertTrue(installed["refreshable"])
+        self.assertTrue(installed["refresh_token_time_limited"])
+        self.assertNotIn("private-refresh", repr(installed))
+        now[0] = 1011.0
+        refreshed = manager.refresh_account("personal")
+        self.assertTrue(refreshed["refreshed"])
+        for resource in ("gmail", "drive", "calendar"):
+            path = token_root / f"google_personal_{resource}_readonly.json"
+            self.assertEqual(0, path.stat().st_mode & 0o077)
+            payload = json.loads(path.read_text())
+            self.assertEqual("private-refresh", payload["refresh_token"])
+            self.assertEqual("refreshed-access", payload["access_token"])
+
     def test_personal_google_direct_api_is_host_locked_and_bounded(self):
         validate_google_api_url("gmail", "https://gmail.googleapis.com/gmail/v1/users/me/labels")
         validate_google_api_url("drive", "https://www.googleapis.com/drive/v3/files")
@@ -278,6 +323,15 @@ class OperationalTests(unittest.TestCase):
         self.assertEqual(10, client.calendar_events("2026-08-01", "2026-08-10", 50)["count"])
         self.assertIn("%2B05%3A00", client.calls[-1][1])
         self.assertTrue(all("https://" in url for _, url in client.calls))
+
+        class SyntheticWork(WorkGoogleDirect):
+            def _request_json(self, resource, url):
+                return {"files": [{"id": "work", "name": "safe"}]}
+
+        work = SyntheticWork(Path(self.temp.name)).drive_recent(1)
+        self.assertEqual("google_work_drive_readonly", work["connection_id"])
+        self.assertEqual("inside-success", work["context"])
+        self.assertFalse(work["writes_available"])
 
     def test_zoom_oauth_is_exactly_read_only(self):
         connection = load_zoom_connection()
