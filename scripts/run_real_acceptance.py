@@ -22,9 +22,17 @@ def main() -> int:
     parser.add_argument("--private-dir", type=Path, default=ROOT / "runtime-data/acceptance-private/prompt4")
     parser.add_argument("--summary", type=Path, default=ROOT / "runtime-data/acceptance-prompt4-summary.json")
     parser.add_argument("--case", action="append", choices=tuple(item.case_id for item in REAL_CASES))
+    parser.add_argument("--timeout-seconds", type=int, default=180)
+    parser.add_argument("--concurrency", type=int, choices=(1, 2), default=1)
     arguments = parser.parse_args()
     selected = tuple(item for item in REAL_CASES if not arguments.case or item.case_id in arguments.case)
-    result = RealAcceptanceRunner(ROOT, arguments.private_dir).run(start_date=arguments.start_date, end_date=arguments.end_date, cases=selected)
+    result = RealAcceptanceRunner(ROOT, arguments.private_dir).run(
+        start_date=arguments.start_date,
+        end_date=arguments.end_date,
+        cases=selected,
+        timeout_seconds=max(30, min(arguments.timeout_seconds, 240)),
+        concurrency=arguments.concurrency,
+    )
     arguments.summary.parent.mkdir(parents=True, exist_ok=True)
     arguments.summary.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     os.chmod(arguments.summary, 0o600)

@@ -12,9 +12,10 @@ import unittest
 from unittest.mock import Mock, patch
 
 from hermes_attention.actions import ActionController
-from hermes_attention.acceptance import AcceptanceCase, classification_snapshot, reclassify_codex_contexts, summarize_private_result
+from hermes_attention.acceptance import AcceptanceCase, classification_snapshot, compose_accepted_results, reclassify_codex_contexts, summarize_private_result
 from hermes_attention.config import load_json
-from hermes_attention.daily_report import load_daily_report_lock
+from hermes_attention.calibration import apply_context_calibration, prepare_context_calibration
+from hermes_attention.daily_report import load_daily_report_lock, normalize_inside_success_result, select_dloa_claims
 from hermes_attention.domain import ActionState, ConfidenceState, ContextLabel, EvidenceItem, Provenance, RiskClass
 from hermes_attention.executor import ExecutionDenied, SlackDestination, SupervisedActionExecutor
 from hermes_attention.history import CodexHistoryBridge
@@ -32,6 +33,7 @@ from hermes_attention.overlay import OverlayEvent, OverlayEventBus
 from hermes_attention.overlay_control import OverlayControlEvent, OverlayControlSupervisor, ProcessRecord
 from hermes_attention.overlay_runtime_bridge import OverlayRuntimeBridge
 from hermes_attention.secrets import configured_keys
+from hermes_attention.specialist_acceptance import run_specialist_acceptance
 from hermes_attention.slack_oauth import (
     SlackOAuthConnection,
     SlackOAuthError,
@@ -113,6 +115,12 @@ class OperationalTests(unittest.TestCase):
         self.assertEqual(3, bridge.ingest(maximum_records=3)["scanned"])
         self.assertEqual(3, bridge.ingest(maximum_records=3)["scanned"])
 
+    def test_specialists_and_memory_remain_context_scoped(self):
+        result = run_specialist_acceptance(ROOT / "specialists")
+        self.assertTrue(result["accepted"])
+        self.assertFalse(result["external_action_performed"])
+        self.assertTrue(result["checks"]["tax_finance_payment_prohibited"])
+
     def test_onboarding_connector_summary_is_resumable_and_honest(self):
         state, detail = summarize_connectors({"external_sources": [
             {"id": "live_read", "type": "remote-mcp", "enabled": True},
@@ -145,6 +153,50 @@ class OperationalTests(unittest.TestCase):
         self.assertFalse(wrapped["json_prefix_valid"])
         self.assertGreater(wrapped["preamble_bytes"], 0)
 
+        unresolved = json.loads(response)
+        unresolved["claims"][0]["source_refs"] = ["private://missing"]
+        unresolved_summary = summarize_private_result(case, json.dumps(unresolved), {}, 12, 0)
+        self.assertFalse(unresolved_summary["accepted"])
+        self.assertEqual(1, unresolved_summary["unresolved_claim_ref_count"])
+
+    def test_acceptance_composer_requires_strict_inputs_and_keeps_contexts_separate(self):
+        inside = AcceptanceCase("inside", "test", ("slack",), ("inside-success",))
+        mitchell = AcceptanceCase("mitchell", "test", ("slack",), ("mitchell",))
+
+        def response(case_id, context, reference):
+            return json.dumps({
+                "case_id": case_id, "status_checked": True, "writes_disabled": True,
+                "success": True, "answer": "private",
+                "claims": [{"claim": "private", "source_refs": [reference], "confidence": 0.8, "label_state": "confirmed"}],
+                "sources": [{"system": "slack", "connection_id": "slack", "ref": reference, "date": "2026-08-03", "context": context}],
+                "leakage_detected": False, "failure_reason": None,
+            })
+
+        target = AcceptanceCase("context_switch_handoff", "test", ("slack",), ("inside-success", "mitchell"))
+        composed, summary = compose_accepted_results(target, (
+            (inside, response("inside", "inside-success", "private://inside")),
+            (mitchell, response("mitchell", "mitchell", "private://mitchell")),
+        ))
+        payload = json.loads(composed)
+        self.assertTrue(summary["accepted"])
+        self.assertEqual({"inside-success", "mitchell"}, {item["context"] for item in payload["sources"]})
+        self.assertTrue(payload["composition"]["no_global_absence_claim"])
+
+    def test_inside_success_normalizer_only_promotes_validated_company_permalinks(self):
+        lock = load_daily_report_lock(ROOT / "config/actions/inside_success_daily_report.json")
+        valid = f"https://{lock.slack_workspace_domain}/archives/{lock.channel_id}/p1234567890000000"
+        result = {
+            "claims": [
+                {"claim": "valid", "source_refs": [valid], "confidence": 0.9, "label_state": "confirmed"},
+                {"claim": "invalid", "source_refs": ["https://example.com/private"], "confidence": 0.9, "label_state": "confirmed"},
+            ],
+            "sources": [],
+        }
+        normalized = normalize_inside_success_result(result, lock, case_id="worked_today")
+        self.assertEqual(1, len(normalized["claims"]))
+        self.assertEqual(valid, normalized["sources"][0]["ref"])
+        self.assertTrue(normalized["sources"][0]["derived_from_validated_permalink"])
+
     def test_codex_reclassification_preserves_genuine_unknowns(self):
         router = ContextRouter(load_json(ROOT / "config/contexts.json"))
         for source_id, workspace in (("known", "/work/new-casting-dashboard-main"), ("ambiguous", "/work/course pipeline/phase 2")):
@@ -161,6 +213,31 @@ class OperationalTests(unittest.TestCase):
         result = reclassify_codex_contexts(self.store, router)
         self.assertEqual(1, result["changed"])
         self.assertEqual({"inside-success": 1, "unknown": 1}, classification_snapshot(self.store)["by_context"])
+
+    def test_context_calibration_is_bounded_owner_confirmed_and_hash_locked(self):
+        for source_system in ("codex", "chatgpt_export"):
+            self.store.add_evidence(EvidenceItem(
+                evidence_id=f"unknown-{source_system}", title="Synthetic unknown", content="Synthetic private excerpt",
+                provenance=Provenance(
+                    source_system=source_system, connection_id=f"{source_system}_readonly", source_id=source_system,
+                    source_timestamp="2026-08-03T00:00:00Z", retrieved_at="2026-08-03T00:01:00Z",
+                ),
+                contexts=(ContextLabel("unknown", 1.0, "baseline", "rules-v1"),),
+                confidence_state=ConfidenceState.INFERRED,
+            ))
+        packet = prepare_context_calibration(self.store, per_source=1)
+        self.assertEqual(2, len(packet["items"]))
+        packet["items"][0]["decision"] = "personal"
+        with self.assertRaises(PermissionError):
+            apply_context_calibration(self.store, packet, confirmed_by="Other", allowed_contexts={"personal", "unknown"})
+        result = apply_context_calibration(self.store, packet, confirmed_by="Syed Moonis Haider", allowed_contexts={"personal", "unknown"})
+        self.assertEqual(1, result["changed"])
+        tampered = prepare_context_calibration(self.store, per_source=1)
+        if tampered["items"]:
+            tampered["items"][0]["review_hash"] = "0" * 64
+            tampered["items"][0]["decision"] = "personal"
+            with self.assertRaisesRegex(ValueError, "changed after review"):
+                apply_context_calibration(self.store, tampered, confirmed_by="Syed Moonis Haider", allowed_contexts={"personal", "unknown"})
 
     def test_google_oauth_scope_guard_is_read_only_and_resource_specific(self):
         class Metadata:
@@ -419,6 +496,22 @@ class OperationalTests(unittest.TestCase):
                 os.environ.pop("HERMES_ACTIONS_KILL_SWITCH", None)
             else:
                 os.environ["HERMES_ACTIONS_KILL_SWITCH"] = previous
+
+    def test_daily_report_claim_resolution_accepts_only_validated_company_permalinks(self):
+        lock = load_daily_report_lock(ROOT / "config/actions/inside_success_daily_report.json")
+        valid = f"https://{lock.slack_workspace_domain}/archives/C0B0RT26KCZ/p1785780558705449"
+        result = {
+            "sources": [],
+            "claims": [
+                {"claim": "Verified activity", "source_refs": [valid], "label_state": "confirmed"},
+                {"claim": "Wrong workspace", "source_refs": ["https://other.slack.com/archives/C0B0RT26KCZ/p1785780558705449"], "label_state": "confirmed"},
+                {"claim": "Uncertain", "source_refs": [valid], "label_state": "uncertain"},
+                {"claim": "Mutable query", "source_refs": ["github:search_commits(total_count=0)"], "label_state": "confirmed"},
+            ],
+        }
+        claims, derived = select_dloa_claims(result, lock)
+        self.assertEqual(["Verified activity"], [item["text"] for item in claims])
+        self.assertEqual(1, derived)
 
     def test_default_action_kill_switch_blocks_writes_but_not_reads(self):
         with patch.dict(os.environ, {"HERMES_ACTIONS_KILL_SWITCH": "1"}):

@@ -21,7 +21,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m hermes_attention.cli status
 HERMES_ACTIONS_KILL_SWITCH=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m hermes_attention.cli health
 ```
 
-Daily launch after the remaining permission gates:
+Daily launch:
 
 ```bash
 ./scripts/launch_daily_hermes.sh
@@ -31,7 +31,7 @@ This prints health, starts the local overlay, and launches Hermes in the trusted
 
 ## Boundaries
 
-- The Hermes plugin exposes evidence, task, handoff, screen-request, and exact-preview tools; the restricted Slack executor exists outside the plugin, remains kill-switched, destination-unconfigured, and shadow-only.
+- The Hermes plugin exposes evidence, task, handoff, screen-request, and exact-preview tools; the restricted Slack executor exists outside the plugin, remains kill-switched, fixed to `#sd-dloa-tyler`, disconnected from a sender, and shadow-only.
 - GitHub, Slack, work Google, personal Google, and Zoom have bounded real acceptance. Personal consumer Google uses three project-local GET-only direct-API tools because Google's hosted Workspace MCP Developer Preview rejects consumer accounts; the unsupported personal MCP servers remain disabled. Provider inventory is never treated as acceptance by itself.
 - Public web research is read-only and citation-bearing; logged-in browsing, carts, checkout, and payment are unavailable.
 - Imported histories and runtime databases remain gitignored.

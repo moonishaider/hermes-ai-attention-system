@@ -68,7 +68,20 @@ The public research smoke returned six cited search results for a harmless keybo
 
 ## Remaining acceptance gates
 
-- Select the exact Inside Success Slack destination and approve one exact payload before any test send.
+- The exact Inside Success destination is selected and locked. Sending remains deliberately unperformed; a fresh preview and exact payload approval are required if the user later requests a supervised test send.
+- The requested Gemini Takeout archive has not arrived. Preview and importer work remain resumable when the ZIP is available.
+
+## Closeout acceptance batch
+
+The 4 August closeout strengthened the acceptance contract: every claim reference must now appear verbatim in exactly one source entry. Missing or duplicated references fail the case even if the model reports success. Prompts also cap each connection to one focused query plus one broadened query and prohibit identical retries. The runner supports at most two concurrent cases on the 8 GB Mac.
+
+A focused Mitchell run passed in 120.8 seconds for an estimated $0.00607: 8/8 claims had exact resolved references across 10 sources, all labeled Mitchell, with no reported leakage. A final Inside Success retry timed out fail-closed at 180 seconds with no recorded API charge, so it was not retried.
+
+For the two remaining multi-context requirements, a deterministic local composer consumed only strict-valid private inputs: the already accepted same-day Inside Success result was normalized by adding only its previously validated company Slack permalinks to the source table, and the new strict Mitchell result supplied the other context. Both context-switch handoff and commitment/contradiction cases then passed with 6/6 cited claims across 9 exact sources and both contexts. The contradiction result counts only explicit candidates in the bounded claims and deliberately makes no global “none exist” assertion. Composition made no connector call and performed no external action.
+
+The DLOA v2 pipeline retained four confirmed claims and four validated Inside Success Slack permalinks, generated a destination-locked private preview, and omitted unresolved/uncertain claims. The preview expired safely. No sender is configured, no generic Slack send tool is exposed, and no message was sent.
+
+An owner-only calibration packet was prepared with 12 bounded unknown records: six ChatGPT and six Codex samples. Applying decisions is owner-confirmed and hash-locked; no context labels were changed in this batch. Specialist acceptance passed seven controls covering persistent loading, context locks, publish/payment prohibitions, disabled serious mode, review routing, and isolated memory namespaces.
 
 ## Voice acceptance
 

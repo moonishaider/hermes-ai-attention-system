@@ -14,7 +14,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from hermes_attention.daily_report import load_daily_report_lock, validate_daily_report_payload  # noqa: E402
+from hermes_attention.daily_report import load_daily_report_lock, select_dloa_claims, validate_daily_report_payload  # noqa: E402
 
 
 def _within(path: Path, parent: Path) -> bool:
@@ -39,6 +39,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--accepted-result", required=True, type=Path)
     parser.add_argument("--report-date", required=True)
+    parser.add_argument("--draft-id", default="v1")
     arguments = parser.parse_args()
 
     runtime = ROOT / "runtime-data"
@@ -56,36 +57,18 @@ def main() -> int:
     if result.get("leakage_detected") is not False:
         parser.error("source acceptance did not pass its leakage check")
 
-    sources = result.get("sources")
-    claims = result.get("claims")
-    if not isinstance(sources, list) or not isinstance(claims, list):
-        parser.error("accepted result has no structured sources/claims")
-    source_by_ref = {
-        item.get("ref"): item
-        for item in sources
-        if isinstance(item, dict) and isinstance(item.get("ref"), str)
-    }
-    accepted_claims: list[dict] = []
-    for claim in claims:
-        if not isinstance(claim, dict) or claim.get("label_state") not in {"confirmed", "inferred"}:
-            continue
-        text = claim.get("claim")
-        refs = claim.get("source_refs")
-        if not isinstance(text, str) or not text.strip() or not isinstance(refs, list) or not refs:
-            continue
-        evidence = [source_by_ref.get(ref) for ref in refs]
-        if any(item is None or item.get("context") != "inside-success" for item in evidence):
-            continue
-        accepted_claims.append({"text": text.strip().lstrip("•- "), "refs": refs, "label_state": claim["label_state"]})
+    lock = load_daily_report_lock(ROOT / "config/actions/inside_success_daily_report.json")
+    accepted_claims, derived_permalink_count = select_dloa_claims(result, lock)
     if not accepted_claims:
         parser.error("no source-backed Inside Success claims are safe to draft")
 
     human_date = f"{report_date.day} {report_date.strftime('%B %Y')}"
     text = "DLOA – " + human_date + "\n" + "\n".join(f"• {item['text']}" for item in accepted_claims) + "\n"
-    lock = load_daily_report_lock(ROOT / "config/actions/inside_success_daily_report.json")
     validate_daily_report_payload({"text": text, "report_date": arguments.report_date}, lock)
 
-    output_dir = runtime / "daily-reports" / arguments.report_date
+    if not arguments.draft_id.replace("-", "").replace("_", "").isalnum():
+        parser.error("draft id may contain only letters, numbers, hyphens, and underscores")
+    output_dir = runtime / "daily-reports" / arguments.report_date / arguments.draft_id
     output_dir.mkdir(parents=True, exist_ok=True)
     draft_path = output_dir / "draft.txt"
     manifest_path = output_dir / "evidence-manifest.json"
@@ -98,6 +81,8 @@ def main() -> int:
         "claim_count": len(accepted_claims),
         "confirmed_count": sum(item["label_state"] == "confirmed" for item in accepted_claims),
         "inferred_count": sum(item["label_state"] == "inferred" for item in accepted_claims),
+        "validated_derived_slack_permalink_count": derived_permalink_count,
+        "source_systems": sorted({system for item in accepted_claims for system in item["source_systems"]}),
         "source_ref_hashes": sorted({sha256(ref.encode("utf-8")).hexdigest() for item in accepted_claims for ref in item["refs"]}),
         "raw_source_content_stored": False,
         "slack_send_performed": False,
@@ -108,6 +93,7 @@ def main() -> int:
         "created": True,
         "report_date": arguments.report_date,
         "claim_count": len(accepted_claims),
+        "validated_derived_slack_permalink_count": derived_permalink_count,
         "draft_path": str(draft_path),
         "manifest_path": str(manifest_path),
         "slack_send_performed": False,
