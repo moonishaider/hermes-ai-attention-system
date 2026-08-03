@@ -23,7 +23,7 @@ Grant Microphone permission only to the exact process macOS presents for this gu
 3. Confirm the current policy returns `shadow-only` and `execution_performed=false`.
 4. Change one payload field locally and confirm preview-hash validation fails. Test unknown/mixed and A4 rejection locally.
 5. The restricted executor exists but is deliberately absent from Hermes tools and remains kill-switched. It accepts only the fixed Inside Success daily-update action, exact workspace/channel, stored approved state, unexpired proposal, matching preview hash, and idempotency policy.
-6. Do not clear the kill switch or test through a real Slack sender until Syed selects the fixed destination and explicitly approves the exact synthetic supervised test. Calendar, email, download, browser, payment, deletion, and account/permission hooks remain disabled.
+6. The selected Slack destination is workspace `T01K1TNLXLK`, channel `#sd-dloa-tyler` (`C0B0RT26KCZ`). Build private previews with `scripts/build_daily_report_draft.py` and `scripts/prepare_daily_report_preview.py`. Do not clear the kill switch or connect a real sender until Syed reviews and explicitly approves the exact unexpired payload/hash. Calendar, email, download, browser, payment, deletion, and account/permission hooks remain disabled.
 
 ## Backup and restore
 

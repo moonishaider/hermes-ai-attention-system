@@ -63,6 +63,7 @@ def validate_project_configuration(paths: ProjectPaths) -> list[str]:
         paths.config_dir / "contexts.json",
         paths.config_dir / "models.json",
         paths.config_dir / "integrations.json",
+        paths.config_dir / "actions" / "inside_success_daily_report.json",
         paths.specialist_dir / "registry.json",
     ]
     for path in required:
@@ -76,6 +77,7 @@ def validate_project_configuration(paths: ProjectPaths) -> list[str]:
         contexts = load_json(paths.config_dir / "contexts.json")
         models = load_json(paths.config_dir / "models.json")
         integrations = load_json(paths.config_dir / "integrations.json")
+        daily_report = load_json(paths.config_dir / "actions" / "inside_success_daily_report.json")
         specialists = load_json(paths.specialist_dir / "registry.json")
     except ConfigurationError as exc:
         return [str(exc)]
@@ -89,6 +91,8 @@ def validate_project_configuration(paths: ProjectPaths) -> list[str]:
         errors.append("models.default_route must be routine")
     if any(item.get("mode") != "read-only" for item in integrations.get("external_sources", [])):
         errors.append("all initial external source integrations must be read-only")
+    if daily_report.get("execution_mode") != "supervised-preview" or daily_report.get("generic_send_exposed") is not False:
+        errors.append("Inside Success daily reporting must remain supervised-preview with no generic send")
     if not specialists.get("specialists"):
         errors.append("specialist registry is empty")
     return errors

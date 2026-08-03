@@ -3,6 +3,12 @@
 **Checked:** 2026-08-02
 **Status:** Updated through Prompt 4 acceptance
 
+## Gemini Apps export (checked 4 August 2026)
+
+Google's official Gemini Apps Help documents an official Takeout route. `Gemini` contains Gems data; chats, generated media, and uploads are exported through `My Activity` with only `Gemini Apps` selected. Google states that archive creation can take hours to days and that downloading does not delete server-side activity. Hermes has no continuous personal Gemini-history synchronization route and will treat a future Takeout archive as untrusted evidence requiring schema preview, date filtering, redaction, and explicit import confirmation.
+
+Official source: https://support.google.com/gemini/answer/16920332?hl=en
+
 This report records implementation-time verification against current official primary sources. Exact versions, capability decisions, and fallback boundaries will be completed before the Milestone 0 gate.
 
 | Area | Current finding | Implementation consequence |

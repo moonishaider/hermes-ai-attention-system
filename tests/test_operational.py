@@ -14,6 +14,7 @@ from unittest.mock import Mock, patch
 from hermes_attention.actions import ActionController
 from hermes_attention.acceptance import AcceptanceCase, classification_snapshot, reclassify_codex_contexts, summarize_private_result
 from hermes_attention.config import load_json
+from hermes_attention.daily_report import load_daily_report_lock
 from hermes_attention.domain import ActionState, ConfidenceState, ContextLabel, EvidenceItem, Provenance, RiskClass
 from hermes_attention.executor import ExecutionDenied, SlackDestination, SupervisedActionExecutor
 from hermes_attention.history import CodexHistoryBridge
@@ -357,6 +358,62 @@ class OperationalTests(unittest.TestCase):
             self.assertTrue(executor.execute_daily_report(proposal, approved_hash=proposal.preview_hash)["executed"])
             with self.assertRaises(ExecutionDenied):
                 executor.execute_daily_report(replace(proposal, target={"workspace_id": "T_FIXED", "channel_id": "C_OTHER"}), approved_hash=proposal.preview_hash)
+        finally:
+            if previous is None:
+                os.environ.pop("HERMES_ACTIONS_KILL_SWITCH", None)
+            else:
+                os.environ["HERMES_ACTIONS_KILL_SWITCH"] = previous
+
+    def test_real_daily_report_lock_rejects_drift_mentions_expiry_and_replay(self):
+        lock = load_daily_report_lock(ROOT / "config/actions/inside_success_daily_report.json")
+        self.assertEqual("T01K1TNLXLK", lock.workspace_id)
+        self.assertEqual("C0B0RT26KCZ", lock.channel_id)
+        self.assertEqual("sd-dloa-tyler", lock.channel_name)
+        self.assertEqual("Syed Moonis Haider", lock.author_name)
+
+        policy = PolicyEngine(external_writes_enabled=True, kill_switch=False)
+        controller = ActionController(self.store, policy)
+        sent = []
+        executor = SupervisedActionExecutor(
+            self.store,
+            policy,
+            SlackDestination.from_lock(lock),
+            lock=lock,
+            sender=lambda channel, text: sent.append((channel, text)) or {"ok": True},
+        )
+
+        def proposal(payload=None, target=None, ttl_minutes=15):
+            item = controller.propose(
+                action_type=lock.action_type,
+                context_id=lock.context_id,
+                risk_class=RiskClass.A2,
+                target=target or {"workspace_id": lock.workspace_id, "channel_id": lock.channel_id},
+                payload=payload or {"text": "DLOA – 4 August 2026\n• Synthetic verified activity", "report_date": "2026-08-04"},
+                ttl_minutes=ttl_minutes,
+            )
+            controller.verify_approval(item, approved_preview_hash=item.preview_hash, approval_identity="Syed Moonis Haider")
+            return item
+
+        previous = os.environ.get("HERMES_ACTIONS_KILL_SWITCH")
+        os.environ["HERMES_ACTIONS_KILL_SWITCH"] = "0"
+        try:
+            wrong_target = proposal(target={"workspace_id": lock.workspace_id, "channel_id": "C_OTHER"})
+            with self.assertRaisesRegex(ExecutionDenied, "destination lock mismatch"):
+                executor.execute_daily_report(wrong_target, approved_hash=wrong_target.preview_hash)
+
+            broad_mention = proposal(payload={"text": "<!channel> synthetic", "report_date": "2026-08-04"})
+            with self.assertRaisesRegex(ExecutionDenied, "broad Slack mention"):
+                executor.execute_daily_report(broad_mention, approved_hash=broad_mention.preview_hash)
+
+            expired = replace(proposal(), expires_at="2026-01-01T00:00:00+00:00")
+            with self.assertRaisesRegex(ExecutionDenied, "expired"):
+                executor.execute_daily_report(expired, approved_hash=expired.preview_hash)
+
+            approved = proposal()
+            self.assertTrue(executor.execute_daily_report(approved, approved_hash=approved.preview_hash)["executed"])
+            with self.assertRaisesRegex(ExecutionDenied, "not in approved state"):
+                executor.execute_daily_report(approved, approved_hash=approved.preview_hash)
+            self.assertEqual([(lock.channel_id, approved.payload["text"])], sent)
         finally:
             if previous is None:
                 os.environ.pop("HERMES_ACTIONS_KILL_SWITCH", None)
