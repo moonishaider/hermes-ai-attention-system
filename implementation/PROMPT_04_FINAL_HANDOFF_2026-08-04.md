@@ -1,11 +1,17 @@
 # Hermes Prompt 4 Final Handoff
 
-**Prepared:** 4 August 2026  
-**Project:** Hermes AI Attention & Intelligence System  
-**Marked project root:** `/Users/moonishaider/Desktop/upwork/jarvis/jarvis-imp/hermes_ai_attention_system_codex_handoff_v2`  
-**Private repository:** `https://github.com/moonishaider/hermes-ai-attention-system`  
-**Branch and operational implementation baseline:** `main` at `116a86f` (`Resolve Google hourly OAuth expiry`); this handoff may be published by a later documentation-only commit  
-**Prompt 4 milestone rollback:** `015948b`  
+**Prepared:** 4 August 2026
+
+**Project:** Hermes AI Attention & Intelligence System
+
+**Marked project root:** `/Users/moonishaider/Desktop/upwork/jarvis/jarvis-imp/hermes_ai_attention_system_codex_handoff_v2`
+
+**Private repository:** `https://github.com/moonishaider/hermes-ai-attention-system`
+
+**Branch and operational implementation baseline:** `main` at `116a86f` (`Resolve Google hourly OAuth expiry`); this handoff may be published by a later documentation-only commit
+
+**Prompt 4 milestone rollback:** `015948b`
+
 **Pre-Google-refresh rollback:** `bf04f22`
 
 ## Purpose of this handoff
