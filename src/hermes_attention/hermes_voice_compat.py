@@ -2,7 +2,26 @@
 
 from __future__ import annotations
 
+import json
+import os
+from pathlib import Path
 from typing import Any, Callable
+
+
+def overlay_voice_output_muted() -> bool:
+    """Read the ephemeral owner-only launcher mute state, failing unmuted."""
+    raw_path = os.environ.get("HERMES_ATTENTION_OVERLAY_MUTE_STATE", "")
+    if not raw_path:
+        return False
+    path = Path(raw_path)
+    try:
+        info = path.stat()
+        if info.st_uid != os.getuid() or info.st_mode & 0o077:
+            return False
+        payload = json.loads(path.read_text(encoding="utf-8")[:256])
+        return payload.get("muted") is True
+    except (OSError, ValueError, json.JSONDecodeError):
+        return False
 
 
 def _play_darwin_afplay_only(
@@ -74,6 +93,8 @@ def install_voice_playback_interrupt_guard() -> bool:
     def guarded(file_path: str) -> bool:
         if voice_mode.platform.system() != "Darwin":
             return original(file_path)
+        if overlay_voice_output_muted():
+            return False
         return _play_darwin_afplay_only(
             voice_mode,
             file_path,
