@@ -132,6 +132,24 @@ def personal_calendar_events(start_time: str, end_time: str, limit: int = 10) ->
     return json.dumps(PersonalGoogleDirect().calendar_events(start_time, end_time, limit), ensure_ascii=False)
 
 
+def work_gmail_search(query: str, limit: int = 10) -> str:
+    """Search the isolated work Gmail account through a bounded read-only API."""
+    from hermes_attention.google_direct import WorkGoogleDirect
+    return json.dumps(WorkGoogleDirect().gmail_search(query, limit), ensure_ascii=False)
+
+
+def work_drive_recent(limit: int = 10) -> str:
+    """List bounded recent work Drive metadata through a read-only API."""
+    from hermes_attention.google_direct import WorkGoogleDirect
+    return json.dumps(WorkGoogleDirect().drive_recent(limit), ensure_ascii=False)
+
+
+def work_calendar_events(start_time: str, end_time: str, limit: int = 10) -> str:
+    """List bounded work Calendar events through a read-only API."""
+    from hermes_attention.google_direct import WorkGoogleDirect
+    return json.dumps(WorkGoogleDirect().calendar_events(start_time, end_time, limit), ensure_ascii=False)
+
+
 def _handler(function: Any) -> Any:
     def invoke(args: dict[str, Any], **_: Any) -> str:
         return function(**args)
@@ -216,6 +234,24 @@ _TOOLS = (
     (
         "hermes_attention_personal_calendar_events", personal_calendar_events,
         "List bounded events from the isolated personal Calendar account; no create, update, delete, or response is available.",
+        {"start_time": {"type": "string"}, "end_time": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 10}},
+        ["start_time", "end_time"], "📅",
+    ),
+    (
+        "hermes_attention_work_gmail_search", work_gmail_search,
+        "Search the isolated work Gmail account read-only with Gmail query syntax and bounded results.",
+        {"query": {"type": "string", "maxLength": 500}, "limit": {"type": "integer", "minimum": 1, "maximum": 10}},
+        ["query"], "✉️",
+    ),
+    (
+        "hermes_attention_work_drive_recent", work_drive_recent,
+        "List bounded recent metadata from the isolated work Drive account; no create, copy, upload, or download is available.",
+        {"limit": {"type": "integer", "minimum": 1, "maximum": 10}},
+        [], "🗂️",
+    ),
+    (
+        "hermes_attention_work_calendar_events", work_calendar_events,
+        "List bounded events from the isolated work Calendar account; no create, update, delete, or response is available.",
         {"start_time": {"type": "string"}, "end_time": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 10}},
         ["start_time", "end_time"], "📅",
     ),

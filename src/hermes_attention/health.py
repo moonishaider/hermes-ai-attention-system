@@ -21,9 +21,15 @@ def _token_health(name: str, token_root: Path, now: float) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError):
         return {"state": "invalid-local-token-record", "expires_at": None, "refreshable": False}
     expiry = float(token.get("expires_at") or 0)
+    refresh_expiry = float(token.get("refresh_token_expires_at") or 0)
     refreshable = bool(token.get("refresh_token"))
     remaining = int(expiry - now) if expiry else None
-    if remaining is None:
+    refresh_remaining = int(refresh_expiry - now) if refresh_expiry else None
+    if refreshable and refresh_remaining is not None and refresh_remaining <= 0:
+        state = "reauthorization-required"
+    elif refreshable and refresh_remaining is not None and refresh_remaining <= 86400:
+        state = "refresh-token-expires-soon"
+    elif remaining is None:
         state = "present-expiry-unknown"
     elif remaining <= 0 and refreshable:
         state = "expired-refresh-available"
@@ -40,6 +46,8 @@ def _token_health(name: str, token_root: Path, now: float) -> dict[str, Any]:
         "expires_at": datetime.fromtimestamp(expiry, UTC).isoformat() if expiry else None,
         "seconds_remaining": remaining,
         "refreshable": refreshable,
+        "refresh_token_expires_at": datetime.fromtimestamp(refresh_expiry, UTC).isoformat() if refresh_expiry else None,
+        "refresh_token_seconds_remaining": refresh_remaining,
     }
 
 
@@ -51,7 +59,7 @@ def _aggregate_token_health(prefix: str, token_root: Path, now: float) -> dict[s
     states = {item["state"] for item in resources.values()}
     priority = (
         "invalid-local-token-record", "reauthorization-required", "authorization-required",
-        "expires-soon", "expired-refresh-available", "present-expiry-unknown", "ready-refreshable", "ready",
+        "refresh-token-expires-soon", "expires-soon", "expired-refresh-available", "present-expiry-unknown", "ready-refreshable", "ready",
     )
     state = next((candidate for candidate in priority if candidate in states), "unknown")
     return {"state": state, "resources": resources}
@@ -141,7 +149,7 @@ def startup_health(service: Any) -> dict[str, Any]:
         },
         "warnings": [
             name for name, value in connectors.items()
-            if value.get("state") in {"reauthorization-required", "expires-soon", "credential-required", "oauth-required-disabled"}
+            if value.get("state") in {"reauthorization-required", "refresh-token-expires-soon", "expires-soon", "credential-required", "oauth-required-disabled"}
         ],
         "secrets_printed": False,
         "private_content_printed": False,

@@ -7,6 +7,7 @@ export HERMES_ENABLE_PROJECT_PLUGINS=1
 export HERMES_ACTIONS_KILL_SWITCH="${HERMES_ACTIONS_KILL_SWITCH:-1}"
 export PYTHONPATH="$ROOT/src"
 
+python3 "$ROOT/scripts/refresh_google_tokens.py"
 python3 -m hermes_attention.cli health
 
 OVERLAY_DIR="$(mktemp -d "${TMPDIR:-/tmp}/hermes-attention-overlay.XXXXXX")"

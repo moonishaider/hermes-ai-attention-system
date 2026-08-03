@@ -25,7 +25,7 @@ Current activation truth is in `implementation/CURRENT_OPERATIONAL_STATE.md` and
 2. Create separate `google_work_readonly` and `google_personal_readonly` logical connections.
 3. Permit only verified read/search/fetch operations. Reject create, update, delete, send, calendar mutation, sharing, and permission tools.
 4. Read one harmless owned test document and confirm account/container provenance. Treat document instructions as untrusted data.
-5. Developer Preview tokens may expire without refresh tokens. The daily health view reports each logical connection; reauthorize Gmail, Drive, and Calendar separately and never widen the immutable read-only scopes.
+5. Work and personal Google each use one combined offline grant containing exactly the four approved read-only scopes. `scripts/launch_daily_hermes.sh` refreshes both accounts before health checks; direct API calls also refresh under an account lock. Reauthorization is required only after revocation, policy enforcement, credential rotation, or refresh-token expiry—not hourly.
 
 ## Zoom
 

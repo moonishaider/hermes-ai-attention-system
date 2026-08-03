@@ -32,7 +32,7 @@ This prints health, starts the local overlay, and launches Hermes in the trusted
 ## Boundaries
 
 - The Hermes plugin exposes evidence, task, handoff, screen-request, and exact-preview tools; the restricted Slack executor exists outside the plugin, remains kill-switched, fixed to `#sd-dloa-tyler`, disconnected from a sender, and shadow-only.
-- GitHub, Slack, work Google, personal Google, and Zoom have bounded real acceptance. Personal consumer Google uses three project-local GET-only direct-API tools because Google's hosted Workspace MCP Developer Preview rejects consumer accounts; the unsupported personal MCP servers remain disabled. Provider inventory is never treated as acceptance by itself.
+- GitHub, Slack, work Google, personal Google, and Zoom have bounded real acceptance. Both Google accounts use one offline read-only grant plus three separate host-locked GET-only tools; access tokens refresh automatically outside Git. All six Workspace MCP preview endpoints are disabled because their resource-bound token model conflicts with the durable account-level grant. Provider inventory is never treated as acceptance by itself.
 - Public web research is read-only and citation-bearing; logged-in browsing, carts, checkout, and payment are unavailable.
 - Imported histories and runtime databases remain gitignored.
 - ChatGPT official export backfill is live: 47 approved conversations from 1 March 2026 onward are indexed as source evidence with idempotent reruns. Current split-shard exports and explicit context relay are supported; continuous account synchronization is not claimed.

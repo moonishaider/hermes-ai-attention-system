@@ -12,6 +12,8 @@ from urllib.parse import quote, urlencode, urlparse
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
+from .google_offline_oauth import GoogleOfflineOAuthError, GoogleOfflineTokenManager
+
 
 class GoogleDirectError(RuntimeError):
     pass
@@ -21,14 +23,10 @@ RESOURCE_POLICY = {
     "gmail": {
         "host": "gmail.googleapis.com",
         "scope": "https://www.googleapis.com/auth/gmail.readonly",
-        "token": "google_personal_gmail_readonly.json",
-        "connection_id": "google_personal_gmail_readonly",
     },
     "drive": {
         "host": "www.googleapis.com",
         "scope": "https://www.googleapis.com/auth/drive.readonly",
-        "token": "google_personal_drive_readonly.json",
-        "connection_id": "google_personal_drive_readonly",
     },
     "calendar": {
         "host": "www.googleapis.com",
@@ -36,8 +34,6 @@ RESOURCE_POLICY = {
             "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
             "https://www.googleapis.com/auth/calendar.events.readonly",
         },
-        "token": "google_personal_calendar_readonly.json",
-        "connection_id": "google_personal_calendar_readonly",
     },
 }
 
@@ -62,33 +58,23 @@ def _ssl_context() -> ssl.SSLContext:
     return ssl.create_default_context()
 
 
-class PersonalGoogleDirect:
-    """Bounded GET-only client using the isolated personal read-only grants."""
+class GoogleDirect:
+    """Bounded GET-only client using one isolated account read-only grant."""
 
-    def __init__(self, token_root: Path | None = None) -> None:
+    def __init__(self, account: str, context: str, token_root: Path | None = None) -> None:
+        if account not in {"work", "personal"} or context not in {"inside-success", "personal"}:
+            raise GoogleDirectError("Unsupported Google account/context boundary")
+        self.account = account
+        self.context = context
         self.token_root = token_root or Path.home() / ".hermes" / "mcp-tokens"
+        self.token_manager = GoogleOfflineTokenManager(self.token_root)
 
     def _access_token(self, resource: str) -> str:
         policy = RESOURCE_POLICY[resource]
-        path = self.token_root / str(policy["token"])
-        if not path.is_file() or path.stat().st_mode & 0o077:
-            raise GoogleDirectError("Personal Google token is missing or not owner-only")
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise GoogleDirectError("Personal Google token record is invalid") from exc
-        expiry = float(payload.get("expires_at") or 0)
-        if expiry and expiry <= datetime.now(UTC).timestamp():
-            raise GoogleDirectError("Personal Google token requires reauthorization")
-        granted = set(str(payload.get("scope") or "").split())
-        required = policy["scope"]
-        expected = {required} if isinstance(required, str) else set(required)
-        if granted != expected:
-            raise GoogleDirectError("Personal Google token scope differs from the reviewed allowlist")
-        token = payload.get("access_token")
-        if not isinstance(token, str) or not token:
-            raise GoogleDirectError("Personal Google token is missing")
-        return token
+            return self.token_manager.access_token(self.account, resource)
+        except GoogleOfflineOAuthError as exc:
+            raise GoogleDirectError(str(exc)) from exc
 
     def _request_json(self, resource: str, url: str) -> dict[str, Any]:
         validate_google_api_url(resource, url)
@@ -141,7 +127,7 @@ class PersonalGoogleDirect:
                 "date": headers.get("date", ""),
                 "snippet": str(latest.get("snippet") or "")[:500],
                 "source_ref": "https://mail.google.com/mail/u/0/#all/" + thread_id,
-                "context": "personal",
+                "context": self.context,
             })
         return self._result("gmail", items)
 
@@ -159,7 +145,7 @@ class PersonalGoogleDirect:
             "mime_type": str(row.get("mimeType") or ""),
             "modified_time": str(row.get("modifiedTime") or ""),
             "source_ref": str(row.get("webViewLink") or ("https://drive.google.com/open?id=" + str(row.get("id") or ""))),
-            "context": "personal",
+            "context": self.context,
         } for row in list(payload.get("files") or [])[:_bounded_limit(limit)]]
         return self._result("drive", items)
 
@@ -188,18 +174,30 @@ class PersonalGoogleDirect:
             "end": row.get("end", {}).get("dateTime") or row.get("end", {}).get("date"),
             "status": str(row.get("status") or ""),
             "source_ref": str(row.get("htmlLink") or ""),
-            "context": "personal",
+            "context": self.context,
         } for row in list(payload.get("items") or [])[:_bounded_limit(limit)]]
         return self._result("calendar", items)
 
-    @staticmethod
-    def _result(resource: str, items: list[dict[str, Any]]) -> dict[str, Any]:
+    def _result(self, resource: str, items: list[dict[str, Any]]) -> dict[str, Any]:
+        connection_id = f"google_{self.account}_{resource}_readonly"
         return {
-            "connection_id": RESOURCE_POLICY[resource]["connection_id"],
-            "source_system": RESOURCE_POLICY[resource]["connection_id"],
+            "connection_id": connection_id,
+            "source_system": connection_id,
             "mode": "read-only-direct-api",
+            "account_boundary": self.account,
+            "context": self.context,
             "retrieved_at": datetime.now(UTC).isoformat(),
             "items": items,
             "count": len(items),
             "writes_available": False,
         }
+
+
+class PersonalGoogleDirect(GoogleDirect):
+    def __init__(self, token_root: Path | None = None) -> None:
+        super().__init__("personal", "personal", token_root)
+
+
+class WorkGoogleDirect(GoogleDirect):
+    def __init__(self, token_root: Path | None = None) -> None:
+        super().__init__("work", "inside-success", token_root)
