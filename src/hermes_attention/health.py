@@ -29,6 +29,8 @@ def _token_health(name: str, token_root: Path, now: float) -> dict[str, Any]:
         state = "expired-refresh-available"
     elif remaining <= 0:
         state = "reauthorization-required"
+    elif remaining <= 3600 and refreshable:
+        state = "ready-refreshable"
     elif remaining <= 3600:
         state = "expires-soon"
     else:
@@ -49,7 +51,7 @@ def _aggregate_token_health(prefix: str, token_root: Path, now: float) -> dict[s
     states = {item["state"] for item in resources.values()}
     priority = (
         "invalid-local-token-record", "reauthorization-required", "authorization-required",
-        "expires-soon", "expired-refresh-available", "present-expiry-unknown", "ready",
+        "expires-soon", "expired-refresh-available", "present-expiry-unknown", "ready-refreshable", "ready",
     )
     state = next((candidate for candidate in priority if candidate in states), "unknown")
     return {"state": state, "resources": resources}
@@ -59,6 +61,9 @@ def startup_health(service: Any) -> dict[str, Any]:
     """Return operational state without token values, source content, or prompts."""
     now = datetime.now(UTC)
     token_root = Path.home() / ".hermes" / "mcp-tokens"
+    chatgpt_records = int(service.store.connection.execute(
+        "SELECT COUNT(*) FROM evidence WHERE evidence_id LIKE 'chatgpt:%' AND tombstoned_at IS NULL"
+    ).fetchone()[0])
     connectors: dict[str, Any] = {}
     for name, record in sorted(service.integrations.connections.items()):
         base = {
@@ -75,9 +80,13 @@ def startup_health(service: Any) -> dict[str, Any]:
             secret_name = "MCP_GITHUB_PERSONAL_READONLY_API_KEY" if "personal" in name else "MCP_GITHUB_INSIDE_SUCCESS_READONLY_API_KEY"
             base["state"] = "configured-live-smoked" if configured_keys().get(secret_name) else "credential-required"
         elif name == "zoom_readonly":
-            base["state"] = "oauth-required-disabled" if not record.get("enabled") else "configured-unverified"
+            if not record.get("enabled"):
+                base["state"] = "oauth-required-disabled"
+            else:
+                base.update(_token_health(name, token_root, now.timestamp()))
         elif name == "chatgpt_export_backfill":
-            base["state"] = "awaiting-user-selected-official-export"
+            base["state"] = "imported" if chatgpt_records else "awaiting-user-selected-official-export"
+            base["records"] = chatgpt_records
         else:
             base["state"] = "local-ready" if record.get("enabled") else "disabled"
         connectors[name] = base
@@ -112,7 +121,11 @@ def startup_health(service: Any) -> dict[str, Any]:
             "last_checkpoint_at": last_checkpoint,
             "pending_lines": "not-counted-at-startup-to-avoid-scanning-6GB-history",
         },
-        "chatgpt": {"state": "awaiting-user-selected-official-export", "continuous_sync": False},
+        "chatgpt": {
+            "state": "imported" if chatgpt_records else "awaiting-user-selected-official-export",
+            "records": chatgpt_records,
+            "continuous_sync": False,
+        },
         "zoom": {"state": connectors.get("zoom_readonly", {}).get("state", "disabled")},
         "external_actions": {
             "enabled": service.policy.external_writes_enabled,

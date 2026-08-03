@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from zipfile import ZipFile
 
 from hermes_attention.config import ProjectPaths, load_json
 from hermes_attention.history import ChatGPTExportImporter, CodexHistoryBridge, ContextRelayImporter
@@ -48,6 +49,23 @@ class HistoryAndServiceTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             importer.ingest(path, start_date="2026-01-01")
         self.assertEqual(1, importer.ingest(path, start_date="2026-01-01", confirmed=True)["inserted"])
+        self.assertEqual({"inserted": 0, "duplicates": 1}, importer.ingest(path, start_date="2026-01-01", confirmed=True))
+
+    def test_chatgpt_split_export_shards_are_supported_and_contiguous(self):
+        source = json.loads((FIXTURES / "chatgpt/conversations.json").read_text(encoding="utf-8"))
+        archive_path = Path(self.temp.name) / "export.zip"
+        with ZipFile(archive_path, "w") as archive:
+            archive.writestr("conversations-000.json", json.dumps(source))
+            archive.writestr("conversations-001.json", json.dumps(source))
+        importer = ChatGPTExportImporter(self.store, self.router)
+        self.assertEqual(2, importer.preview(archive_path, start_date="2026-01-01")["conversations_total"])
+
+        broken_path = Path(self.temp.name) / "broken.zip"
+        with ZipFile(broken_path, "w") as archive:
+            archive.writestr("conversations-000.json", json.dumps(source))
+            archive.writestr("conversations-002.json", json.dumps(source))
+        with self.assertRaisesRegex(Exception, "contiguous"):
+            importer.preview(broken_path, start_date="2026-01-01")
 
     def test_history_redacts_secrets_and_marks_injection(self):
         path = Path(self.temp.name) / "conversations.json"

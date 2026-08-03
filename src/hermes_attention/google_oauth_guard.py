@@ -57,3 +57,13 @@ def install_google_oauth_scope_guard() -> bool:
     guarded_scope_selection._hermes_attention_google_guard = True  # type: ignore[attr-defined]
     oauth2.get_client_metadata_scopes = guarded_scope_selection
     return True
+
+
+def validated_read_probe_blocks(result: object) -> list[object]:
+    """Return successful MCP content blocks and fail closed on protocol errors."""
+    if bool(getattr(result, "isError", False)):
+        raise RuntimeError("Google MCP read probe returned a provider error")
+    blocks = list(getattr(result, "content", None) or [])
+    if not blocks:
+        raise RuntimeError("Google MCP read probe returned no content")
+    return blocks

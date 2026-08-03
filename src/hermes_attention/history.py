@@ -7,6 +7,7 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import re
 from typing import Any, Iterable, Iterator
 from zipfile import ZipFile
 
@@ -203,6 +204,8 @@ def iter_chatgpt_conversations(payload: Any) -> Iterable[dict[str, Any]]:
 
 
 class ChatGPTExportImporter:
+    MAX_CONVERSATION_BYTES = 512 * 1024 * 1024
+
     def __init__(self, store: Store, router: ContextRouter) -> None:
         self.store = store
         self.router = router
@@ -211,10 +214,29 @@ class ChatGPTExportImporter:
     def load(path: Path) -> list[dict[str, Any]]:
         if path.suffix.casefold() == ".zip":
             with ZipFile(path) as archive:
-                names = [name for name in archive.namelist() if Path(name).name == "conversations.json"]
-                if len(names) != 1:
-                    raise HistoryFormatError("export ZIP must contain exactly one conversations.json")
-                payload = json.loads(archive.read(names[0]))
+                infos = archive.infolist()
+                single = [info for info in infos if Path(info.filename).name == "conversations.json"]
+                shards = [info for info in infos if re.fullmatch(r"conversations-\d{3}\.json", Path(info.filename).name)]
+                if single and shards:
+                    raise HistoryFormatError("export ZIP cannot mix conversations.json with conversation shards")
+                if len(single) == 1:
+                    selected = single
+                elif not single and shards:
+                    selected = sorted(shards, key=lambda info: Path(info.filename).name)
+                    expected = [f"conversations-{index:03d}.json" for index in range(len(selected))]
+                    actual = [Path(info.filename).name for info in selected]
+                    if actual != expected:
+                        raise HistoryFormatError("export ZIP conversation shards must be unique and contiguous from 000")
+                else:
+                    raise HistoryFormatError("export ZIP must contain one conversations.json or contiguous conversations-NNN.json shards")
+                if any(info.flag_bits & 1 for info in selected):
+                    raise HistoryFormatError("encrypted conversation entries are unsupported")
+                if sum(info.file_size for info in selected) > ChatGPTExportImporter.MAX_CONVERSATION_BYTES:
+                    raise HistoryFormatError("export conversation data exceeds the bounded import limit")
+                payload = []
+                for info in selected:
+                    shard = json.loads(archive.read(info))
+                    payload.extend(iter_chatgpt_conversations(shard))
         else:
             payload = json.loads(path.read_text(encoding="utf-8"))
         return list(iter_chatgpt_conversations(payload))
@@ -259,8 +281,14 @@ class ChatGPTExportImporter:
                 permission_ref="owner-provided-export",
             )
             revision = sha256(content.encode()).hexdigest()
+            evidence_id = f"chatgpt:{conversation_id}:{revision[:16]}"
+            if self.store.connection.execute(
+                "SELECT 1 FROM evidence WHERE evidence_id=?", (evidence_id,)
+            ).fetchone():
+                duplicate += 1
+                continue
             item = EvidenceItem(
-                evidence_id=f"chatgpt:{conversation_id}:{revision[:16]}",
+                evidence_id=evidence_id,
                 title=str(conversation.get("title") or "ChatGPT conversation"),
                 content=content,
                 provenance=provenance,

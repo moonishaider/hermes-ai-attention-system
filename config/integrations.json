@@ -56,20 +56,21 @@
     },
     {
       "id": "google_personal_readonly",
-      "type": "google-workspace-mcp",
+      "type": "google-direct-api",
       "mode": "read-only",
       "enabled": true,
       "account_boundary": "personal Google account",
       "browser_profile": "Profile 1",
-      "endpoints": {"gmail": "https://gmailmcp.googleapis.com/mcp/v1", "drive": "https://drivemcp.googleapis.com/mcp/v1", "calendar": "https://calendarmcp.googleapis.com/mcp/v1"},
+      "fallback_reason": "Google Workspace MCP Developer Preview rejects consumer Gmail accounts at the provider boundary",
+      "endpoints": {"gmail": "https://gmail.googleapis.com", "drive": "https://www.googleapis.com/drive/v3", "calendar": "https://www.googleapis.com/calendar/v3"},
       "oauth_scopes": ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/calendar.calendarlist.readonly", "https://www.googleapis.com/auth/calendar.events.readonly"],
-      "tools": {"include": ["search_threads", "get_message", "get_thread", "list_labels", "search_files", "list_recent_files", "get_file_metadata", "read_file_content", "list_calendars", "list_events", "get_event"], "exclude": ["create_draft", "label_message", "label_thread", "unlabel_message", "unlabel_thread", "copy_file", "create_file", "download_file_content", "create_event", "update_event", "delete_event", "respond_to_event", "suggest_time"]}
+      "tools": {"include": ["hermes_attention_personal_gmail_search", "hermes_attention_personal_drive_recent", "hermes_attention_personal_calendar_events"], "exclude": ["create_draft", "send_message", "label_message", "label_thread", "unlabel_message", "unlabel_thread", "copy_file", "create_file", "upload_file", "download_file_content", "create_event", "update_event", "delete_event", "respond_to_event", "suggest_time"]}
     },
     {
       "id": "zoom_readonly",
       "type": "zoom-mcp",
       "mode": "read-only",
-      "enabled": false,
+      "enabled": true,
       "account_boundary": "Inside Success work account: syed.haider@insidesuccess.com",
       "browser_profile": "Profile 2",
       "endpoint": "https://mcp.zoom.us/mcp/zoom/streamable",

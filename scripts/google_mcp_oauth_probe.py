@@ -22,7 +22,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from hermes_attention.google_oauth_guard import install_google_oauth_scope_guard
+from hermes_attention.google_oauth_guard import install_google_oauth_scope_guard, validated_read_probe_blocks
 
 
 READ_ONLY_PROBES = {
@@ -55,7 +55,7 @@ async def run_probe(connector: str) -> tuple[str, int, str]:
         server = await _connect_server(connector, config)
         try:
             result = await server.session.call_tool(tool_name, arguments)
-            blocks = list(getattr(result, "content", None) or [])
+            blocks = validated_read_probe_blocks(result)
             digest = hashlib.sha256(repr(blocks).encode("utf-8")).hexdigest()[:16]
             return tool_name, len(blocks), digest
         finally:
