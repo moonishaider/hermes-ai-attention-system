@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "action_type": "publish_inside_success_daily_update",
+  "context_id": "inside-success",
+  "workspace_id": "TEXAMPLE001",
+  "workspace_name": "Inside Success TV",
+  "channel_id": "CEXAMPLE001",
+  "channel_name": "example-channel-1",
+  "author_user_id": "UEXAMPLE001",
+  "author_name": "Syed Moonis Haider",
+  "execution_mode": "supervised-preview",
+  "generic_send_exposed": false,
+  "approval_expiry_minutes": 15,
+  "message_max_characters": 8000,
+  "format": {
+    "heading": "DLOA – {date}",
+    "primary_bullet": "•",
+    "nested_bullet": "◦",
+    "source_sample_count": 6,
+    "source_sample_checked_at": "2026-08-04"
+  }
+}
