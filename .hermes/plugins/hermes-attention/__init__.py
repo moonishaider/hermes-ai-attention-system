@@ -82,6 +82,12 @@ def request_screen_view(reason: str, context_id: str) -> str:
     return _call("request_screen_view", reason=reason, context_id=context_id)
 
 
+def view_screen_once(reason: str, context_id: str) -> str:
+    """Open the visible selector once, interpret the selection, and retain no pixels."""
+    from hermes_attention.screen import understand_screen_once
+    return json.dumps(understand_screen_once(reason, context_id), ensure_ascii=False, default=str)
+
+
 def daily_report_draft(report_date: str) -> str:
     """Create a local source-backed draft; publishing is unavailable."""
     return _call("daily_report_draft", report_date=report_date)
@@ -195,6 +201,12 @@ _TOOLS = (
         "hermes_attention_request_screen", request_screen_view,
         "Create an explicit one-time screen-view request without capturing anything.",
         {"reason": {"type": "string"}, "context_id": {"type": "string"}}, ["reason", "context_id"], "🖥️",
+    ),
+    (
+        "hermes_attention_view_screen_once", view_screen_once,
+        "After the user explicitly asks to inspect the screen, open Apple's visible one-time region selector and describe only the selected pixels with Luna. The user can cancel; no pixels are retained and no computer-control action is available.",
+        {"reason": {"type": "string", "minLength": 1, "maxLength": 500}, "context_id": {"type": "string", "enum": ["inside-success", "mitchell", "personal"]}},
+        ["reason", "context_id"], "👁️",
     ),
     (
         "hermes_attention_daily_report", daily_report_draft,

@@ -29,7 +29,7 @@ from hermes_attention.google_offline_oauth import GOOGLE_READONLY_SCOPES, Google
 from hermes_attention.policy import PolicyEngine
 from hermes_attention.routing import ContextRouter
 from hermes_attention.runtime_models import DirectModelClient
-from hermes_attention.screen import OneShotScreenCapture
+from hermes_attention.screen import OneShotScreenCapture, understand_screen_once
 from hermes_attention.overlay import OverlayEvent, OverlayEventBus
 from hermes_attention.overlay_control import OverlayControlEvent, OverlayControlSupervisor, ProcessRecord
 from hermes_attention.overlay_runtime_bridge import OverlayRuntimeBridge
@@ -420,6 +420,38 @@ class OperationalTests(unittest.TestCase):
         self.assertFalse(captured_path.exists())
         with self.assertRaises(PermissionError):
             capture.capture_interactive_png(grant.token)
+
+    def test_daily_screen_understanding_is_one_shot_redacted_and_non_controlling(self):
+        synthetic_png = b"\x89PNG\r\n\x1a\nsynthetic"
+        synthetic_secret = "github_" + "pat_" + ("A" * 41)
+        model_result = {
+            "success": True,
+            "route": "vision",
+            "provider": "openai",
+            "model": "gpt-5.6-luna",
+            "latency_ms": 12,
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "estimated_cost_usd": 0.0001,
+            "response_received": True,
+            "error_class": None,
+            "text": f"Visible token {synthetic_secret} is redacted.",
+        }
+        with patch.object(OneShotScreenCapture, "capture_interactive_png", return_value=synthetic_png), patch.object(
+            DirectModelClient, "generate", return_value=model_result,
+        ) as generate:
+            result = understand_screen_once("Explain this region", "personal")
+        self.assertEqual("visible-user-selected-one-shot", result["capture"])
+        self.assertFalse(result["pixels_retained"])
+        self.assertFalse(result["continuous_capture"])
+        self.assertFalse(result["computer_control_enabled"])
+        self.assertNotIn(synthetic_secret, result["description"])
+        self.assertEqual(1, result["description_redactions"])
+        self.assertNotIn("text", result)
+        image_value = generate.call_args.kwargs["image_data_url"]
+        self.assertTrue(image_value.startswith("data:image/png;base64,"))
+        with self.assertRaises(ValueError):
+            understand_screen_once("Explain", "unknown")
 
     def test_overlay_event_contains_visible_operational_state(self):
         received = []

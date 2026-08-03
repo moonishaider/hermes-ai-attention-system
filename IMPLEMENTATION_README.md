@@ -29,6 +29,8 @@ Daily launch:
 
 This prints health, starts the local overlay, and launches Hermes in the trusted project. No dev server, daemon, service, or launch agent is created.
 
+For normal first use on macOS, double-click `Launch Hermes.command` in the project folder. It only calls the canonical launcher above. `START_HERE.md` contains the short user guide.
+
 ## Boundaries
 
 - The Hermes plugin exposes evidence, task, handoff, screen-request, and exact-preview tools; the restricted Slack executor exists outside the plugin, remains kill-switched, fixed to `#sd-dloa-tyler`, disconnected from a sender, and shadow-only.

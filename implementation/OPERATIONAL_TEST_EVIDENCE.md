@@ -5,7 +5,7 @@ Checked: 4 August 2026
 | Check | Result |
 |---|---|
 | Safety preflight, persisted hook tests, command-rule tests | Passed |
-| Python unit, integration, security, history, action, model-route, health, specialist, voice-compatibility, web, Google direct-read, and Zoom OAuth tests | 55 passed |
+| Python unit, integration, security, history, action, model-route, health, specialist, voice-compatibility, screen daily-use, web, Google direct-read, and Zoom OAuth tests | 56 passed |
 | Configuration doctor and JSON/TOML validation | Passed |
 | Versionable-file secret scan | Passed |
 | Git diff whitespace check | Passed |
@@ -54,6 +54,7 @@ Checked: 4 August 2026
 | Google freshness | Work and personal each use one exact-scope offline grant. Both forced refreshes passed, all six standard-API metadata smokes passed, and startup/direct calls refresh automatically. Personal returned no refresh-token lifetime field after the app moved to In production. |
 | Personal Google direct acceptance | The MCP probe now rejects protocol error blocks instead of reporting false success. Standard Gmail, Drive, and Calendar APIs returned bounded metadata successfully through host-locked GET-only tools. Personal-obligations acceptance passed with 6/6 cited claims, 5 confirmed and 1 inferred, mixed evidence labeled, no reported leakage, 68.4 s latency, and $0.00308 estimated model cost. |
 | Zoom OAuth/inventory/read acceptance | Secretless public-client PKCE succeeded with exactly four read scopes and refreshable owner-only token state. Shared-access widening stayed unchecked. Live discovery found 12 raw tools, including two writes that are filtered out; four reviewed reads are exposed. After a metadata-only smoke, a bounded recent work-meeting case passed with 3/3 cited confirmed claims, no reported leakage, 65.5 s latency, and $0.00523 estimated model cost. |
+| Prompt 5 first-use path | Double-click wrapper delegates to the canonical launcher; real CLI launch reached the prompt, project status reported writes disabled/kill switch active/no generic sender, `/voice on` showed TTS enabled and `Control+B`, and normal `/exit` cleaned up. One project-resumption task passed 7/7 cited claims and 18/18 resolved references across 15 sources in 178.9 s for about $0.01115 with no reported leakage. The new one-shot screen tool was discoverable from live Hermes without capturing. |
 | Hermes voice runtime | Corrected orchestrator from unused `.venv` to actual `venv`; deliberate microphone → local faster-whisper → DeepSeek Flash → audible Edge TTS loop passed |
 | Hermes voice choice and latency | Syed selected `en-GB-RyanNeural`; first/repeat direct synthesis measured 2.04/1.43 s; bounded 1.5 s early-stop and zero-volume playback exited cleanly |
 | Hermes automatic TTS and barge-in | Corrected `voice.auto_tts` from false to true after an owner-only backup; MacBook-speaker reply was audible. After the process-local macOS fallback guard, the corrected no-headphones retest interrupted playback at 14:52:50 and Syed confirmed Ryan stopped immediately, accepted the correction, and did not replay. Continuous listening remained active as designed; a later “great” → “grade” local-Whisper error is retained as an STT limitation. Overlay buttons remain. |

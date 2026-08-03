@@ -11,6 +11,7 @@ provides_tools:
   - hermes_attention_add_task
   - hermes_attention_propose_action
   - hermes_attention_request_screen
+  - hermes_attention_view_screen_once
   - hermes_attention_daily_report
   - hermes_attention_routed_reasoning
   - hermes_attention_web_search
