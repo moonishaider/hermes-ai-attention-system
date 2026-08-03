@@ -116,10 +116,15 @@ class CoreTests(unittest.TestCase):
         assert_read_only_tool_inventory(integrations.tool_inventory("github_personal_readonly")["include"])
         with self.assertRaises(PermissionError):
             assert_read_only_tool_inventory(["get_file_contents", "create_issue"])
+        for read_tool in ("search_threads", "read_file_content", "list_events"):
+            integrations.assert_tool("google_work_readonly", read_tool)
+        for read_tool in (
+            "hermes_attention_personal_gmail_search",
+            "hermes_attention_personal_drive_recent",
+            "hermes_attention_personal_calendar_events",
+        ):
+            integrations.assert_tool("google_personal_readonly", read_tool)
         for google_connection in ("google_work_readonly", "google_personal_readonly"):
-            integrations.assert_tool(google_connection, "search_threads")
-            integrations.assert_tool(google_connection, "read_file_content")
-            integrations.assert_tool(google_connection, "list_events")
             for write_tool in ("create_draft", "create_file", "create_event", "delete_event"):
                 with self.assertRaises(PermissionError):
                     integrations.assert_tool(google_connection, write_tool)

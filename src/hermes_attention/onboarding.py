@@ -98,8 +98,15 @@ class OnboardingOrchestrator:
 
         service = AttentionService(paths=self.paths)
         chatgpt_detail = "official export not selected"
+        chatgpt_import_complete = False
         try:
             history = CodexHistoryBridge(service.store, service.router).ingest(maximum_records=history_batch, start_date=start_date)
+            existing_chatgpt = int(service.store.connection.execute(
+                "SELECT COUNT(*) FROM evidence WHERE evidence_id LIKE 'chatgpt:%' AND tombstoned_at IS NULL"
+            ).fetchone()[0])
+            if existing_chatgpt:
+                chatgpt_detail = f"existing imported records={existing_chatgpt}"
+                chatgpt_import_complete = True
             if chatgpt_export:
                 importer = ChatGPTExportImporter(service.store, service.router)
                 preview = importer.preview(chatgpt_export, start_date=start_date)
@@ -107,11 +114,12 @@ class OnboardingOrchestrator:
                 if confirm_chatgpt_import:
                     imported = importer.ingest(chatgpt_export, start_date=start_date, confirmed=True)
                     chatgpt_detail += f" imported={imported['inserted']} duplicates={imported['duplicates']}"
+                    chatgpt_import_complete = True
         except Exception:
             service.close()
             raise
         results.append(self._record("history", "complete", f"Codex bounded batch scanned={history['scanned']} inserted={history['inserted']} start={start_date}"))
-        chatgpt_state = "complete" if chatgpt_export else "human_required"
+        chatgpt_state = "complete" if chatgpt_import_complete else "human_required"
         results.append(self._record("chatgpt_export", chatgpt_state, f"ChatGPT {chatgpt_detail}; explicit context relay remains available"))
 
         keys = configured_keys()

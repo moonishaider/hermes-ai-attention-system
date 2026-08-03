@@ -1,6 +1,6 @@
 # Connector activation status
 
-Checked: 2 August 2026
+Checked: 4 August 2026
 
 Activation does not equal real-data acceptance. `implementation/CURRENT_OPERATIONAL_STATE.md` is authoritative for that distinction.
 
@@ -10,9 +10,9 @@ Activation does not equal real-data acceptance. `implementation/CURRENT_OPERATIO
 | GitHub company `Inside-Success` | Live, bounded real acceptance passed | Separate token and `/readonly` provider; accepted source-backed report draft; no company write tool |
 | Slack Inside Success | Live, bounded cross-context/report acceptance passed | Exact read scopes/tools; no bot or send tool; accepted cross-context and report-draft use |
 | Slack Mitchell | Live, mixed acceptance | Participated in accepted cross-context use; a separate focused query timed out at 180 seconds; no send tool |
-| Google work Gmail/Drive/Calendar | Reauthorization required | Prior metadata smokes and exact read allowlists stand, but all three access tokens expired without refresh tokens |
-| Google personal Gmail/Drive/Calendar | Reauthorization required | Prior isolated metadata smokes stand; all three access tokens expired without refresh tokens |
-| Zoom | Normal TLS healthy; OAuth pending; disabled | Official endpoint returned HTTP 401 over normal verified TLS on retry; exact work-account OAuth and post-auth inventory remain |
+| Google work Gmail/Drive/Calendar | Live; bounded acceptance passed | Separately reauthorized with exact read-only scopes; metadata probes passed; Gmail/Calendar participated in accepted work brief and same-day attribution cases; provider writes remain excluded |
+| Google personal Gmail/Drive/Calendar | Live through standard direct read-only APIs; bounded acceptance passed | Profile 1 exact-scope authorization; hosted Workspace MCP disabled because consumer accounts are provider-rejected; three host-locked GET-only project tools; 6/6 cited personal-obligation claims with no reported leakage |
+| Zoom work | Live and bounded usefulness-tested | Profile 2 user-managed public-client PKCE app; exactly four read scopes; shared-access widening unchecked; refreshable owner-only token; 12 raw tools discovered but only four reviewed reads exposed; a recent work-meeting case passed with 3/3 cited confirmed claims and no reported leakage |
 
 All remote content remains untrusted evidence. Account identity, tool inventory, provider read-only policy, Hermes include list, and a metadata-only smoke must pass separately for every activated connection.
 
@@ -22,6 +22,8 @@ The first generic Hermes OAuth attempt inherited every scope advertised by Slack
 
 Mitchell uses a distinct Slack app, client credential, token set, callback port, Hermes server name, and Profile 1 browser boundary. The live zero-match `slack_search_channels` smoke succeeded without printing source content. The write tool is absent from the discovered inventory and blocked by project policy before any external request.
 
-Work Google uses the organization-owned `hermes-ai-attention-work` Cloud project and a Web OAuth client stored outside Git with owner-only permissions. The three official Developer Preview MCP resources were authorized separately. Stored token scopes are exactly `gmail.readonly`, `drive.readonly`, and the two Calendar read-only scopes. Metadata-only probes passed for Gmail labels, recent Drive files, and Calendar lists without printing source content. Raw provider inventories include write-capable Gmail, Drive, and Calendar tools; Hermes exposes only the reviewed local read allowlists.
+Work Google uses the organization-owned `hermes-ai-attention-work` Cloud project and a Web OAuth client stored outside Git with owner-only permissions. On 3 August 2026 the three official Developer Preview MCP resources were reauthorized separately. Stored token scopes are exactly `gmail.readonly`, `drive.readonly`, and the two Calendar read-only scopes. Metadata-only probes passed for Gmail labels, recent Drive files, and Calendar lists without printing source content. A bounded work brief used Gmail and Calendar with 9/9 cited claims, and the same-day attribution case used Calendar with 6/6 cited claims; neither reported leakage. Raw provider inventories include write-capable Gmail, Drive, and Calendar tools; Hermes exposes only the reviewed local read allowlists.
 
-Personal Google uses the separate no-organization `hermes-ai-attention-personal` Cloud project, external testing audience, and `Hermes AI Attention - Personal Read Only` app. Credentials and token files remain outside Git with owner-only permissions. The previous Gmail, Drive, and Calendar metadata smokes passed, but they are historical evidence until reauthorization. No write tool was invoked.
+Personal Google uses the separate no-organization `hermes-ai-attention-personal` Cloud project, external testing audience, and `Hermes AI Attention - Personal Read Only` app. Credentials and token files remain outside Git with owner-only permissions. The exact scopes were reauthorized in Profile 1. Because Google's hosted Workspace MCP Developer Preview requires Workspace program access and returns provider permission errors for this consumer account, those three personal MCP servers are disabled. Host-locked GET-only standard Gmail, Drive, and Calendar API tools passed metadata smokes and bounded personal-obligations acceptance. No write method is implemented or exposed.
+
+Zoom uses the private user-managed `Hermes Work Zoom Read Only` General App in Profile 2. A public client ID plus PKCE avoids retaining or using a confidential client secret. The exact grant is `meeting:read:search`, `meeting:read:assets`, `cloud_recording:read:list_user_recordings`, and `cloud_recording:read:content`; the optional shared-access permission remained unchecked. Live `tools/list` returned 12 tools, including two provider write tools, but the runtime include list exposes only `search_meetings`, `get_meeting_assets`, `recordings_list`, and `get_recording_resource`. A one-record metadata-only recording-list smoke passed without printing provider content, followed by a bounded usefulness case with three cited confirmed claims and no reported leakage.

@@ -1,6 +1,6 @@
 # Prompt 4 Real-World Acceptance Report
 
-Checked: 2 August 2026. Private answers, source text, prompts, token values, and raw references were stored only in ignored owner-only runtime files. This report contains redacted counts, hashes, labels, latency, cost, and failure classes.
+Checked: 4 August 2026. Private answers, source text, prompts, token values, and raw references were stored only in ignored owner-only runtime files. This report contains redacted counts, hashes, labels, latency, cost, and failure classes.
 
 ## Real-data results
 
@@ -17,7 +17,22 @@ A focused run over 26 July–2 August accepted three of four cases after a robus
 
 A separate resource-accounted project-resumption acceptance passed again with 9/9 claims cited, 7 confirmed and 2 inferred, no reported leakage, 103.8 s latency, $0.00611 estimated model cost, and 175,472,640 bytes maximum resident set size (about 167.3 MiB). This is within the 8 GB Mac target, but live connector latency is too high for conversational daily use.
 
-The strict suite did not accept “worked today,” the full Inside Success daily brief, personal upcoming obligations, context-switch handoff, or commitment/contradiction cases. Primary reasons were no current-date Codex evidence, expired Google tokens, empty local task/evidence windows, and connector timeout/tool-selection reliability. These are honest misses, not fabricated successes.
+The strict suite initially did not accept “worked today,” the full Inside Success daily brief, personal upcoming obligations, context-switch handoff, or commitment/contradiction cases. Primary reasons were no current-date Codex evidence, expired Google tokens, empty local task/evidence windows, and connector timeout/tool-selection reliability. These were honest misses, not fabricated successes.
+
+After owner-only backup and separate work Gmail, Drive, and Calendar reauthorization on 3 August, all three unchanged read-only metadata probes passed. Two focused real-data reruns then passed:
+
+| Case | Result | Sources | Citation/labels | Latency | Estimated cost |
+|---|---|---|---|---:|---:|
+| Inside Success daily brief | Accepted | Codex, company GitHub, Inside Success Slack, work Gmail, work Calendar | 9/9 cited; 8 confirmed, 1 inferred; no reported leakage | 119.5 s | $0.01950 |
+| What Syed worked on today | Accepted | Codex, company GitHub, Inside Success Slack, work Calendar | 6/6 cited; 5 confirmed, 1 uncertain; no reported leakage | 141.7 s | $0.01195 |
+
+The second case preserved uncertainty and did not report other-person attribution. Private responses remain only in ignored owner-only acceptance files. Personal upcoming obligations were accepted later through the isolated Profile 1 direct-read fallback described below.
+
+Zoom then passed a separate bounded usefulness case over 1–4 August. The assistant used only the filtered `zoom_readonly` connection, returned three source-backed recent work-meeting claims, cited 3/3 claims, labeled all three confirmed, kept the Inside Success context, reported no leakage, and completed in 65.5 seconds for an estimated $0.00523. The private answer and opaque provider references remain in ignored owner-only files; this report records only counts and outcomes.
+
+Profile 1 then reauthorized personal Gmail, Drive, and Calendar with the exact reviewed read scopes. The initial provider probes were corrected because they had counted MCP error blocks as successful content. Official Google documentation and live calls established that the hosted Workspace MCP Developer Preview rejects the consumer account, while the same grants succeed against the standard Google APIs. Hermes now disables the three unsupported personal MCP servers and provides three bounded, host-locked GET-only project tools. After correcting date-only Calendar bounds to Asia/Karachi RFC 3339 values, the 1–10 August personal-obligations case passed with 6/6 claims cited, 5 confirmed and 1 inferred, mixed evidence explicitly retained as mixed, no reported leakage, 68.4 seconds latency, and $0.00308 estimated model cost.
+
+The selected official ChatGPT export was 308.8 MB and used the current five-shard `conversations-000.json` through `-004.json` layout. Strict archive validation accepted only contiguous official shard names and bounded total conversation bytes. Preview found 458 conversations total and selected 47 from 1 March 2026 onward at 126,042,112 bytes maximum RSS. After exact approval, 47 records were imported; a rerun reported 0 inserted and 47 duplicates. All 47 records retained valid export provenance, 46 are inferred evidence and 1 is uncertain, and all remain honestly `unknown` pending semantic calibration. A hashed-query retrieval check found an imported record without printing source content.
 
 ## Classification calibration
 
@@ -53,11 +68,7 @@ The public research smoke returned six cited search results for a harmless keybo
 
 ## Remaining acceptance gates
 
-- Reauthorize Google Developer Preview resources, then rerun work/personal acceptance and check the personal Gmail export notification.
-- Complete one supervised visible-overlay mute/cancel pass. The microphone-to-spoken-reply loop, automatic TTS, and immediate speaker-only barge-in are accepted.
-- Authorize Zoom read-only and inspect its inventory now that normal TLS reaches the endpoint.
 - Select the exact Inside Success Slack destination and approve one exact payload before any test send.
-- Import the official ChatGPT ZIP after it arrives and is identified.
 
 ## Voice acceptance
 
@@ -76,3 +87,7 @@ The corrected no-headphones retest passed on 2026-08-02. Metadata-only telemetry
 On 2026-08-03 Syed selected one harmless Codex region through Apple's visible screenshot UI. GPT-5.6 Luna processed the authorized PNG successfully in 4.95 seconds, using 3,549 input and 256 output tokens at an estimated $0.0051. The private response was stored owner-only outside Git; metadata checks confirmed a visible-region description and no credential patterns. No continuous capture, Accessibility permission, or computer control was enabled.
 
 macOS 26 ignored the requested destination when the full screenshot toolbar was used and saved the selected PNG to the Desktop. The exact new file was moved without inspection to owner-only Git-ignored quarantine, processed once through a fixed recovery path, and then moved recoverably to Trash. The generic recovery result incorrectly reported no retained pixels while that quarantine file still existed; this record supersedes that field. The one-time recovery option was removed from the permanent runner. The permanent adapter now forces selection-only mode, uses a random private temporary directory, and removes that directory before returning. After Syed explicitly confirmed the exact filename, Finder permanently deleted only that screenshot and showed the other six Trash items still present. No raw acceptance screenshot remains.
+
+## Overlay acceptance
+
+On 2026-08-03 the real foreground daily launcher displayed the startup transcript, safety status, context/source, and disabled-without-preview Approve control. Mute and Unmute updated only this launch's owner-only ephemeral voice-output state; the audit remained mode `0600`. The first signal-based Cancel attempt failed closed and was rejected as acceptance evidence. The corrected project-local Hermes 0.19.1 bridge then stopped an active DeepSeek Flash API call after about seven seconds through Hermes' native in-process interruption seam and did not queue another model turn. Dismiss hid the overlay, launcher exit removed the temporary control FIFOs/state, and no service or launch agent remained.

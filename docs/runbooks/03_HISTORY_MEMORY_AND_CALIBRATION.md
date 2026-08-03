@@ -10,7 +10,7 @@
 ## ChatGPT historical backfill
 
 1. In ChatGPT, use the official Settings data-export workflow. Download the export manually.
-2. Place the ZIP temporarily under the gitignored `imports/` directory.
+2. Place the ZIP temporarily under the gitignored `imports/` directory. The importer accepts either one legacy `conversations.json` or current contiguous `conversations-NNN.json` shards and rejects mixed, missing, encrypted, or oversized conversation entries.
 3. Preview, choosing an explicit start date: `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m hermes_attention.cli chatgpt-export preview imports/EXPORT.zip --start-date YYYY-MM-DD`.
 4. Review selected conversation count. Import only after that review by repeating with action `import` and `--confirmed`.
 5. Remove the downloaded export manually when no longer needed using a recoverable method; do not commit it.

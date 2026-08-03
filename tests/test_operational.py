@@ -21,7 +21,8 @@ from hermes_attention.health import _token_health
 from hermes_attention.hermes_voice_compat import _play_darwin_afplay_only, overlay_voice_output_muted
 from hermes_attention.model_quality import QualityTask, deterministic_quality
 from hermes_attention.onboarding import summarize_connectors
-from hermes_attention.google_oauth_guard import APPROVED_SCOPES, select_google_scopes
+from hermes_attention.google_oauth_guard import APPROVED_SCOPES, select_google_scopes, validated_read_probe_blocks
+from hermes_attention.google_direct import GoogleDirectError, PersonalGoogleDirect, validate_google_api_url
 from hermes_attention.policy import PolicyEngine
 from hermes_attention.routing import ContextRouter
 from hermes_attention.runtime_models import DirectModelClient
@@ -40,6 +41,13 @@ from hermes_attention.slack_oauth import (
 )
 from hermes_attention.storage import Store
 from hermes_attention.web_research import _TextExtractor, _validate_public_url, search_public_web
+from hermes_attention.zoom_oauth import (
+    ZoomOAuthError,
+    build_zoom_authorization_url,
+    load_zoom_connection,
+    persist_zoom_oauth_state,
+    validate_zoom_granted_scopes,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -164,6 +172,65 @@ class OperationalTests(unittest.TestCase):
             self.assertNotIn("modify", selected)
             self.assertNotIn("mail.google.com", selected)
         self.assertIsNone(select_google_scopes(Metadata("https://example.com/mcp")))
+
+    def test_google_probe_rejects_provider_error_content(self):
+        with self.assertRaisesRegex(RuntimeError, "provider error"):
+            validated_read_probe_blocks(SimpleNamespace(isError=True, content=["permission denied"]))
+        self.assertEqual(["metadata"], validated_read_probe_blocks(SimpleNamespace(isError=False, content=["metadata"])))
+
+    def test_personal_google_direct_api_is_host_locked_and_bounded(self):
+        validate_google_api_url("gmail", "https://gmail.googleapis.com/gmail/v1/users/me/labels")
+        validate_google_api_url("drive", "https://www.googleapis.com/drive/v3/files")
+        with self.assertRaises(GoogleDirectError):
+            validate_google_api_url("gmail", "https://example.com/gmail/v1/users/me/labels")
+
+        class SyntheticClient(PersonalGoogleDirect):
+            def _request_json(self, resource, url):
+                self.calls.append((resource, url))
+                if resource == "drive":
+                    return {"files": [{"id": str(index), "name": "safe"} for index in range(20)]}
+                if resource == "calendar":
+                    return {"items": [{"id": str(index), "summary": "safe"} for index in range(20)]}
+                return {"threads": []}
+
+        client = SyntheticClient(Path(self.temp.name))
+        client.calls = []
+        self.assertEqual(10, client.drive_recent(50)["count"])
+        self.assertEqual(10, client.calendar_events("2026-08-01T00:00:00Z", "2026-08-10T00:00:00Z", 50)["count"])
+        self.assertEqual(10, client.calendar_events("2026-08-01", "2026-08-10", 50)["count"])
+        self.assertIn("%2B05%3A00", client.calls[-1][1])
+        self.assertTrue(all("https://" in url for _, url in client.calls))
+
+    def test_zoom_oauth_is_exactly_read_only(self):
+        connection = load_zoom_connection()
+        url = build_zoom_authorization_url(connection, "client", "state", "v" * 72)
+        self.assertIn("meeting%3Aread%3Asearch", url)
+        self.assertNotIn("write", " ".join(connection.scopes))
+        self.assertEqual(set(connection.scopes), set(validate_zoom_granted_scopes(connection.scopes, " ".join(connection.scopes))))
+        with self.assertRaises(ZoomOAuthError):
+            validate_zoom_granted_scopes(connection.scopes, " ".join(connection.scopes + ("meeting:write:meeting",)))
+        self.assertEqual(
+            {"search_meetings", "get_meeting_assets", "recordings_list", "get_recording_resource"},
+            set(connection.tools_include),
+        )
+
+    def test_zoom_oauth_persistence_is_owner_only_and_redacted(self):
+        connection = load_zoom_connection()
+        token_dir = Path(self.temp.name) / "zoom-tokens"
+        result = persist_zoom_oauth_state(connection, "client", {
+            "access_token": "access-secret",
+            "refresh_token": "refresh-secret",
+            "expires_in": 3600,
+            "scope": " ".join(connection.scopes),
+        }, token_dir=token_dir)
+        self.assertTrue(result["stored"])
+        self.assertTrue(result["refreshable"])
+        self.assertNotIn("access-secret", repr(result))
+        client_payload = json.loads((token_dir / "zoom_readonly.client.json").read_text(encoding="utf-8"))
+        self.assertEqual("none", client_payload["token_endpoint_auth_method"])
+        self.assertNotIn("client_secret", client_payload)
+        for path in token_dir.iterdir():
+            self.assertEqual(0o600, path.stat().st_mode & 0o777)
 
     def test_codex_tool_output_is_not_ingested(self):
         home = Path(self.temp.name) / "codex"

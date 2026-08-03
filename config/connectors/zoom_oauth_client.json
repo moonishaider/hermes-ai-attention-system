@@ -1,0 +1,28 @@
+{
+  "display_name": "Hermes Work Zoom Read Only",
+  "client_id_env": "ZOOM_WORK_OAUTH_PUBLIC_CLIENT_ID",
+  "server_name": "zoom_readonly",
+  "server_url": "https://mcp.zoom.us/mcp/zoom/streamable",
+  "authorization_endpoint": "https://zoom.us/oauth/authorize",
+  "token_endpoint": "https://zoom.us/oauth/token",
+  "redirect_uri": "http://localhost:8767",
+  "scopes": [
+    "meeting:read:search",
+    "meeting:read:assets",
+    "cloud_recording:read:list_user_recordings",
+    "cloud_recording:read:content"
+  ],
+  "tools_include": [
+    "search_meetings",
+    "get_meeting_assets",
+    "recordings_list",
+    "get_recording_resource"
+  ],
+  "tools_exclude": [
+    "create_new_file_with_markdown",
+    "hub_create_file_from_content",
+    "create_meeting",
+    "update_meeting",
+    "delete_meeting"
+  ]
+}

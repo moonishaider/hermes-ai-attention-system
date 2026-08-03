@@ -1,11 +1,11 @@
 # Operational test evidence
 
-Checked: 3 August 2026
+Checked: 4 August 2026
 
 | Check | Result |
 |---|---|
 | Safety preflight, persisted hook tests, command-rule tests | Passed |
-| Python unit, integration, security, history, action, model-route, health, specialist, voice-compatibility, and web tests | 40 passed |
+| Python unit, integration, security, history, action, model-route, health, specialist, voice-compatibility, web, Google direct-read, and Zoom OAuth tests | 48 passed |
 | Configuration doctor and JSON/TOML validation | Passed |
 | Versionable-file secret scan | Passed |
 | Git diff whitespace check | Passed |
@@ -23,8 +23,9 @@ Checked: 3 August 2026
 | Hermes one-shot master assistant | Passed; called project status first and reported `external writes enabled: false` |
 | GPT-5.6 Luna live vision smoke | Passed with synthetic 1-pixel image; 3,478 ms; 24 input/20 output tokens; estimated `$0.000144` |
 | GPT-5.6 Terra live review smoke | Passed; 2,310 ms; 22 input/9 output tokens; estimated `$0.00019` |
-| Connector inventories | GitHub personal/company, both Slack workspaces, and work/personal Gmail/Drive/Calendar live. Zoom Profile 2 identity, license, endpoint, four current read scopes/tools, and negative write policy verified; activation remains disabled while Zoom Marketplace returns provider-side 526. |
-| Resumable onboarding | Real schema-v2 pass on 2026-08-02: project/Hermes/plugin/voice dependencies complete; bounded Codex batch scanned 500 and inserted 126 incremental records; all four direct model smokes passed; registry reports 6/7 remote connectors enabled with only Zoom pending; ChatGPT export and macOS microphone/screen permissions remain explicit human gates. |
+| Connector inventories | GitHub personal/company, both Slack workspaces, work Gmail/Drive/Calendar, personal Gmail/Drive/Calendar direct reads, and Zoom are live. Unsupported personal Workspace MCP endpoints are disabled. Zoom granted exactly four read scopes; 12 raw tools were discovered while only four reads are exposed. |
+| Resumable onboarding | The 2026-08-02 schema-v2 pass completed project/Hermes/plugin/voice dependencies, bounded Codex ingestion, and all four model smokes. Subsequent Prompt 4 work completed Zoom, microphone, screen, personal Google, and the selected ChatGPT import; the exact Slack destination remains. |
+| ChatGPT official export | Current five-shard official format validated; 458 total, 47 selected since 1 March, 47 imported, 47/47 duplicate rerun, all provenance valid, retrieval passed, source content not printed; about 120 MiB preview maximum RSS |
 | GitHub personal MCP | Live through `/mcp/readonly`; authenticated `moonishaider`; private project metadata read; 14 exact read tools allowed |
 | GitHub personal negative write | `create_or_update_file` resolved to `BLOCKED_TOOL_UNAVAILABLE`; no network write attempted |
 | GitHub Inside Success MCP | Live through separate `/mcp/readonly`; 36 authorized repositories visible; metadata-only smoke passed; no approval pending |
@@ -50,12 +51,14 @@ Checked: 3 August 2026
 | Acceptance resources | Repeated project-resumption case passed in 103.8 s; maximum RSS 175,472,640 bytes (about 167.3 MiB) |
 | Representative model quality | Six of six bounded tasks passed deterministic grounding/misattribution criteria; Flash retained as default because Luna tied quality at about 14x cost |
 | Public web/shopping | Six cited search results and one official product-page fetch; URL/date/hash/untrusted labels present; browser/cart/checkout/payment unavailable |
-| Google freshness | All six Developer Preview resource tokens are expired without refresh tokens; reauthorization required and reported by startup health |
-| Zoom TLS retry | Normal TLS reached the official endpoint and returned HTTP 401; no certificate bypass; OAuth remains pending and connector disabled |
+| Google freshness | Work and personal exact-scope tokens are short-lived without refresh tokens, so startup health warns before expiry. Personal standard-API fallback is live; reauthorization remains periodically necessary. |
+| Personal Google direct acceptance | The MCP probe now rejects protocol error blocks instead of reporting false success. Standard Gmail, Drive, and Calendar APIs returned bounded metadata successfully through host-locked GET-only tools. Personal-obligations acceptance passed with 6/6 cited claims, 5 confirmed and 1 inferred, mixed evidence labeled, no reported leakage, 68.4 s latency, and $0.00308 estimated model cost. |
+| Zoom OAuth/inventory/read acceptance | Secretless public-client PKCE succeeded with exactly four read scopes and refreshable owner-only token state. Shared-access widening stayed unchecked. Live discovery found 12 raw tools, including two writes that are filtered out; four reviewed reads are exposed. After a metadata-only smoke, a bounded recent work-meeting case passed with 3/3 cited confirmed claims, no reported leakage, 65.5 s latency, and $0.00523 estimated model cost. |
 | Hermes voice runtime | Corrected orchestrator from unused `.venv` to actual `venv`; deliberate microphone → local faster-whisper → DeepSeek Flash → audible Edge TTS loop passed |
 | Hermes voice choice and latency | Syed selected `en-GB-RyanNeural`; first/repeat direct synthesis measured 2.04/1.43 s; bounded 1.5 s early-stop and zero-volume playback exited cleanly |
 | Hermes automatic TTS and barge-in | Corrected `voice.auto_tts` from false to true after an owner-only backup; MacBook-speaker reply was audible. After the process-local macOS fallback guard, the corrected no-headphones retest interrupted playback at 14:52:50 and Syed confirmed Ryan stopped immediately, accepted the correction, and did not replay. Continuous listening remained active as designed; a later “great” → “grade” local-Whisper error is retained as an STT limitation. Overlay buttons remain. |
 | One-shot screen and Luna | Syed selected one Codex region through Apple's visible UI; Luna succeeded in 4,948 ms with 3,549 input/256 output tokens and estimated $0.005085 cost. No continuous capture, Accessibility, or computer control. macOS toolbar destination drift required one fixed quarantine recovery; after exact confirmation, only that screenshot was permanently deleted and Finder showed the other six Trash items remained. No raw acceptance screenshot remains. |
+| Daily launcher and overlay controls | Foreground launcher health, visible transcript/status/context, Mute, Unmute, active-turn Cancel, and Dismiss passed. Cancel interrupted a harmless active Flash API call after about seven seconds without a follow-up turn. Approve stayed disabled without an exact preview hash. Control audit was owner-only; no service, broad process target, external action, or launch agent was created. |
 
 Runtime data, audio, checkpoints, restore files, private evidence, and diagnostics are excluded from Git.
 
