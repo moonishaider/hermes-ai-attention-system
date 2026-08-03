@@ -4,6 +4,7 @@
   "context_id": "inside-success",
   "workspace_id": "TEXAMPLE001",
   "workspace_name": "Inside Success TV",
+  "slack_workspace_domain": "example-workspace-1.slack.com",
   "channel_id": "CEXAMPLE001",
   "channel_name": "example-channel-1",
   "author_user_id": "UEXAMPLE001",
