@@ -55,7 +55,7 @@ The public research smoke returned six cited search results for a harmless keybo
 
 - Reauthorize Google Developer Preview resources, then rerun work/personal acceptance and check the personal Gmail export notification.
 - Complete one supervised visible-overlay mute/cancel pass. The microphone-to-spoken-reply loop, automatic TTS, and immediate speaker-only barge-in are accepted.
-- Complete one explicit one-shot screen capture and Luna interpretation after Screen Recording permission.
+- Permanently remove the one recoverable Prompt 4 screenshot copy from Trash after exact confirmation. The selected-region Luna interpretation itself is accepted.
 - Authorize Zoom read-only and inspect its inventory now that normal TLS reaches the endpoint.
 - Select the exact Inside Success Slack destination and approve one exact payload before any test send.
 - Import the official ChatGPT ZIP after it arrives and is identified.
@@ -71,3 +71,9 @@ The first continuous-mode attempt exposed `voice.auto_tts: false`: Hermes accept
 A realistic no-headphones run initially logged `Audio playback interrupted`, submitted the captured interjection as a new voice turn, and generated the requested shorter follow-up, but Syed's direct observation established that the original speech had not stopped immediately. Code review found the exact cause: Hermes 0.19.1 terminates macOS `afplay`, interprets its nonzero interrupted exit as a player failure, and falls through to `ffplay`, restarting the audio. The trusted project plugin now applies a process-local macOS guard that uses only `afplay` for the attempt and treats interruption as final; it does not edit the installed Hermes checkout or system audio settings.
 
 The corrected no-headphones retest passed on 2026-08-02. Metadata-only telemetry recorded the first reply, `Audio playback interrupted` at 14:52:50, a 4.7-second captured correction, a second DeepSeek Flash turn, and no fallback replay or residual audio process. Syed confirmed Ryan stopped immediately and then answered the correction. Continuous mode correctly kept listening afterward; local Whisper misheard Syed's later “great” as “grade,” which produced a confusing extra response. This is an STT accuracy limitation, not a barge-in failure.
+
+## Screen acceptance
+
+On 2026-08-03 Syed selected one harmless Codex region through Apple's visible screenshot UI. GPT-5.6 Luna processed the authorized PNG successfully in 4.95 seconds, using 3,549 input and 256 output tokens at an estimated $0.0051. The private response was stored owner-only outside Git; metadata checks confirmed a visible-region description and no credential patterns. No continuous capture, Accessibility permission, or computer control was enabled.
+
+macOS 26 ignored the requested destination when the full screenshot toolbar was used and saved the selected PNG to the Desktop. The exact new file was moved without inspection to owner-only Git-ignored quarantine, processed once through a fixed recovery path, and then moved recoverably to Trash. The generic recovery result incorrectly reported no retained pixels while that quarantine file still existed; this record supersedes that field. The one-time recovery option was removed from the permanent runner. The permanent adapter now forces selection-only mode, uses a random private temporary directory, and removes that directory before returning. Permanent deletion of the recoverable Trash copy requires a final exact confirmation.

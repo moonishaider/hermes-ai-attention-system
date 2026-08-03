@@ -29,6 +29,7 @@ def main() -> int:
     if not args.confirmed_one_shot:
         parser.error("--confirmed-one-shot is required immediately before the visible interactive capture")
 
+    capture_transport = "interactive-private-temporary-file"
     capture = OneShotScreenCapture()
     grant = capture.grant_once(args.reason)
     png = capture.capture_interactive_png(grant.token)
@@ -61,9 +62,11 @@ def main() -> int:
     print(json.dumps({
         **result,
         "context": args.context,
+        "capture_transport": capture_transport,
         "image_sha256": image_hash,
         "image_bytes": None,
-        "image_file_written": False,
+        "transient_image_file_used": True,
+        "retained_image_file": False,
         "continuous_capture": False,
         "accessibility_permission_required": False,
         "computer_control_enabled": False,

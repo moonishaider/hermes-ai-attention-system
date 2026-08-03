@@ -197,6 +197,28 @@ class OperationalTests(unittest.TestCase):
         self.assertTrue(grant.token)
         self.assertNotEqual(grant.token, capture.grant_once("new grant").token)
 
+    def test_one_shot_capture_removes_transient_pixel_file(self):
+        capture = OneShotScreenCapture()
+        grant = capture.grant_once("synthetic explicit test")
+        png = b"\x89PNG\r\n\x1a\nsynthetic"
+        captured_path = None
+
+        def fake_capture(command, **kwargs):
+            nonlocal captured_path
+            captured_path = Path(command[-1])
+            captured_path.write_bytes(png)
+            return SimpleNamespace(returncode=0, stdout=b"")
+
+        with patch("hermes_attention.screen.subprocess.run", side_effect=fake_capture) as run:
+            self.assertEqual(png, capture.capture_interactive_png(grant.token))
+        self.assertEqual("/usr/sbin/screencapture", run.call_args.args[0][0])
+        self.assertEqual(["-i", "-s", "-o", "-x", "-t", "png"], run.call_args.args[0][1:-1])
+        self.assertEqual({"check": False, "capture_output": True, "timeout": 120}, run.call_args.kwargs)
+        self.assertIsNotNone(captured_path)
+        self.assertFalse(captured_path.exists())
+        with self.assertRaises(PermissionError):
+            capture.capture_interactive_png(grant.token)
+
     def test_overlay_event_contains_visible_operational_state(self):
         received = []
         bus = OverlayEventBus()
