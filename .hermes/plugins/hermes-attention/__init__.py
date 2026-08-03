@@ -16,6 +16,7 @@ if str(SRC) not in sys.path:
 from hermes_attention.service import AttentionService  # noqa: E402
 from hermes_attention.google_oauth_guard import install_google_oauth_scope_guard  # noqa: E402
 from hermes_attention.hermes_voice_compat import install_voice_playback_interrupt_guard  # noqa: E402
+from hermes_attention.overlay_runtime_bridge import install_overlay_runtime_bridge  # noqa: E402
 
 
 # Google Workspace MCP metadata advertises write-capable scopes even for a
@@ -187,6 +188,7 @@ _TOOLS = (
 
 def register(ctx: Any) -> None:
     """Register the intentionally narrow local tool inventory with Hermes."""
+    install_overlay_runtime_bridge(ctx)
     for name, function, description, properties, required, emoji in _TOOLS:
         ctx.register_tool(
             name=name,

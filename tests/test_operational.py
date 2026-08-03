@@ -4,6 +4,7 @@ from dataclasses import replace
 import json
 import os
 from pathlib import Path
+import signal
 import tempfile
 import threading
 from types import SimpleNamespace
@@ -17,7 +18,7 @@ from hermes_attention.domain import ActionState, ConfidenceState, ContextLabel, 
 from hermes_attention.executor import ExecutionDenied, SlackDestination, SupervisedActionExecutor
 from hermes_attention.history import CodexHistoryBridge
 from hermes_attention.health import _token_health
-from hermes_attention.hermes_voice_compat import _play_darwin_afplay_only
+from hermes_attention.hermes_voice_compat import _play_darwin_afplay_only, overlay_voice_output_muted
 from hermes_attention.model_quality import QualityTask, deterministic_quality
 from hermes_attention.onboarding import summarize_connectors
 from hermes_attention.google_oauth_guard import APPROVED_SCOPES, select_google_scopes
@@ -26,6 +27,8 @@ from hermes_attention.routing import ContextRouter
 from hermes_attention.runtime_models import DirectModelClient
 from hermes_attention.screen import OneShotScreenCapture
 from hermes_attention.overlay import OverlayEvent, OverlayEventBus
+from hermes_attention.overlay_control import OverlayControlEvent, OverlayControlSupervisor, ProcessRecord
+from hermes_attention.overlay_runtime_bridge import OverlayRuntimeBridge
 from hermes_attention.secrets import configured_keys
 from hermes_attention.slack_oauth import (
     SlackOAuthConnection,
@@ -229,6 +232,45 @@ class OperationalTests(unittest.TestCase):
         encoded = event.to_json()
         for field in ("heard", "searching", "streamed", "inside-success", "codex"):
             self.assertIn(field, encoded)
+
+    def test_overlay_approval_requires_exact_visible_hash(self):
+        with self.assertRaises(ValueError):
+            OverlayControlEvent("approve")
+        event = OverlayControlEvent("approve", preview_hash="sha256:exact")
+        self.assertIn("sha256:exact", event.to_json())
+
+    def test_overlay_controls_target_only_exact_hermes_child_and_audio_descendant(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            signals = []
+            records = [
+                ProcessRecord(200, 100, "/trusted/hermes"),
+                ProcessRecord(203, 100, "python overlay-control --hermes-path /trusted/hermes"),
+                ProcessRecord(201, 200, "/usr/bin/afplay reply.mp3"),
+                ProcessRecord(202, 999, "/usr/bin/afplay unrelated.mp3"),
+            ]
+            supervisor = OverlayControlSupervisor(
+                launcher_pid=100,
+                expected_hermes_path=Path("/trusted/hermes"),
+                mute_state_path=root / "mute.json",
+                audit_path=root / "audit.jsonl",
+                snapshot=lambda: records,
+                signal_process=lambda pid, sig: signals.append((pid, sig)),
+            )
+            muted = supervisor.handle(OverlayControlEvent("mute"))
+            self.assertTrue(muted["applied"])
+            self.assertEqual([(201, signal.SIGTERM)], signals)
+            with patch.dict(os.environ, {"HERMES_ATTENTION_OVERLAY_MUTE_STATE": str(root / "mute.json")}):
+                self.assertTrue(overlay_voice_output_muted())
+            supervisor.handle(OverlayControlEvent("cancel"))
+            self.assertEqual([(201, signal.SIGTERM)], signals)
+            cancellations = []
+            bridge = OverlayRuntimeBridge(root / "mute.json", lambda: cancellations.append(True) or True)
+            supervisor.handle(OverlayControlEvent("cancel"))
+            self.assertTrue(bridge.poll_once())
+            self.assertEqual([True], cancellations)
+            self.assertFalse(bridge.poll_once())
+            self.assertNotIn((202, signal.SIGTERM), signals)
 
     def test_supervised_executor_fails_closed_then_fixed_destination_executes(self):
         policy = PolicyEngine(external_writes_enabled=True, kill_switch=False)

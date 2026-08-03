@@ -12,6 +12,7 @@ from .config import ProjectPaths, validate_project_configuration
 from .history import ChatGPTExportImporter, CodexHistoryBridge, ContextRelayImporter
 from .health import startup_health
 from .overlay import run_tk_overlay
+from .overlay_control import OverlayControlSupervisor
 from .onboarding import OnboardingOrchestrator
 from .runtime_models import DirectModelClient
 from .secrets import configured_keys, prompt_and_store
@@ -60,6 +61,12 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("date")
 
     commands.add_parser("overlay", help="run the optional local Tk overlay; reads JSON events from stdin")
+    overlay_control = commands.add_parser("overlay-control", help="run the owner-only local overlay control supervisor")
+    overlay_control.add_argument("--fifo", required=True, type=Path)
+    overlay_control.add_argument("--launcher-pid", required=True, type=int)
+    overlay_control.add_argument("--hermes-path", required=True, type=Path)
+    overlay_control.add_argument("--mute-state", required=True, type=Path)
+    overlay_control.add_argument("--audit", required=True, type=Path)
     onboarding = commands.add_parser("onboard", help="run or inspect resumable automation-first onboarding")
     onboarding.add_argument("action", choices=("run", "status"), default="run", nargs="?")
     onboarding.add_argument("--history-batch", type=int, default=500)
@@ -89,6 +96,14 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if errors else 0
     if arguments.command == "overlay":
         return run_tk_overlay()
+    if arguments.command == "overlay-control":
+        OverlayControlSupervisor(
+            launcher_pid=arguments.launcher_pid,
+            expected_hermes_path=arguments.hermes_path,
+            mute_state_path=arguments.mute_state,
+            audit_path=arguments.audit,
+        ).run(arguments.fifo)
+        return 0
     if arguments.command == "secret":
         prompt_and_store(arguments.name)
         emit({"stored": True, "name": arguments.name, "path": "~/.hermes/.env", "secret_printed": False})
