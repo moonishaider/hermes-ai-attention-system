@@ -38,7 +38,7 @@ The selected official ChatGPT export was 308.8 MB and used the current five-shar
 
 Baseline Codex classification was 9,651 records: 4,910 Inside Success and 4,741 unknown (49.1244% unknown). Adding only the verified `new-casting-dashboard-main` workspace mapping reclassified 198 records to Inside Success. The new result is 5,108 Inside Success and 4,543 unknown (47.0728% unknown). Course-pipeline and Bayers records remain unknown because their contexts cannot be inferred safely.
 
-The current archive is 187 files and roughly 6.9 GB; 64,000 lines are checkpointed. Current indexed timestamps do not prove activity on 2 August, so Hermes must not claim “today” from Codex alone.
+The current archive is 187 files and roughly 6.9 GB; 64,500 lines are checkpointed. Current indexed timestamps do not prove activity on 2 August, so Hermes must not claim “today” from Codex alone.
 
 ## Representative model evaluation
 

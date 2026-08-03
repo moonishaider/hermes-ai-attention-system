@@ -2,9 +2,9 @@
 
 **Authoritative as of:** 4 August 2026
 
-**Prompt 4 rollback checkpoints:** milestone start `015948b`; pre-closeout `ac43070`
+**Prompt 4 rollback checkpoints:** milestone start `015948b`; pre-closeout `ac43070`; pre-Google-refresh `bf04f22`
 
-**Implemented through:** the current published `main`; `ac43070` is the pre-closeout rollback
+**Operational implementation through:** `116a86f` (`Resolve Google hourly OAuth expiry`); later handoff-only commits do not change runtime state
 
 **Purpose:** This is the single current source of truth. Historical milestone records are evidence of what was true when written, not the present status.
 
