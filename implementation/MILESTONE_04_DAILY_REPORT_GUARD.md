@@ -1,7 +1,9 @@
 # Milestone 04: Destination-Locked DLOA Preview
 
-**Date:** 4 August 2026  
-**Pre-change rollback:** `09717a6`  
+**Date:** 4 August 2026
+
+**Pre-change rollback:** `09717a6`
+
 **External Slack writes:** none
 
 Syed confirmed `#example-channel-1` as the department DLOA channel and confirmed that `#sd-eat-that-frog-tyler` is not the destination. The read-only Slack connection resolved the approved destination to workspace `TEXAMPLE001`, channel `CEXAMPLE001`, and Syed user `UEXAMPLE001`.
