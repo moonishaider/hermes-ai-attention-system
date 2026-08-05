@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
+import re
 from typing import Any
 from uuid import uuid4
 
@@ -14,6 +15,7 @@ from .config import ProjectPaths, load_json, validate_project_configuration
 from .context_time import resolve_context_window
 from .domain import ConfidenceState, EvidenceItem, Provenance, RiskClass, TaskRecord
 from .extraction import extract_task_candidates
+from .history import CodexAppServerBridge
 from .models import ModelRouter
 from .policy import PolicyEngine
 from .registry import IntegrationRegistry, SpecialistRegistry
@@ -23,6 +25,13 @@ from .storage import Store
 
 
 class AttentionService:
+    CURRENT_CODEX_QUERY = re.compile(
+        r"\b(?:dloa|daily (?:list|activit|report)|worked (?:today|yesterday)|"
+        r"what did i (?:work|do)|latest codex|recent codex|project resum|"
+        r"resume (?:the )?project|current work|work (?:today|yesterday))",
+        re.IGNORECASE,
+    )
+
     def __init__(self, *, paths: ProjectPaths | None = None, database: Path | str | None = None) -> None:
         self.paths = paths or ProjectPaths.discover()
         configuration_errors = validate_project_configuration(self.paths)
@@ -44,6 +53,11 @@ class AttentionService:
         self.store.close()
 
     def status(self) -> dict[str, Any]:
+        codex_checkpoint = self.store.get_checkpoint(CodexAppServerBridge.GLOBAL_CHECKPOINT)
+        try:
+            codex_last_sync = datetime.fromtimestamp(int(codex_checkpoint), UTC).isoformat() if codex_checkpoint else None
+        except (TypeError, ValueError, OSError):
+            codex_last_sync = None
         return {
             "service": "hermes-attention",
             "version": "0.1.0",
@@ -55,6 +69,11 @@ class AttentionService:
             "specialists": sorted(self.specialists.specialists),
             "integrations": {key: value["mode"] for key, value in self.integrations.connections.items()},
             "budget": self.models.budget_status(),
+            "codex_sync": {
+                "mode": "app-server-readonly-on-demand",
+                "last_updated_at": codex_last_sync,
+                "scheduled": False,
+            },
         }
 
     def context_time_window(self, context_id: str, relative_date: str = "today") -> dict[str, Any]:
@@ -111,7 +130,30 @@ class AttentionService:
             "task_candidates": [asdict(task) for task in candidates],
         }
 
-    def search(self, query: str, *, context_id: str | None = None, limit: int = 10) -> list[dict[str, Any]]:
+    def sync_codex(
+        self,
+        *,
+        lookback_days: int = 14,
+        maximum_threads: int = 50,
+        maximum_items: int = 2_000,
+    ) -> dict[str, Any]:
+        """Refresh current Codex evidence through the local read-only App Server."""
+        return CodexAppServerBridge(self.store, self.router).sync(
+            lookback_days=lookback_days,
+            maximum_threads=maximum_threads,
+            maximum_items=maximum_items,
+        )
+
+    def search(
+        self,
+        query: str,
+        *,
+        context_id: str | None = None,
+        limit: int = 10,
+        refresh_current_codex: bool = True,
+    ) -> list[dict[str, Any]]:
+        if refresh_current_codex and self.CURRENT_CODEX_QUERY.search(query):
+            self.sync_codex()
         return self.store.search_evidence(query, context_id=context_id, limit=limit)
 
     def add_task(
@@ -182,6 +224,7 @@ class AttentionService:
         }
 
     def daily_report_draft(self, report_date: str) -> dict[str, Any]:
+        codex_sync = self.sync_codex()
         tasks = self.store.list_tasks(context_id="inside-success", statuses=("open", "blocked", "done"))
         lines = []
         sources: list[str] = []
@@ -199,4 +242,5 @@ class AttentionService:
             "state": "draft",
             "requires_exact_preview_and_approval": True,
             "publisher_enabled": False,
+            "codex_sync": codex_sync,
         }

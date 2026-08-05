@@ -31,6 +31,8 @@ Healthy startup shows the Hermes window without Terminal, the default model as *
 
 For work questions, “today” and “yesterday” use **Miami / America-New_York time**. Personal dates use **Asia/Karachi**. Mixed-context answers resolve and label each source window separately.
 
+For a fresh activity report, ask **“Generate my DLOA for yesterday.”** Hermes refreshes recent Codex work first and keeps the result as a draft. You can also open **Attention** and click **Sync latest Codex work** for an explicit manual refresh.
+
 Normal limitations: there is no separate global voice shortcut beyond the visible microphone and wake mode; wake listening uses some CPU and is optional; local speech recognition can mishear very short phrases; Zoom transcript depth depends on the provider; Slack/email/calendar writes, payments, logged-in browser control, continuous screen capture, continuous ChatGPT sync, and mobile access remain unavailable.
 
 To quit completely, choose **Hermes → Quit Hermes** or press **Command+Q**. Closing the window may leave the native app available for Quick Entry and optional wake mode.

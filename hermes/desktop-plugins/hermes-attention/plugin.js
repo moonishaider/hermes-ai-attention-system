@@ -44,6 +44,7 @@ function AttentionHome() {
   const [title, setTitle] = useState('')
   const [screenReason, setScreenReason] = useState('Explain the selected area')
   const [notice, setNotice] = useState('')
+  const [syncingCodex, setSyncingCodex] = useState(false)
   const query = useQuery({
     queryKey: ['hermes-attention', 'home', contextId],
     queryFn: () => pluginContext.rest(`/home?context_id=${encodeURIComponent(contextId)}`),
@@ -96,6 +97,26 @@ function AttentionHome() {
     }
   }
 
+  const syncCodex = async () => {
+    if (syncingCodex) return
+    setSyncingCodex(true)
+    setNotice('Reading your latest Codex chats… No Codex thread will be changed.')
+    try {
+      const result = await pluginContext.rest('/codex-sync', {
+        method: 'POST',
+        body: { lookback_days: 14, maximum_threads: 50, maximum_items: 2000 },
+        timeoutMs: 120000
+      })
+      setNotice(`Codex is current: ${result.inserted} new items from ${result.threads_read} updated chats (${result.duration_ms} ms).`)
+      await query.refetch()
+    } catch (error) {
+      host.notifyError(error, 'Codex synchronization did not complete')
+      setNotice('Codex synchronization failed; Hermes will not pretend stale evidence is current.')
+    } finally {
+      setSyncingCodex(false)
+    }
+  }
+
   const cancel = async () => {
     const sid = host.state.activeSessionId.get()
     if (!sid) {
@@ -133,6 +154,21 @@ function AttentionHome() {
         jsx(StatusLine, { ok: status?.external_writes_enabled === false, children: 'Company and client writes are unavailable' }),
         jsx(StatusLine, { ok: status?.budget?.level === 'ok', children: `Monthly model budget: ${status?.budget?.level || 'checking'}` }),
         jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: query.isLoading ? 'Checking local status…' : `Context: ${contextId}` })
+      ] }),
+      jsxs('section', { className: 'space-y-2', children: [
+        jsx('h2', { className: 'font-medium', children: 'Codex freshness' }),
+        jsx('p', {
+          className: 'text-xs text-(--ui-text-tertiary)',
+          children: status?.codex_sync?.last_updated_at
+            ? `Last synchronized ${status.codex_sync.last_updated_at}. DLOA and current-work searches refresh automatically.`
+            : 'Not yet synchronized through the live read-only interface.'
+        }),
+        jsx(Button, {
+          onClick: () => void syncCodex(),
+          variant: 'secondary',
+          disabled: syncingCodex,
+          children: syncingCodex ? 'Synchronizing Codex…' : 'Sync latest Codex work'
+        })
       ] }),
       jsxs('section', { className: 'space-y-2', children: [
         jsx('h2', { className: 'font-medium', children: 'Tasks and open loops' }),

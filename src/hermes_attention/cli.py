@@ -45,6 +45,11 @@ def build_parser() -> argparse.ArgumentParser:
     codex.add_argument("--maximum-records", type=int, default=500)
     codex.add_argument("--start-date", default="2026-03-01")
 
+    codex_live = commands.add_parser("codex-sync", help="sync recent Codex chats through read-only App Server methods")
+    codex_live.add_argument("--lookback-days", type=int, default=14)
+    codex_live.add_argument("--maximum-threads", type=int, default=50)
+    codex_live.add_argument("--maximum-items", type=int, default=2000)
+
     chatgpt = commands.add_parser("chatgpt-export", help="preview or import an official ChatGPT export")
     chatgpt.add_argument("action", choices=("preview", "import"))
     chatgpt.add_argument("path", type=Path)
@@ -136,6 +141,12 @@ def main(argv: list[str] | None = None) -> int:
         elif arguments.command == "codex-history":
             bridge = CodexHistoryBridge(service.store, service.router)
             emit(bridge.preview(start_date=arguments.start_date) if arguments.action == "preview" else bridge.ingest(maximum_records=arguments.maximum_records, start_date=arguments.start_date))
+        elif arguments.command == "codex-sync":
+            emit(service.sync_codex(
+                lookback_days=arguments.lookback_days,
+                maximum_threads=arguments.maximum_threads,
+                maximum_items=arguments.maximum_items,
+            ))
         elif arguments.command == "chatgpt-export":
             importer = ChatGPTExportImporter(service.store, service.router)
             if arguments.action == "preview":

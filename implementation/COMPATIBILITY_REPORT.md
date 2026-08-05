@@ -3,6 +3,27 @@
 **Checked:** 2026-08-04
 **Status:** Updated through Prompt 4 acceptance
 
+## Codex current-conversation synchronization (checked 6 August 2026)
+
+The current official Codex App Server documentation exposes local JSONL-RPC
+over stdio, `thread/list`, non-mutating `thread/read`, and experimental
+paginated `thread/turns/list`. Live testing against installed `codex-cli
+0.147.0-alpha.1.2` confirmed initialization, updated-thread listing, and
+summary-view turn pagination. Full `thread/read` responses for recent long
+chats measured roughly 46–86 MiB because they include tool/reasoning payloads;
+the bounded summary turn view measured about 1–4 KiB for ordinary recent turns
+and retained the user/assistant fields Hermes needs.
+
+Implementation consequence: current synchronization uses stdio only,
+`thread/list` plus summary-view `thread/turns/list`, a 14-day/50-thread/2,000
+conversation-item default bound, and a hard method allowlist. Reasoning, tool
+calls/results, commands, and images are excluded. The App Server exits after
+each sync. `thread/read` is explicitly excluded because the measured full
+responses are unnecessary for current-work synchronization. The accepted checkpointed JSONL importer remains
+the fallback if the experimental pagination contract changes.
+
+Official source: https://developers.openai.com/codex/app-server
+
 ## Gemini Apps export (checked 4 August 2026)
 
 Google's official Gemini Apps Help documents an official Takeout route. `Gemini` contains Gems data; chats, generated media, and uploads are exported through `My Activity` with only `Gemini Apps` selected. Google states that archive creation can take hours to days and that downloading does not delete server-side activity. Hermes has no continuous personal Gemini-history synchronization route and will treat a future Takeout archive as untrusted evidence requiring schema preview, date filtering, redaction, and explicit import confirmation.

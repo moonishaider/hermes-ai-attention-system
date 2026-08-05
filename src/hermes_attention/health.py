@@ -105,6 +105,7 @@ def startup_health(service: Any) -> dict[str, Any]:
     ).fetchall()
     checkpointed_lines = sum(int(row["cursor"]) for row in checkpoint_rows if str(row["cursor"]).isdigit())
     last_checkpoint = max((str(row["updated_at"]) for row in checkpoint_rows), default=None)
+    live_codex = service.status()["codex_sync"]
     routes = {
         route_id: {"provider": route.provider, "model": route.model, "purpose": route.purpose}
         for route_id, route in service.models.routes.items()
@@ -128,6 +129,9 @@ def startup_health(service: Any) -> dict[str, Any]:
             "checkpointed_lines": checkpointed_lines,
             "last_checkpoint_at": last_checkpoint,
             "pending_lines": "not-counted-at-startup-to-avoid-scanning-6GB-history",
+            "live_sync": live_codex,
+            "read_methods": ["thread/list", "thread/turns/list"],
+            "thread_mutations": False,
         },
         "chatgpt": {
             "state": "imported" if chatgpt_records else "awaiting-user-selected-official-export",

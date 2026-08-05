@@ -12,6 +12,29 @@
 
 Codex is the highest-priority history integration.
 
+### Current structured synchronization
+
+For current work, Hermes starts the installed official `codex app-server` only
+for the duration of a synchronization and communicates over local stdio. The
+client has a hard read allowlist containing only `thread/list` and the official
+experimental `thread/turns/list`. The paginated turn method uses `itemsView:
+summary`, which retains user/assistant conversation messages while excluding
+large reasoning and tool payloads before they enter Hermes. No thread start,
+resume, archive, delete, turn start, command execution, config write, or MCP
+tool call is available through the bridge.
+
+Hermes synchronizes automatically before DLOA/current-work/project-resumption
+searches and before the daily-report draft tool. The Attention page also offers
+**Sync latest Codex work**. Synchronization is incremental, bounded to recent
+threads and turns, redacts secrets, preserves thread/turn/item provenance, and
+stops the App Server child process when complete. A failure is reported rather
+than treating stale evidence as current.
+
+The experimental pagination status is a compatibility risk, not hidden. The
+checkpointed local JSONL importer below remains the historical fallback. No
+scheduled synchronization, permanent watcher, custom daemon, or network server
+is enabled.
+
 ### Discovery
 
 At runtime, discover the active `CODEX_HOME` rather than hard-coding one path. Verify current official paths and formats. Candidate sources may include:
