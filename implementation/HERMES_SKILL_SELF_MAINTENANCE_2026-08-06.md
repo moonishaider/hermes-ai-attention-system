@@ -18,7 +18,7 @@ The owner-approved skill is installed at `~/.hermes/skills/inside-success/inside
 - the phrase `Worked on the reps' performance analyzer system`, never `worked with reps`;
 - a draft-only result unless Syed separately requests sending.
 
-The skill is curator-managed and pinned. Pinning prevents Hermes and the curator from deleting or archiving it while still permitting focused edits and patches.
+The original `inside-success-dla` skill was initially curator-managed and pinned. After Hermes created the renamed `inside-success-dloa` skill, Syed explicitly requested that the old name be unpinned, and the pin was removed successfully. Hermes may run the narrowly allowlisted `hermes curator unpin <skill-name>` command only after an explicit owner request; other curator mutations are not allowlisted.
 
 ## Automatic-write policy
 
@@ -36,6 +36,6 @@ The pre-change owner-only backup is `~/.hermes/backups/hermes-before-skill-appro
 - Hermes 0.20.0 accepted the repaired skill through its native skill manager.
 - The skill passed structural validation.
 - `hermes skills list` reports it enabled as a local Inside Success skill.
-- `hermes curator status` reports it active and pinned.
+- `hermes curator status` reports the original skill active and unpinned after the explicit rename request.
 - The pending skill-write queue is empty after applying all ten reviewed writes.
 - No Slack message or external action was performed.
