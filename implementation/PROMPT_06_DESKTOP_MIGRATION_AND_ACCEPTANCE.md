@@ -31,8 +31,8 @@ The old Tk overlay and project launcher are no longer the normal interface. The 
 - Quick Entry: Command+Shift+Space from another app, accepted visibly.
 - Visible voice: native microphone control, accepted with macOS microphone permission.
 - Wake phrase: local openWakeWord `hey_jarvis`, visible ear toggle, off by safe default on first configuration and currently enabled by Syed.
-- Typed TTS: off, preventing long typed reports from being narrated.
-- Microphone response projection: first one or two natural sentences, at most 45 words, with citations and structured evidence retained after `Details for screen:` for display only.
+- Typed automatic TTS: controlled by the visible Desktop toggle. When enabled, it ignores interim tool narration and reads the complete final reply.
+- Microphone response behavior: one neutral immediate acknowledgement while tools run, no detailed reasoning/tool narration, then the complete final answer. The former 45-word/`Details for screen:` split was removed after real use showed that it truncated useful speech.
 - Stop controls: native active-voice Stop, Attention Stop speaking, command-palette action, and configurable Control+Shift+S shortcut.
 - Interruption: native Stop and the permanent Attention Stop speaking control both stop audio immediately while preserving the written reply. Spoken barge-in remains available in active voice conversation; the discoverable button/shortcut is the reliable fallback.
 - Separate global talk shortcut: not added because the official SDK does not expose a clean supported voice-start action. The microphone and optional local wake phrase remain the supported paths.
@@ -54,7 +54,7 @@ DeepSeek V4 Flash remains routine/default, DeepSeek V4 Pro remains difficult rea
 - Native Quick Entry opened successfully from another application, both before and after closing the main window.
 - A source-backed project-resumption answer completed with citations and no external write.
 - Real microphone, local STT, Flash, Edge TTS Ryan voice, and wake detection passed.
-- The shorter voice projection passed a real calendar question and was accepted as more natural. A subsequent sky explanation proved the visible Stop control halts audio immediately while leaving screen detail intact.
+- The earlier short voice projection passed an initial calendar test but later proved too aggressive because it narrated interim work and truncated the useful answer. The 6 August correction retains one brief progress acknowledgement and speaks the complete final response; automated acceptance passes and one owner-visible tool-backed turn remains. A sky explanation proved the visible Stop control halts audio immediately while leaving the written answer intact.
 - The visible wake switch persisted Off; repeated `Hey Jarvis` phrases produced no recording or response. Wake remains off at handoff.
 - Native Attention completed one explicit Personal-context selected-area view after macOS permission restart; Luna returned a result and no transient screenshot remained.
 - A real low-risk preference appeared as one learned item in Attention and in the native Memory Graph.
