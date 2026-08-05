@@ -9,8 +9,11 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
+
+if TYPE_CHECKING:
+    from .config import ProjectPaths
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,7 +61,11 @@ class OneShotScreenCapture:
             return png
 
 
-def understand_screen_once(reason: str, context_id: str) -> dict[str, Any]:
+def understand_screen_once(
+    reason: str,
+    context_id: str,
+    paths: ProjectPaths | None = None,
+) -> dict[str, Any]:
     """Run one visible, user-selectable capture through Luna without retention."""
     if context_id not in {"inside-success", "mitchell", "personal"}:
         raise ValueError("screen context must be inside-success, mitchell, or personal")
@@ -75,7 +82,7 @@ def understand_screen_once(reason: str, context_id: str) -> dict[str, Any]:
     png = capture.capture_interactive_png(grant.token)
     image_hash = sha256(png).hexdigest()
     image_data_url = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
-    service = AttentionService()
+    service = AttentionService(paths=paths)
     try:
         result = DirectModelClient(service.paths.config_dir / "models.json", service.store).generate(
             "vision",

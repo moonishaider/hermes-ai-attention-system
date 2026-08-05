@@ -1,0 +1,7 @@
+{
+  "name": "hermes-attention",
+  "label": "Hermes Attention",
+  "description": "Local attention, context, task, source, and one-shot screen status.",
+  "version": "0.2.0",
+  "api": "plugin_api.py"
+}

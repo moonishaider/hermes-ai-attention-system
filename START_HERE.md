@@ -1,44 +1,32 @@
-# Start Hermes
+# Start Here
 
-## Open it
+## Open Hermes
 
-Double-click **Launch Hermes.command** in this project folder. A Terminal window is the Hermes chat, and the small Hermes status overlay appears beside it. Wait until the Hermes prompt appears.
+Open **Hermes** from Applications, Finder, Spotlight, or the Dock. The normal experience is the desktop app; no Terminal window is required. The old `Launch Hermes.command` remains only as a recovery diagnostic.
 
-## Type or speak
+From any Mac app, press **Command+Shift+Space** to open Quick Entry. Type a request and press Return. For the full Attention view, open **Attention** in Hermes or press **Command+Shift+A**.
 
-- Type a request at the Hermes prompt and press Return.
-- For voice, type `/voice on`, press Return, then use `Control+B` to start and stop recording. Ryan speaks the reply.
-- Say `stop` while Ryan is speaking to interrupt him, or type `/voice off` to end voice mode.
+## Talk to Hermes
 
-## View one screen region
+Click the microphone beside the chat box and speak. Microphone questions receive a short natural spoken answer while citations and structured detail stay visible on screen. Typed questions stay quiet.
 
-Ask: `Look at one screen region once and explain what you see in personal context.`
+- Speak over Hermes to interrupt it while voice conversation is active.
+- Click **Stop** in the active voice strip, click **Stop speaking** in Attention, or press **Control+Shift+S** to stop only the current audio.
+- Use the native **Mute** or **End** control to mute or finish voice conversation.
+- Say **Hey Jarvis** only when the visible ear toggle is on. Turn the ear off to stop wake listening.
 
-Hermes opens Apple's visible region selector. Drag over only the window or region you want to share, then confirm the capture. Press Escape to cancel. It uses GPT-5.6 Luna once, retains no screenshot, does not continuously watch the screen, and cannot click or type for you.
+## View one selected screen area
 
-## Controls
+Open **Attention**, choose Inside Success, Mitchell, or Personal, then click **Look at selected area**. Select one region in Apple's visible selector. Hermes uses GPT-5.6 Luna once, retains no screenshot, never continuously watches the screen, and cannot click or type for you.
 
-- **Cancel** stops the active model response.
-- **Mute** or **Unmute** changes spoken output for this launch.
-- **Dismiss** hides the small overlay; the Terminal chat remains open.
-- Type `/exit` in the Terminal chat to close Hermes normally. Do not use `/exit --delete` unless you intentionally want to delete that session history.
+## Learning
 
-## Healthy startup
+Say, for example, `Remember that I prefer short spoken replies` or `Learn this workflow`. Explicit low-risk communication preferences may be saved automatically; uncertain facts and wider changes remain staged for review. Attention shows a plain **Learning status** summary. **Open Memory Graph** is the advanced view; orange diamonds are memories, blue dots are skills, and right-clicking a node opens its inspect/edit controls. Security policy, credentials, OAuth scopes, model budgets, write destinations, and protected code can never be self-changed.
 
-Healthy startup ends at the Hermes prompt with the overlay showing **Hermes ready; external actions killed**. The health output should show the approved Flash/Pro/Luna/Terra routes, refreshable Google accounts, `external_actions.enabled: false`, `kill_switch: true`, and no generic Slack sender.
+## Healthy daily use
 
-The launcher uses Hermes's pinned Python 3.11 runtime directly, so double-clicking it does not depend on Terminal's PATH or Apple's older system Python.
+Healthy startup shows the Hermes window without Terminal, the default model as **DeepSeek V4 Flash**, and the **Attention** page showing the external-action kill switch on and company/client writes unavailable. Source-backed work can take longer because Hermes preserves freshness, citations, and context separation; progress appears in the native tool/activity stream.
 
-## Normal limitations
+Normal limitations: there is no separate global voice shortcut beyond the visible microphone and wake mode; wake listening uses some CPU and is optional; local speech recognition can mishear very short phrases; Zoom transcript depth depends on the provider; Slack/email/calendar writes, payments, logged-in browser control, continuous screen capture, continuous ChatGPT sync, and mobile access remain unavailable.
 
-- A simple reply normally starts quickly. Source-backed multi-service work can take roughly one to three minutes; Hermes should show that it is checking sources rather than guessing.
-- Very short speech can be misheard by local Whisper. Repeat the phrase or type it when precision matters.
-- Zoom may refresh its access token on first use. A refreshable expired access token is not the same as a disconnected account.
-- Screen understanding requires a fresh visible selection every time.
-- Slack/email sending, calendar changes, logged-in browser control, checkout/payment, continuous ChatGPT sync, and continuous screen viewing remain unavailable.
-
-Useful first requests:
-
-- `Give me a concise Inside Success attention brief with sources and confidence labels. Do not send anything.`
-- `Resume the Hermes project from Codex and GitHub evidence and tell me the next open loop.`
-- `Find my Mitchell open loops and unanswered questions, keeping Mitchell separate from Inside Success.`
+To quit completely, choose **Hermes → Quit Hermes** or press **Command+Q**. Closing the window may leave the native app available for Quick Entry and optional wake mode.
