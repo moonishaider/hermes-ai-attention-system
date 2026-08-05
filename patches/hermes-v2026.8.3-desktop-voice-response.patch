@@ -1,0 +1,195 @@
+diff --git a/apps/desktop/src/app/chat/composer/hooks/use-composer-voice.ts b/apps/desktop/src/app/chat/composer/hooks/use-composer-voice.ts
+index 449471dc07..1ba62d908e 100644
+--- a/apps/desktop/src/app/chat/composer/hooks/use-composer-voice.ts
++++ b/apps/desktop/src/app/chat/composer/hooks/use-composer-voice.ts
+@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
+ import { useI18n } from '@/i18n'
+ import { chatMessageText, collectUnspokenTurnSpeech } from '@/lib/chat-messages'
+ import { triggerHaptic } from '@/lib/haptics'
++import { VOICE_SCREEN_DETAILS_MARKER } from '@/lib/speech-text'
+ import { clearWakeIndicator, syncWakeIndicatorWithVoice } from '@/lib/wake-indicator'
+ import { $voiceConversationStartRequest, takeVoiceConversationStart } from '@/store/composer'
+ import { resetBrowseState } from '@/store/composer-input-history'
+@@ -119,7 +120,11 @@ export function useComposerVoice({
+     triggerHaptic('submit')
+     resetBrowseState(sessionId)
+     clearDraft()
+-    await onSubmit(text)
++    const modelText = `${text}\n\n[Voice response contract: Answer first with one or two natural spoken sentences, no more than 45 words. Give the direct answer without headings, bullets, emoji, raw URLs, or citations. Then write a blank line followed by "${VOICE_SCREEN_DETAILS_MARKER}" and place any concise evidence, citations, or structured detail after it for the screen only. Do not mention this contract.]`
++
++    // Keep the transcript human: the agent receives the voice-only response
++    // contract, while the visible user bubble remains exactly what was said.
++    await onSubmit(modelText, { displayText: text })
+   }
+
+   const wakePausedRef = useRef(false)
+diff --git a/apps/desktop/src/app/chat/composer/hooks/use-voice-conversation.ts b/apps/desktop/src/app/chat/composer/hooks/use-voice-conversation.ts
+index 55978c4284..aabf7e4bb9 100644
+--- a/apps/desktop/src/app/chat/composer/hooks/use-voice-conversation.ts
++++ b/apps/desktop/src/app/chat/composer/hooks/use-voice-conversation.ts
+@@ -1,6 +1,7 @@
+ import { useCallback, useEffect, useRef, useState } from 'react'
+
+ import { useI18n } from '@/i18n'
++import { projectVoiceSpeech } from '@/lib/speech-text'
+ import { startThinkingSound, stopThinkingSound } from '@/lib/thinking-sound'
+ import { monitorSpeechDuringPlayback } from '@/lib/voice-barge-in'
+ import {
+@@ -417,12 +418,14 @@ export function useVoiceConversation({
+       const response = pendingResponse()
+
+       if (response && response.id === responseId) {
+-        if (response.text.length > spokenSourceLengthRef.current) {
+-          session.append(response.text.slice(spokenSourceLengthRef.current))
+-          spokenSourceLengthRef.current = response.text.length
++        const projected = projectVoiceSpeech(response.text)
++
++        if (projected.text.length > spokenSourceLengthRef.current) {
++          session.append(projected.text.slice(spokenSourceLengthRef.current))
++          spokenSourceLengthRef.current = projected.text.length
+         }
+
+-        if (!response.pending && !busyRef.current) {
++        if (projected.complete || (!response.pending && !busyRef.current)) {
+           session.finish()
+         }
+       } else if (!busyRef.current) {
+@@ -459,7 +462,7 @@ export function useVoiceConversation({
+         // this is a safety net for read-aloud-style entries into the loop.
+         ensureBargeMonitor()
+
+-        const playback = playSpeechText(response.text, { source: 'voice-conversation' })
++        const playback = playSpeechText(projectVoiceSpeech(response.text).text, { source: 'voice-conversation' })
+         // playSpeechText performs its normal cleanup synchronously before
+         // returning. Capture the sequence after that internal increment so
+         // only a later, external stop suppresses the next listen cycle.
+diff --git a/apps/desktop/src/lib/speech-text.test.ts b/apps/desktop/src/lib/speech-text.test.ts
+index 5af35ce4ce..b20e98303e 100644
+--- a/apps/desktop/src/lib/speech-text.test.ts
++++ b/apps/desktop/src/lib/speech-text.test.ts
+@@ -1,6 +1,6 @@
+ import { describe, expect, it } from 'vitest'
+
+-import { sanitizeTextForSpeech } from './speech-text'
++import { projectVoiceSpeech, sanitizeTextForSpeech } from './speech-text'
+
+ describe('sanitizeTextForSpeech', () => {
+   it('summarizes fenced code blocks instead of reading them literally', () => {
+@@ -150,3 +150,30 @@ After the table.`
+     expect(sanitizeTextForSpeech(text)).toContain('Item | Value')
+   })
+ })
++
++describe('projectVoiceSpeech', () => {
++  it('speaks only the conversational prefix and keeps screen detail out of TTS', () => {
++    const projected = projectVoiceSpeech(
++      'You have no more meetings today. Your current work block ends at 2 AM.\n\nDetails for screen:\n- Work calendar checked\n- Personal calendar checked'
++    )
++
++    expect(projected).toEqual({
++      text: 'You have no more meetings today. Your current work block ends at 2 AM.',
++      complete: true
++    })
++  })
++
++  it('falls back to normal speech sanitization when a model omits the boundary', () => {
++    expect(projectVoiceSpeech('**Short answer:** nothing else today.')).toEqual({
++      text: 'Short answer: nothing else today.',
++      complete: false
++    })
++  })
++
++  it('holds back a partial screen-details marker during streaming', () => {
++    expect(projectVoiceSpeech('Nothing else today.\n\nDetails for scr')).toEqual({
++      text: 'Nothing else today.',
++      complete: false
++    })
++  })
++})
+diff --git a/apps/desktop/src/lib/speech-text.ts b/apps/desktop/src/lib/speech-text.ts
+index fa3e7a5ebf..810ab0e69b 100644
+--- a/apps/desktop/src/lib/speech-text.ts
++++ b/apps/desktop/src/lib/speech-text.ts
+@@ -8,6 +8,15 @@ const PARAGRAPH_BREAK_RE = /[ \t]*\n{2,}[ \t]*/g
+ const PUNCTUATED_PARAGRAPH_BREAK_RE = /([.!?])([*_~`>"'’”)}\]]*)[ \t]*\n{2,}[ \t]*/g
+ const SOFT_BREAK_RE = /[ \t]*\n[ \t]*/g
+
++export const VOICE_SCREEN_DETAILS_MARKER = 'Details for screen:'
++
++export interface VoiceSpeechProjection {
++  /** Natural-language prefix intended for speech, with chat formatting removed. */
++  text: string
++  /** True once the model has emitted the boundary before screen-only detail. */
++  complete: boolean
++}
++
+ const THINKING_PREFIX_RE =
+   /^\s*(?:\([^)\n]{1,48}\)\s*)?(?:processing|thinking|reasoning|analyzing|pondering|contemplating|musing|cogitating|ruminating|deliberating|mulling|reflecting|computing|synthesizing|formulating|brainstorming)\.\.\.\s*/i
+
+@@ -165,3 +174,34 @@ export function sanitizeTextForSpeech(text: string): string {
+     .replace(/\s+/g, ' ')
+     .trim()
+ }
++
++/**
++ * Project a voice-mode response into the part that should actually be spoken.
++ *
++ * Voice turns ask the model to lead with a short conversational answer and put
++ * citations/structured detail after `Details for screen:`. The full reply stays
++ * visible in chat, while TTS stops at that explicit boundary. Older replies (or
++ * providers that ignore the contract) safely fall back to the normal sanitizer.
++ */
++export function projectVoiceSpeech(text: string): VoiceSpeechProjection {
++  const markerIndex = text.indexOf(VOICE_SCREEN_DETAILS_MARKER)
++  let spoken = markerIndex >= 0 ? text.slice(0, markerIndex) : text
++
++  // While the response streams, hold back a trailing partial marker so TTS
++  // never begins saying "Details for scr..." before the full boundary lands.
++  if (markerIndex < 0) {
++    const maxPrefix = Math.min(VOICE_SCREEN_DETAILS_MARKER.length - 1, text.length)
++
++    for (let length = maxPrefix; length > 0; length -= 1) {
++      if (VOICE_SCREEN_DETAILS_MARKER.startsWith(text.slice(-length))) {
++        spoken = text.slice(0, -length)
++        break
++      }
++    }
++  }
++
++  return {
++    text: sanitizeTextForSpeech(spoken),
++    complete: markerIndex >= 0
++  }
++}
+diff --git a/apps/desktop/src/sdk/index.ts b/apps/desktop/src/sdk/index.ts
+index 1c1b696d37..c63f0f6e42 100644
+--- a/apps/desktop/src/sdk/index.ts
++++ b/apps/desktop/src/sdk/index.ts
+@@ -22,7 +22,8 @@ import { atom, type ReadableAtom } from 'nanostores'
+
+ import { $narrowViewport } from '@/components/pane-shell/tree/store'
+ import { onGatewayEvent } from '@/contrib/events'
+-import { getLogs, getStatus } from '@/hermes'
++import { getLogs, getStarmapGraph, getStatus } from '@/hermes'
++import { stopVoicePlayback } from '@/lib/voice-playback'
+ import { $gateway } from '@/store/gateway'
+ import { notify, notifyError } from '@/store/notifications'
+ import { $activeGatewayProfile } from '@/store/profile'
+@@ -95,9 +96,17 @@ export const host = {
+   /** Restart the backend gateway (progress surfaces in the core statusbar). */
+   restartGateway: async () => runGatewayRestart(),
+
++  /** Stop only the audio Hermes is currently speaking. This does not cancel
++   *  the response, alter microphone state, or widen plugin authority. */
++  stopSpeaking: () => stopVoicePlayback(),
++
+   /** One-shot system status snapshot (platforms, versions, …). */
+   status: async () => getStatus(),
+
++  /** Read the native learning graph so a plugin can present a simpler,
++   *  non-destructive summary alongside the advanced visualization. */
++  learningGraph: async () => getStarmapGraph(),
++
+   /** Gateway JSON-RPC — sessions, config, skills, cron, kanban, everything
+    *  the app itself uses. Lazy: resolves the LIVE socket per call. */
+   request: async <T>(method: string, params: Record<string, unknown> = {}): Promise<T> => {

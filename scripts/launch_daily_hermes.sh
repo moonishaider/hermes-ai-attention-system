@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+cd "$ROOT"
 "$ROOT/scripts/preflight_safety.sh" >/dev/null
 export HERMES_ENABLE_PROJECT_PLUGINS=1
 export HERMES_ACTIONS_KILL_SWITCH="${HERMES_ACTIONS_KILL_SWITCH:-1}"
@@ -56,5 +57,4 @@ OVERLAY_PID=$!
 } >"$FIFO" &
 FEED_PID=$!
 
-cd "$ROOT"
 "$HOME/.local/bin/hermes" "$@"

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+import re
 import sys
 from typing import Any
 
@@ -13,6 +15,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from hermes_attention.config import ProjectPaths  # noqa: E402
 from hermes_attention.service import AttentionService  # noqa: E402
 from hermes_attention.google_oauth_guard import install_google_oauth_scope_guard  # noqa: E402
 from hermes_attention.hermes_voice_compat import install_voice_playback_interrupt_guard  # noqa: E402
@@ -24,15 +27,27 @@ from hermes_attention.overlay_runtime_bridge import install_overlay_runtime_brid
 # reauthorization can occur; recognized Google resources are fail-closed to
 # the immutable scope allowlist.
 install_google_oauth_scope_guard()
+PROJECT_PATHS = ProjectPaths.discover(ROOT)
+
+def _hermes_version_tuple() -> tuple[int, int, int]:
+    """Return the installed Hermes version without importing runtime internals."""
+    try:
+        raw = version("hermes-agent")
+    except PackageNotFoundError:
+        return (0, 0, 0)
+    parts = [int(value) for value in re.findall(r"\d+", raw)[:3]]
+    return tuple((parts + [0, 0, 0])[:3])
+
 
 # Hermes 0.19.1 restarts interrupted macOS afplay output through its ffplay
-# fallback. Apply a process-local project guard so a successful voice barge-in
-# ends playback instead of replaying it. No installed Hermes file is edited.
-install_voice_playback_interrupt_guard()
+# fallback. The official 0.20.0 voice stack fixes barge-in natively, so the
+# compatibility patch must never replace its redesigned playback path.
+if _hermes_version_tuple() < (0, 20, 0):
+    install_voice_playback_interrupt_guard()
 
 
 def _call(method: str, **kwargs: Any) -> str:
-    service = AttentionService()
+    service = AttentionService(paths=PROJECT_PATHS)
     try:
         result = getattr(service, method)(**kwargs)
         return json.dumps(result, sort_keys=True, default=str)
@@ -85,7 +100,11 @@ def request_screen_view(reason: str, context_id: str) -> str:
 def view_screen_once(reason: str, context_id: str) -> str:
     """Open the visible selector once, interpret the selection, and retain no pixels."""
     from hermes_attention.screen import understand_screen_once
-    return json.dumps(understand_screen_once(reason, context_id), ensure_ascii=False, default=str)
+    return json.dumps(
+        understand_screen_once(reason, context_id, PROJECT_PATHS),
+        ensure_ascii=False,
+        default=str,
+    )
 
 
 def daily_report_draft(report_date: str) -> str:
@@ -97,7 +116,7 @@ def routed_reasoning(route: str, prompt: str, image_data_url: str = "") -> str:
     """Use only an approved non-routine direct-API route."""
     if route not in {"difficult", "vision", "review"}:
         raise ValueError("only difficult, vision, and review escalation routes are exposed")
-    service = AttentionService()
+    service = AttentionService(paths=PROJECT_PATHS)
     try:
         from hermes_attention.runtime_models import DirectModelClient
         result = DirectModelClient(service.paths.config_dir / "models.json", service.store).generate(

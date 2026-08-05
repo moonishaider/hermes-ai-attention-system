@@ -125,6 +125,22 @@ class HistoryAndServiceTests(unittest.TestCase):
         self.assertNotIn("hermes_attention_execute_action", registered)
         self.assertFalse(any(name.startswith(("send", "create", "delete", "update")) for name in registered))
 
+    def test_plugin_resolves_marked_project_independently_of_process_cwd(self):
+        path = ROOT / ".hermes/plugins/hermes-attention/__init__.py"
+        spec = importlib.util.spec_from_file_location("hermes_attention_desktop_plugin", path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(module)
+        self.assertEqual(ROOT, module.PROJECT_PATHS.root)
+        original = Path.cwd()
+        try:
+            __import__("os").chdir(Path(self.temp.name))
+            result = json.loads(module.status())
+        finally:
+            __import__("os").chdir(original)
+        self.assertEqual(str(ROOT), result["project_root"])
+        self.assertFalse(result["external_writes_enabled"])
+
 
 if __name__ == "__main__":
     unittest.main()
