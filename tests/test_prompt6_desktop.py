@@ -70,12 +70,15 @@ class Prompt6DesktopTests(unittest.TestCase):
         self.assertNotIn("api_key", source.lower())
         self.assertNotIn("client_secret", source.lower())
 
-    def test_desktop_voice_patch_separates_spoken_and_screen_detail(self):
+    def test_desktop_voice_patch_speaks_final_answer_with_bounded_progress(self):
         patch = (ROOT / "patches/hermes-v2026.8.3-desktop-voice-response.patch").read_text(encoding="utf-8")
-        self.assertIn("Voice response contract", patch)
-        self.assertIn("Details for screen:", patch)
-        self.assertIn("displayText: text", patch)
-        self.assertIn("projectVoiceSpeech", patch)
+        self.assertIn("I'm checking that now.", patch)
+        self.assertIn("message.interim", patch)
+        self.assertIn("!m.interim", patch)
+        self.assertIn("complete final answer", patch)
+        self.assertNotIn("Voice response contract", patch)
+        self.assertNotIn("Details for screen:", patch)
+        self.assertNotIn("projectVoiceSpeech", patch)
         self.assertNotIn("external-action", patch.lower())
 
 
