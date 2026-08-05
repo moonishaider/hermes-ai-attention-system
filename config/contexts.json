@@ -4,6 +4,7 @@
     {
       "id": "inside-success",
       "label": "Inside Success",
+      "timezone": "America/New_York",
       "browser_profile": "Company Chrome",
       "rules": [
         {"field": "workspace", "contains": "inside success", "weight": 0.9},
@@ -16,6 +17,7 @@
     {
       "id": "mitchell",
       "label": "Mitchell",
+      "timezone": "Asia/Karachi",
       "browser_profile": "Profile 1",
       "rules": [
         {"field": "workspace", "contains": "mitchell", "weight": 0.95},
@@ -25,6 +27,7 @@
     {
       "id": "personal",
       "label": "Personal",
+      "timezone": "Asia/Karachi",
       "browser_profile": "Profile 1",
       "rules": [
         {"field": "github_owner", "equals": "moonishaider", "weight": 1.0},
@@ -33,8 +36,8 @@
         {"field": "workspace", "contains": "jarvis/jarvis-imp", "weight": 0.95}
       ]
     },
-    {"id": "mixed", "label": "Mixed - confirmation required", "browser_profile": null, "rules": []},
-    {"id": "unknown", "label": "Unknown - fail closed", "browser_profile": null, "rules": []}
+    {"id": "mixed", "label": "Mixed - confirmation required", "timezone": null, "browser_profile": null, "rules": []},
+    {"id": "unknown", "label": "Unknown - fail closed", "timezone": null, "browser_profile": null, "rules": []}
   ],
   "classification": {"minimum_confidence": 0.6, "mixed_delta": 0.15, "allow_multiple_labels": true}
 }

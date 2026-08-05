@@ -11,6 +11,7 @@ from uuid import uuid4
 from .actions import ActionController
 from .attention import AttentionEngine
 from .config import ProjectPaths, load_json, validate_project_configuration
+from .context_time import resolve_context_window
 from .domain import ConfidenceState, EvidenceItem, Provenance, RiskClass, TaskRecord
 from .extraction import extract_task_candidates
 from .models import ModelRouter
@@ -55,6 +56,9 @@ class AttentionService:
             "integrations": {key: value["mode"] for key, value in self.integrations.connections.items()},
             "budget": self.models.budget_status(),
         }
+
+    def context_time_window(self, context_id: str, relative_date: str = "today") -> dict[str, Any]:
+        return resolve_context_window(self.context_config, context_id, relative_date)
 
     def ingest_evidence(
         self,

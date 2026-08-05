@@ -87,6 +87,15 @@ def validate_project_configuration(paths: ProjectPaths) -> list[str]:
     context_ids = {item.get("id") for item in contexts.get("contexts", [])}
     if not {"inside-success", "mitchell", "personal", "mixed", "unknown"} <= context_ids:
         errors.append("required initial contexts are missing")
+    timezone_by_context = {
+        str(item.get("id")): item.get("timezone")
+        for item in contexts.get("contexts", [])
+        if isinstance(item, dict)
+    }
+    if timezone_by_context.get("inside-success") != "America/New_York":
+        errors.append("inside-success timezone must be America/New_York")
+    if timezone_by_context.get("personal") != "Asia/Karachi":
+        errors.append("personal timezone must be Asia/Karachi")
     if models.get("default_route") != "routine":
         errors.append("models.default_route must be routine")
     if any(item.get("mode") != "read-only" for item in integrations.get("external_sources", [])):

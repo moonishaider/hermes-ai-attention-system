@@ -9,6 +9,7 @@ import unittest
 
 from hermes_attention.actions import ActionController
 from hermes_attention.config import ProjectPaths, load_json, validate_project_configuration
+from hermes_attention.context_time import resolve_context_window
 from hermes_attention.domain import ActionProposal, Provenance, RiskClass, TaskRecord
 from hermes_attention.extraction import extract_task_candidates, find_contradictions
 from hermes_attention.github import assert_read_only_tool_inventory, normalize_github_item
@@ -81,6 +82,23 @@ class CoreTests(unittest.TestCase):
         unknown = self.router.classify(self.provenance(connection_id="unmapped", workspace=None, metadata={}))
         self.assertEqual("unknown", unknown[0].context_id)
         self.assertEqual("Company Chrome", self.router.browser_profile("inside-success"))
+
+    def test_relative_dates_use_context_timezone_at_karachi_midnight(self):
+        # 00:30 on 6 August in Karachi is still 15:30 on 5 August in Miami.
+        instant = datetime(2026, 8, 5, 19, 30, tzinfo=UTC)
+        work = resolve_context_window(self.contexts, "inside-success", "yesterday", now=instant)
+        personal = resolve_context_window(self.contexts, "personal", "yesterday", now=instant)
+        self.assertEqual("2026-08-04", work["local_date"])
+        self.assertEqual("2026-08-05", personal["local_date"])
+        self.assertEqual("America/New_York", work["timezone"])
+        self.assertEqual("2026-08-04T04:00:00+00:00", work["start_utc"])
+        self.assertTrue(work["search_guidance"]["slack"]["avoid_channel_enumeration"])
+        self.assertFalse(work["search_guidance"]["slack"]["include_context"])
+
+    def test_ambiguous_context_time_fails_closed(self):
+        for context_id in ("mixed", "unknown"):
+            with self.assertRaisesRegex(ValueError, "explicit date"):
+                resolve_context_window(self.contexts, context_id, "today")
 
     def test_immutable_provenance_and_search(self):
         item = normalize_github_item(

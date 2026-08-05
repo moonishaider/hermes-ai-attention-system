@@ -3,6 +3,9 @@
 model: deepseek/deepseek-v4-flash
 memory:
   write_approval: true
+voice:
+  auto_tts: false
+  silence_duration: 5.5
 plugins:
   enabled:
     - hermes-attention

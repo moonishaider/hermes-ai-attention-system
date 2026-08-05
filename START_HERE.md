@@ -10,6 +10,8 @@ From any Mac app, press **Command+Shift+Space** to open Quick Entry. Type a requ
 
 Click the microphone beside the chat box and speak. Microphone questions receive a short natural spoken answer while citations and structured detail stay visible on screen. Typed questions stay quiet.
 
+Hermes waits for about **5.5 seconds of continuous silence** before treating a voice turn as complete, so a normal mid-sentence pause should not submit early. Use **End** when you want to finish immediately.
+
 - Speak over Hermes to interrupt it while voice conversation is active.
 - Click **Stop** in the active voice strip, click **Stop speaking** in Attention, or press **Control+Shift+S** to stop only the current audio.
 - Use the native **Mute** or **End** control to mute or finish voice conversation.
@@ -26,6 +28,8 @@ Say, for example, `Remember that I prefer short spoken replies` or `Learn this w
 ## Healthy daily use
 
 Healthy startup shows the Hermes window without Terminal, the default model as **DeepSeek V4 Flash**, and the **Attention** page showing the external-action kill switch on and company/client writes unavailable. Source-backed work can take longer because Hermes preserves freshness, citations, and context separation; progress appears in the native tool/activity stream.
+
+For work questions, “today” and “yesterday” use **Miami / America-New_York time**. Personal dates use **Asia/Karachi**. Mixed-context answers resolve and label each source window separately.
 
 Normal limitations: there is no separate global voice shortcut beyond the visible microphone and wake mode; wake listening uses some CPU and is optional; local speech recognition can mishear very short phrases; Zoom transcript depth depends on the provider; Slack/email/calendar writes, payments, logged-in browser control, continuous screen capture, continuous ChatGPT sync, and mobile access remain unavailable.
 
