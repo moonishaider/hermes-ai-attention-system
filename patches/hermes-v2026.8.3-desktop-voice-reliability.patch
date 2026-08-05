@@ -1,0 +1,203 @@
+--- a/apps/desktop/src/app/chat/composer/hooks/use-voice-recorder.ts
++++ b/apps/desktop/src/app/chat/composer/hooks/use-voice-recorder.ts
+@@ -5,6 +5,7 @@
+
+ import type { VoiceActivityState, VoiceStatus } from '../types'
+
++import { transcribeWithOneRetry } from './transcribe-with-retry'
+ import { useMicRecorder } from './use-mic-recorder'
+
+ interface VoiceRecorderOptions {
+@@ -62,7 +63,7 @@
+     setVoiceStatus('transcribing')
+
+     try {
+-      const transcript = (await onTranscribeAudio(result.audio)).trim()
++      const transcript = await transcribeWithOneRetry(result.audio, onTranscribeAudio)
+
+       if (!transcript) {
+         notify({ kind: 'warning', title: voiceCopy.noSpeechDetected, message: voiceCopy.tryRecordingAgain })
+--- a/apps/desktop/src/app/chat/composer/hooks/use-voice-conversation.ts
++++ b/apps/desktop/src/app/chat/composer/hooks/use-voice-conversation.ts
+@@ -14,6 +14,7 @@
+ import { notify, notifyError } from '@/store/notifications'
+ import { $voicePlayback } from '@/store/voice-playback'
+
++import { transcribeWithOneRetry } from './transcribe-with-retry'
+ import { useMicRecorder } from './use-mic-recorder'
+
+ export type ConversationStatus = 'idle' | 'listening' | 'transcribing' | 'thinking' | 'speaking'
+@@ -27,6 +28,7 @@
+ interface VoiceConversationOptions {
+   busy: boolean
+   enabled: boolean
++  maxRecordingSeconds: number
+   onFatalError?: () => void
+   /** Interrupt the in-flight agent turn (the same seam as the Stop button).
+    *  Fired when the user speaks while the model is still generating. */
+@@ -44,10 +46,13 @@
+ /** How long a barge-triggered interrupt may take to settle before we submit
+  *  the captured utterance anyway. */
+ const INTERRUPT_SETTLE_TIMEOUT_MS = 5_000
++/** Let natural mid-sentence pauses breathe before closing the user's turn. */
++const VOICE_TURN_SILENCE_MS = 5_500
+
+ export function useVoiceConversation({
+   busy,
+   enabled,
++  maxRecordingSeconds,
+   onFatalError,
+   onInterrupt,
+   onStopWord,
+@@ -159,7 +164,7 @@
+         }
+
+         try {
+-          const transcript = (await onTranscribeAudio(result.audio)).trim()
++          const transcript = await transcribeWithOneRetry(result.audio, onTranscribeAudio)
+
+           if (!transcript) {
+             if (enabledRef.current) {
+@@ -236,7 +241,7 @@
+       // VAD tuning mirrors `tools.voice_mode` defaults so the browser loop matches the CLI.
+       await handle.start({
+         silenceLevel: 0.075,
+-        silenceMs: 1_250,
++        silenceMs: VOICE_TURN_SILENCE_MS,
+         idleSilenceMs: 12_000,
+         onError: error => {
+           notifyError(error, voiceCopy.microphoneFailed)
+@@ -252,14 +257,15 @@
+       // the middle of a new listen, cutting it short (or, after enough idle
+       // re-listens, wedging the loop into a state it doesn't re-arm from).
+       clearTurnTimeout()
+-      turnTimeoutRef.current = window.setTimeout(() => void handleTurn(), 60_000)
++      const cap = Math.max(1, Math.min(Math.trunc(maxRecordingSeconds), 600))
++      turnTimeoutRef.current = window.setTimeout(() => void handleTurn(), cap * 1000)
+     } catch (error) {
+       notifyError(error, voiceCopy.couldNotStartSession)
+       pendingStartRef.current = false
+       setStatus('idle')
+       onFatalError?.()
+     }
+-  }, [handle, handleTurn, onFatalError, voiceCopy.couldNotStartSession, voiceCopy.microphoneFailed])
++  }, [handle, handleTurn, maxRecordingSeconds, onFatalError, voiceCopy.couldNotStartSession, voiceCopy.microphoneFailed])
+
+   const settleAfterSpeech = useCallback(
+     (barged: boolean, stoppedDuringSetup = false) => {
+@@ -324,7 +330,7 @@
+       setStatus('transcribing')
+
+       try {
+-        const transcript = (await onTranscribeAudio(audio)).trim()
++        const transcript = await transcribeWithOneRetry(audio, onTranscribeAudio)
+
+         if (!transcript) {
+           resumeListening()
+--- a/apps/desktop/src/app/chat/composer/hooks/use-composer-voice.ts
++++ b/apps/desktop/src/app/chat/composer/hooks/use-composer-voice.ts
+@@ -135,6 +135,7 @@
+     busy,
+     consumePendingResponse,
+     enabled: voiceConversationActive,
++    maxRecordingSeconds,
+     onFatalError: () => setVoiceConversationActive(false),
+     // Speaking over the model mid-generation interrupts the in-flight turn —
+     // the same seam as the Stop button — so the interjection becomes the next
+diff --git a/apps/desktop/src/app/chat/composer/hooks/use-voice-conversation-rearm.test.tsx b/apps/desktop/src/app/chat/composer/hooks/use-voice-conversation-rearm.test.tsx
+index e993abc5730..ec9ca3143d9 100644
+--- a/apps/desktop/src/app/chat/composer/hooks/use-voice-conversation-rearm.test.tsx
++++ b/apps/desktop/src/app/chat/composer/hooks/use-voice-conversation-rearm.test.tsx
+@@ -136,6 +136,7 @@ function renderRearmConversation(responseId: string, responseText: string) {
+         busy: false,
+         consumePendingResponse: vi.fn(),
+         enabled,
++        maxRecordingSeconds: 600,
+         onSubmit: async () => {
+           response = { id: responseId, pending: false, text: responseText }
+         },
+diff --git a/apps/desktop/src/app/chat/composer/hooks/use-voice-conversation.test.tsx b/apps/desktop/src/app/chat/composer/hooks/use-voice-conversation.test.tsx
+index 1e43ef8b186..f5ac5692604 100644
+--- a/apps/desktop/src/app/chat/composer/hooks/use-voice-conversation.test.tsx
++++ b/apps/desktop/src/app/chat/composer/hooks/use-voice-conversation.test.tsx
+@@ -101,6 +101,7 @@ function renderConversation(overrides: { onInterrupt?: () => void; transcript?:
+         busy,
+         consumePendingResponse: vi.fn(),
+         enabled: true,
++        maxRecordingSeconds: 600,
+         onInterrupt,
+         onStopWord,
+         onSubmit,
+--- /dev/null
++++ b/apps/desktop/src/app/chat/composer/hooks/transcribe-with-retry.ts
+@@ -0,0 +1,28 @@
++/**
++ * Transcribe one in-memory recording, retrying exactly once when the provider
++ * fails or returns an empty transcript. The Blob is never persisted.
++ */
++export async function transcribeWithOneRetry(
++  audio: Blob,
++  transcribe: (audio: Blob) => Promise<string>
++): Promise<string> {
++  let firstError: unknown = null
++
++  for (let attempt = 0; attempt < 2; attempt += 1) {
++    try {
++      const transcript = (await transcribe(audio)).trim()
++
++      if (transcript) {
++        return transcript
++      }
++    } catch (error) {
++      firstError ??= error
++    }
++  }
++
++  if (firstError) {
++    throw firstError
++  }
++
++  return ''
++}
+--- /dev/null
++++ b/apps/desktop/src/app/chat/composer/hooks/transcribe-with-retry.test.ts
+@@ -0,0 +1,39 @@
++import { describe, expect, it, vi } from 'vitest'
++
++import { transcribeWithOneRetry } from './transcribe-with-retry'
++
++describe('transcribeWithOneRetry', () => {
++  const audio = new Blob(['voice'], { type: 'audio/webm' })
++
++  it('returns the first non-empty transcript without retrying', async () => {
++    const transcribe = vi.fn(async () => '  a complete request  ')
++
++    await expect(transcribeWithOneRetry(audio, transcribe)).resolves.toBe('a complete request')
++    expect(transcribe).toHaveBeenCalledTimes(1)
++  })
++
++  it('retries an empty transcript using the same in-memory recording', async () => {
++    const transcribe = vi.fn().mockResolvedValueOnce('   ').mockResolvedValueOnce('recovered request')
++
++    await expect(transcribeWithOneRetry(audio, transcribe)).resolves.toBe('recovered request')
++    expect(transcribe).toHaveBeenNthCalledWith(1, audio)
++    expect(transcribe).toHaveBeenNthCalledWith(2, audio)
++  })
++
++  it('retries one provider failure and then succeeds', async () => {
++    const transcribe = vi.fn().mockRejectedValueOnce(new Error('temporary failure')).mockResolvedValueOnce('recovered')
++
++    await expect(transcribeWithOneRetry(audio, transcribe)).resolves.toBe('recovered')
++    expect(transcribe).toHaveBeenCalledTimes(2)
++  })
++
++  it('never retries more than once', async () => {
++    const failure = new Error('still unavailable')
++    const transcribe = vi.fn(async () => {
++      throw failure
++    })
++
++    await expect(transcribeWithOneRetry(audio, transcribe)).rejects.toBe(failure)
++    expect(transcribe).toHaveBeenCalledTimes(2)
++  })
++})

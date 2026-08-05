@@ -61,6 +61,7 @@ class Prompt6DesktopTests(unittest.TestCase):
         self.assertIn('"consolidate": False', source)
         self.assertIn('wake_word.setdefault("enabled", False)', source)
         self.assertIn('voice["silence_duration"] = 5.5', source)
+        self.assertIn('voice["max_recording_seconds"] = 600', source)
         self.assertNotIn('config["wake_word"] = {', source)
         self.assertIn('"surface": "gui"', source)
         self.assertIn('"model": "hey_jarvis"', source)
@@ -80,6 +81,15 @@ class Prompt6DesktopTests(unittest.TestCase):
         self.assertNotIn("Details for screen:", patch)
         self.assertNotIn("projectVoiceSpeech", patch)
         self.assertNotIn("external-action", patch.lower())
+
+    def test_desktop_voice_reliability_patch_preserves_long_requests(self):
+        patch = (ROOT / "patches/hermes-v2026.8.3-desktop-voice-reliability.patch").read_text(encoding="utf-8")
+        self.assertIn("VOICE_TURN_SILENCE_MS = 5_500", patch)
+        self.assertIn("maxRecordingSeconds", patch)
+        self.assertIn("transcribeWithOneRetry", patch)
+        self.assertIn("for (let attempt = 0; attempt < 2; attempt += 1)", patch)
+        self.assertNotIn("writeFile", patch)
+        self.assertNotIn("localStorage", patch)
 
 
 if __name__ == "__main__":

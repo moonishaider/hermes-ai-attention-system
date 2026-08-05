@@ -122,6 +122,10 @@ def configure(root: Path, hermes_home: Path, *, dry_run: bool) -> Path:
     # The stock 3-second VAD boundary submits during Syed's natural
     # mid-sentence pauses. This remains finite so completed turns do not hang.
     voice["silence_duration"] = 5.5
+    # Desktop dictation and continuous conversation both clamp this value at
+    # ten minutes. The explicit cap prevents an unbounded recording while
+    # avoiding the upstream two-minute default silently cutting long requests.
+    voice["max_recording_seconds"] = 600
     config["desktop"] = {
         "repo_scan_enabled": True,
         "repo_scan_roots": [str(root)],
