@@ -2,13 +2,21 @@ from __future__ import annotations
 
 import importlib.util
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 from zipfile import ZipFile
 
 from hermes_attention.config import ProjectPaths, load_json
-from hermes_attention.history import ChatGPTExportImporter, CodexHistoryBridge, ContextRelayImporter
+from hermes_attention.history import (
+    ChatGPTExportImporter,
+    CodexAppServerBridge,
+    CodexAppServerClient,
+    CodexHistoryBridge,
+    ContextRelayImporter,
+)
 from hermes_attention.routing import ContextRouter
 from hermes_attention.service import AttentionService
 from hermes_attention.storage import Store
@@ -40,6 +48,60 @@ class HistoryAndServiceTests(unittest.TestCase):
         second = bridge.ingest()
         self.assertEqual(2, first["inserted"])
         self.assertEqual(0, second["scanned"])
+
+    def test_codex_app_server_sync_is_bounded_incremental_and_excludes_private_runtime_items(self):
+        now = int(datetime.now(UTC).timestamp())
+        secret = "ghp_" + "C" * 36
+
+        class FakeClient:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return None
+
+            @staticmethod
+            def list_threads(**_):
+                return {"data": [{"id": "thread-1", "updatedAt": now, "cwd": str(ROOT), "name": "Current project"}], "nextCursor": None}
+
+            @staticmethod
+            def list_turns(thread_id, **_):
+                assert thread_id == "thread-1"
+                return {"data": [{
+                        "id": "turn-1",
+                        "status": "completed",
+                        "completedAt": now,
+                        "items": [
+                            {"id": "user-1", "type": "userMessage", "content": [{"type": "text", "text": f"Prepare today's DLOA {secret}"}]},
+                            {"id": "reasoning-1", "type": "reasoning", "content": ["private chain of thought"]},
+                            {"id": "tool-1", "type": "commandExecution", "aggregatedOutput": "private tool output"},
+                            {"id": "agent-1", "type": "agentMessage", "phase": "final_answer", "text": "Implemented the bounded project update."},
+                        ],
+                    }], "nextCursor": None}
+
+        bridge = CodexAppServerBridge(self.store, self.router, client_factory=FakeClient)
+        first = bridge.sync(maximum_threads=2, maximum_items=10)
+        second = bridge.sync(maximum_threads=2, maximum_items=10)
+        self.assertEqual(2, first["inserted"])
+        self.assertEqual(0, second["inserted"])
+        self.assertEqual(0, second["threads_read"])
+        results = self.store.search_evidence("DLOA")
+        self.assertEqual(1, len(results))
+        self.assertNotIn(secret, results[0]["content"])
+        self.assertEqual("codex_app_server_readonly", results[0]["provenance"]["connection_id"])
+        self.assertEqual("app-server-readonly:thread-list,thread-turns-list", results[0]["provenance"]["permission_ref"])
+        self.assertEqual([], self.store.search_evidence("private chain thought"))
+        self.assertEqual([], self.store.search_evidence("private tool output"))
+
+    def test_codex_app_server_client_rejects_every_non_read_method_before_io(self):
+        client = object.__new__(CodexAppServerClient)
+        with self.assertRaises(PermissionError):
+            client._request("turn/start", {})
+        with self.assertRaises(PermissionError):
+            client._request("thread/delete", {})
+        with self.assertRaises(PermissionError):
+            client._request("thread/read", {})
+        self.assertEqual({"thread/list", "thread/turns/list"}, set(CodexAppServerClient.ALLOWED_METHODS))
 
     def test_chatgpt_preview_then_explicit_import(self):
         importer = ChatGPTExportImporter(self.store, self.router)
@@ -102,6 +164,18 @@ class HistoryAndServiceTests(unittest.TestCase):
         finally:
             service.close()
 
+    def test_current_work_search_refreshes_codex_but_unrelated_search_does_not(self):
+        service = AttentionService(paths=ProjectPaths.discover(ROOT), database=self.database)
+        try:
+            with patch.object(service, "sync_codex", return_value={"ok": True}) as sync:
+                service.search("What did I work on today?", context_id="inside-success")
+                sync.assert_called_once_with()
+                sync.reset_mock()
+                service.search("bounded synthetic evidence", context_id="personal")
+                sync.assert_not_called()
+        finally:
+            service.close()
+
     def test_plugin_has_no_executor(self):
         path = ROOT / ".hermes/plugins/hermes-attention/__init__.py"
         spec = importlib.util.spec_from_file_location("hermes_attention_plugin", path)
@@ -123,6 +197,7 @@ class HistoryAndServiceTests(unittest.TestCase):
         self.assertIn("hermes_attention_propose_action", registered)
         self.assertIn("hermes_attention_routed_reasoning", registered)
         self.assertIn("hermes_attention_context_time", registered)
+        self.assertIn("hermes_attention_sync_codex", registered)
         self.assertNotIn("hermes_attention_execute_action", registered)
         self.assertFalse(any(name.startswith(("send", "create", "delete", "update")) for name in registered))
 

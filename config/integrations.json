@@ -80,10 +80,15 @@
     },
     {
       "id": "codex_local_history",
-      "type": "local-jsonl",
+      "type": "codex-app-server-plus-local-jsonl",
       "mode": "read-only",
       "enabled": true,
-      "tools": {"include": ["preview", "ingest"], "exclude": []}
+      "freshness": "app-server-on-demand-before-dloa-current-work-and-project-resumption",
+      "transport": "stdio",
+      "app_server_methods": {"include": ["thread/list", "thread/turns/list"], "experimental_read_path": "thread/turns/list provides bounded summary pages for long histories", "exclude": ["thread/read", "thread/start", "thread/resume", "thread/archive", "thread/delete", "turn/start", "command/exec", "config/value/write", "mcpServer/tool/call"]},
+      "historical_fallback": "checkpointed-local-jsonl",
+      "scheduled": false,
+      "tools": {"include": ["sync_current", "preview_history", "ingest_history"], "exclude": ["mutate_thread", "start_turn", "run_command"]}
     },
     {
       "id": "chatgpt_export_backfill",

@@ -61,8 +61,18 @@ def status() -> str:
 
 
 def search_evidence(query: str, context_id: str = "", limit: int = 10) -> str:
-    """Search source-backed evidence, optionally inside one context."""
+    """Search evidence; current-work intents first refresh recent Codex chats."""
     return _call("search", query=query, context_id=context_id or None, limit=limit)
+
+
+def sync_codex(lookback_days: int = 14, maximum_threads: int = 50, maximum_items: int = 2000) -> str:
+    """Read recent Codex chats through the official local read-only interface."""
+    return _call(
+        "sync_codex",
+        lookback_days=lookback_days,
+        maximum_threads=maximum_threads,
+        maximum_items=maximum_items,
+    )
 
 
 def attention_queue(context_id: str = "", limit: int = 10) -> str:
@@ -194,9 +204,15 @@ _TOOLS = (
     ),
     (
         "hermes_attention_search", search_evidence,
-        "Search source-backed local evidence, optionally constrained to one context.",
+        "Search source-backed local evidence, optionally constrained to one context. DLOA, worked-today/yesterday, latest-Codex, and project-resumption queries automatically refresh current Codex chats first.",
         {"query": {"type": "string"}, "context_id": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 50}},
         ["query"], "🔎",
+    ),
+    (
+        "hermes_attention_sync_codex", sync_codex,
+        "Synchronize recent Codex chats now through local stdio using only bounded thread listing/reading methods. Use before a DLOA, worked-today/yesterday answer, or project resumption when freshness matters. No Codex thread or external system is modified.",
+        {"lookback_days": {"type": "integer", "minimum": 1, "maximum": 90}, "maximum_threads": {"type": "integer", "minimum": 1, "maximum": 100}, "maximum_items": {"type": "integer", "minimum": 1, "maximum": 5000}},
+        [], "🔄",
     ),
     (
         "hermes_attention_queue", attention_queue,
@@ -240,7 +256,7 @@ _TOOLS = (
     ),
     (
         "hermes_attention_daily_report", daily_report_draft,
-        "Draft an evidence-only Inside Success activity report; publishing is unavailable.",
+        "Refresh recent Codex chats, then draft an evidence-only Inside Success activity report; publishing is unavailable.",
         {"report_date": {"type": "string"}}, ["report_date"], "📋",
     ),
     (

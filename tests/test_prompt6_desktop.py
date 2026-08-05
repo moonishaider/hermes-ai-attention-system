@@ -18,6 +18,8 @@ class Prompt6DesktopTests(unittest.TestCase):
         self.assertIn("host.stopSpeaking()", source)
         self.assertIn("host.learningGraph()", source)
         self.assertIn("Learning status", source)
+        self.assertIn("Sync latest Codex work", source)
+        self.assertIn("pluginContext.rest('/codex-sync'", source)
         self.assertIn("Right-click a node", source)
         self.assertIn("Stop speaking", source)
         self.assertIn("ctrl+shift+s", source)
@@ -38,9 +40,11 @@ class Prompt6DesktopTests(unittest.TestCase):
                     continue
                 if isinstance(decorator.func.value, ast.Name) and decorator.func.value.id == "router" and decorator.args:
                     routes.add((decorator.func.attr, ast.literal_eval(decorator.args[0])))
-        self.assertEqual({("get", "/home"), ("post", "/tasks"), ("post", "/screen")}, routes)
+        self.assertEqual({("get", "/home"), ("post", "/tasks"), ("post", "/codex-sync"), ("post", "/screen")}, routes)
         self.assertNotIn("SupervisedActionExecutor", source)
         self.assertNotIn("subprocess", source)
+        self.assertIn("run_in_threadpool(_sync_codex_in_worker, body)", source)
+        self.assertIn('def _sync_codex_in_worker(body: "CodexSyncRequest")', source)
 
     def test_desktop_manifest_and_fallback_root_are_valid(self):
         manifest = json.loads(

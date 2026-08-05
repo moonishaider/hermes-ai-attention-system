@@ -37,6 +37,19 @@ def _service() -> AttentionService:
     return AttentionService(paths=PROJECT_PATHS)
 
 
+def _sync_codex_in_worker(body: "CodexSyncRequest") -> dict:
+    """Create and close SQLite state in the same worker thread."""
+    service = _service()
+    try:
+        return service.sync_codex(
+            lookback_days=body.lookback_days,
+            maximum_threads=body.maximum_threads,
+            maximum_items=body.maximum_items,
+        )
+    finally:
+        service.close()
+
+
 class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=300)
     context_id: ContextId
@@ -46,6 +59,12 @@ class TaskCreate(BaseModel):
 class ScreenRequest(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
     context_id: Literal["inside-success", "mitchell", "personal"]
+
+
+class CodexSyncRequest(BaseModel):
+    lookback_days: int = Field(default=14, ge=1, le=90)
+    maximum_threads: int = Field(default=50, ge=1, le=100)
+    maximum_items: int = Field(default=2000, ge=1, le=5000)
 
 
 def _latest_action(service: AttentionService) -> dict | None:
@@ -111,6 +130,14 @@ async def create_task(body: TaskCreate) -> dict:
         return {"task": asdict(task), "external_write": False}
     finally:
         service.close()
+
+
+@router.post("/codex-sync")
+async def sync_codex(body: CodexSyncRequest) -> dict:
+    try:
+        return await run_in_threadpool(_sync_codex_in_worker, body)
+    except (RuntimeError, ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/screen")
