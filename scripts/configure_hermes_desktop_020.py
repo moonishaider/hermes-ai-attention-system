@@ -117,7 +117,11 @@ def configure(root: Path, hermes_home: Path, *, dry_run: bool) -> Path:
     # Typed Quick Entry should remain quiet. Native voice-conversation mode
     # still speaks replies to microphone-originating turns, so the user gets
     # voice when they ask for it without having long text reports narrated.
-    config.setdefault("voice", {})["auto_tts"] = False
+    voice = config.setdefault("voice", {})
+    voice["auto_tts"] = False
+    # The stock 3-second VAD boundary submits during Syed's natural
+    # mid-sentence pauses. This remains finite so completed turns do not hang.
+    voice["silence_duration"] = 5.5
     config["desktop"] = {
         "repo_scan_enabled": True,
         "repo_scan_roots": [str(root)],

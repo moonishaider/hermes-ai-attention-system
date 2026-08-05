@@ -122,6 +122,7 @@ class HistoryAndServiceTests(unittest.TestCase):
         module.register(Context())
         self.assertIn("hermes_attention_propose_action", registered)
         self.assertIn("hermes_attention_routed_reasoning", registered)
+        self.assertIn("hermes_attention_context_time", registered)
         self.assertNotIn("hermes_attention_execute_action", registered)
         self.assertFalse(any(name.startswith(("send", "create", "delete", "update")) for name in registered))
 

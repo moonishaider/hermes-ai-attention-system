@@ -8,6 +8,7 @@ provides_tools:
   - hermes_attention_search
   - hermes_attention_queue
   - hermes_attention_handoff
+  - hermes_attention_context_time
   - hermes_attention_add_task
   - hermes_attention_propose_action
   - hermes_attention_request_screen

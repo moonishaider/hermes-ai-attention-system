@@ -75,6 +75,11 @@ def context_handoff(context_id: str) -> str:
     return _call("context_handoff", context_id=context_id)
 
 
+def context_time_window(context_id: str, relative_date: str = "today") -> str:
+    """Resolve today/yesterday/tomorrow in the selected context's timezone."""
+    return _call("context_time_window", context_id=context_id, relative_date=relative_date)
+
+
 def add_task(title: str, context_id: str, task_type: str = "task", priority: int = 50) -> str:
     """Add a local task; this performs no external write."""
     return _call("add_task", title=title, context_id=context_id, task_type=task_type, priority=priority)
@@ -203,6 +208,12 @@ _TOOLS = (
         "hermes_attention_handoff", context_handoff,
         "Build a bounded resumption packet for one explicit context.",
         {"context_id": {"type": "string"}}, ["context_id"], "🔁",
+    ),
+    (
+        "hermes_attention_context_time", context_time_window,
+        "Resolve today, yesterday, or tomorrow in the requested context before searching any dated evidence. Inside Success uses America/New_York (Miami); Personal uses Asia/Karachi. Mixed or Unknown fails closed. The result includes exact UTC/local bounds and a bounded Slack/Calendar search recipe that avoids broad channel discovery and oversized results.",
+        {"context_id": {"type": "string", "enum": ["inside-success", "mitchell", "personal", "mixed", "unknown"]}, "relative_date": {"type": "string", "enum": ["today", "yesterday", "tomorrow"]}},
+        ["context_id", "relative_date"], "🕒",
     ),
     (
         "hermes_attention_add_task", add_task,

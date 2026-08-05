@@ -60,6 +60,7 @@ class Prompt6DesktopTests(unittest.TestCase):
         self.assertIn('"prune_builtins": False', source)
         self.assertIn('"consolidate": False', source)
         self.assertIn('wake_word.setdefault("enabled", False)', source)
+        self.assertIn('voice["silence_duration"] = 5.5', source)
         self.assertNotIn('config["wake_word"] = {', source)
         self.assertIn('"surface": "gui"', source)
         self.assertIn('"model": "hey_jarvis"', source)
