@@ -73,10 +73,12 @@ def configure(root: Path, hermes_home: Path, *, dry_run: bool) -> Path:
         raise RuntimeError("Hermes config must be a mapping")
 
     config.setdefault("memory", {})["write_approval"] = True
-    config.setdefault("skills", {})["write_approval"] = True
-    # Permit only Hermes' bounded local skill manager. Community-skill search
-    # remains disabled through the separate skills_hub toolset, and every
-    # create/edit/archive is held by the approval gate above.
+    skills = config.setdefault("skills", {})
+    skills["write_approval"] = False
+    skills["guard_agent_created"] = True
+    # Permit Hermes to maintain local skills without a Codex round trip while
+    # retaining the independent dangerous-content scanner. Community-skill
+    # search remains disabled through the separate skills_hub toolset.
     agent = config.setdefault("agent", {})
     disabled = agent.setdefault("disabled_toolsets", [])
     if not isinstance(disabled, list):

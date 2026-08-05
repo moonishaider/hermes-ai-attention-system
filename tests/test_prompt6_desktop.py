@@ -54,11 +54,12 @@ class Prompt6DesktopTests(unittest.TestCase):
         launcher = (ROOT / "scripts/launch_daily_hermes.sh").read_text(encoding="utf-8")
         self.assertLess(launcher.index('cd "$ROOT"'), launcher.index("refresh_google_tokens.py"))
 
-    def test_desktop_configuration_merge_keeps_review_gates_and_safe_wake_default(self):
+    def test_desktop_configuration_merge_keeps_safe_learning_and_wake_default(self):
         source = (ROOT / "scripts/configure_hermes_desktop_020.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
         self.assertIn('config.setdefault("memory", {})["write_approval"] = True', source)
-        self.assertIn('config.setdefault("skills", {})["write_approval"] = True', source)
+        self.assertIn('skills["write_approval"] = False', source)
+        self.assertIn('skills["guard_agent_created"] = True', source)
         self.assertIn('[item for item in disabled if item != "skills"]', source)
         self.assertIn('if "skills" not in cli_tools', source)
         self.assertIn('"prune_builtins": False', source)
