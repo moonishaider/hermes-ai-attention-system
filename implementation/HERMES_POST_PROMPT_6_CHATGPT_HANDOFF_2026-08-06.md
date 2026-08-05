@@ -1,11 +1,16 @@
 # Hermes Post-Prompt-6 Product and Implementation Handoff
 
-**Prepared:** 6 August 2026  
-**Purpose:** Self-contained factual handoff for Syed to upload to his ChatGPT browser and discuss the next product milestone.  
-**Repository:** Private `moonishaider/hermes-ai-attention-system`  
-**Local marked root:** `/Users/moonishaider/Desktop/upwork/jarvis/jarvis-imp/hermes_ai_attention_system_codex_handoff_v2`  
-**Operational code baseline before this handoff:** `main` at `732527e`  
-**Prompt 6 implementation commit:** `9ecbaec`  
+**Prepared:** 6 August 2026
+
+**Purpose:** Self-contained factual handoff for Syed to upload to his ChatGPT browser and discuss the next product milestone.
+
+**Repository:** Private `moonishaider/hermes-ai-attention-system`
+
+**Local marked root:** `/Users/moonishaider/Desktop/upwork/jarvis/jarvis-imp/hermes_ai_attention_system_codex_handoff_v2`
+
+**Operational code baseline before this handoff:** `main` at `732527e`
+
+**Prompt 6 implementation commit:** `9ecbaec`
 **Pre-Prompt-6 rollback:** `2ae9512`, tag `prompt6-pre-desktop-upgrade-20260805`
 
 This document contains no API keys, OAuth tokens, imported conversation text, private Slack/email content, browser cookies, or runtime database records. It distinguishes implementation and automated verification from Syed's visible acceptance.
