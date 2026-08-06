@@ -60,7 +60,17 @@ def main() -> int:
             "client_name": connection.display_name,
         },
         "enabled": bool(arguments.enable),
-        "tools": {"include": list(connection.tools_include)},
+        # Zoom's notification GET stream is recycled before Hermes' default
+        # three-minute liveness probe. Its generic ping path also recycles the
+        # session, so use a metadata-only tools/list proof before the provider
+        # recycle can exhaust the rapid-drop budget and park the read tools.
+        "keepalive_interval": 15,
+        "keepalive_probe": "list_tools",
+        "tools": {
+            "include": list(connection.tools_include),
+            "resources": False,
+            "prompts": False,
+        },
     }
     handle, temporary = tempfile.mkstemp(prefix="config.yaml.", suffix=".tmp", dir=home)
     try:

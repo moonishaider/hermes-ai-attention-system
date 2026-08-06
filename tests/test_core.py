@@ -155,6 +155,15 @@ class CoreTests(unittest.TestCase):
         for write_tool in ("create_new_file_with_markdown", "hub_create_file_from_content", "create_meeting"):
             with self.assertRaises(PermissionError):
                 integrations.assert_tool("zoom_readonly", write_tool)
+        zoom = next(
+            item
+            for item in load_json(ROOT / "config/integrations.json")["external_sources"]
+            if item["id"] == "zoom_readonly"
+        )
+        self.assertEqual(15, zoom["keepalive_interval_seconds"])
+        self.assertEqual("list_tools", zoom["keepalive_probe"])
+        self.assertFalse(zoom["tools"]["resources"])
+        self.assertFalse(zoom["tools"]["prompts"])
         self.assertFalse(PolicyEngine().allow_external_tool("read-only", "delete_file").allowed)
 
     def test_security_and_extraction(self):

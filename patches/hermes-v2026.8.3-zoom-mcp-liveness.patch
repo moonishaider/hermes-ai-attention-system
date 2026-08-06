@@ -1,0 +1,35 @@
+--- a/tools/mcp_tool.py
++++ b/tools/mcp_tool.py
+@@
++        configured_probe = str(
++            self._config.get("keepalive_probe", "ping")
++        ).strip().lower()
++        if configured_probe == "list_tools":
++            if not self._advertises_tools():
++                raise RuntimeError(
++                    "keepalive_probe=list_tools requires the MCP tools capability"
++                )
++            await asyncio.wait_for(self.session.list_tools(), timeout=30.0)
++            return
++        if configured_probe != "ping":
++            raise RuntimeError(
++                f"unsupported MCP keepalive_probe: {configured_probe!r}"
++            )
++
+         if not self._ping_unsupported:
+--- a/tests/tools/test_mcp_capability_gating.py
++++ b/tests/tools/test_mcp_capability_gating.py
+@@
++    async def test_configured_list_tools_probe_avoids_ping(self):
++        task = MCPServerTask("test")
++        task._config = {"keepalive_probe": "list_tools"}
++        task.initialize_result = _caps(tools=SimpleNamespace())
++        task.session = SimpleNamespace(
++            send_ping=AsyncMock(),
++            list_tools=AsyncMock(),
++        )
++
++        await task._keepalive_probe()
++
++        task.session.send_ping.assert_not_called()
++        task.session.list_tools.assert_awaited_once()
