@@ -1,6 +1,6 @@
 # Connector activation status
 
-Checked: 4 August 2026
+Checked: 11 August 2026
 
 Activation does not equal real-data acceptance. `implementation/CURRENT_OPERATIONAL_STATE.md` is authoritative for that distinction.
 
@@ -13,6 +13,7 @@ Activation does not equal real-data acceptance. `implementation/CURRENT_OPERATIO
 | Google work Gmail/Drive/Calendar | Live, automatically refreshable, bounded acceptance passed | One offline grant with exactly four read-only scopes; forced refresh and three standard-API metadata smokes passed; three host-locked GET-only tools; preview MCP disabled |
 | Google personal Gmail/Drive/Calendar | Live, automatically refreshable, bounded acceptance passed | In-production private OAuth app; one offline exact-scope grant; forced refresh and three standard-API metadata smokes passed; three host-locked GET-only tools; unverified warning acknowledged |
 | Zoom work | Live, bounded usefulness-tested, and lifecycle-repaired | Profile 2 user-managed public-client PKCE app; exactly four read scopes; shared-access widening unchecked; refreshable owner-only token; 12 raw tools discovered but exactly four reviewed reads registered; a 15-second metadata `tools/list` keepalive prevents notification-stream recycling from parking the connection; a fresh bounded read and the earlier 3/3 cited usefulness case passed without reported leakage |
+| Gemini official Takeout backfill | Live, bounded local acceptance passed | Official ZIP validated and read without extraction; 178 duplicate-safe untrusted evidence records indexed from 1 November 2025; binary attachments and unrelated Takeout products ignored; no OAuth, continuous sync, or external write |
 
 All remote content remains untrusted evidence. Account identity, tool inventory, provider read-only policy, Hermes include list, and a metadata-only smoke must pass separately for every activated connection.
 

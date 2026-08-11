@@ -98,6 +98,15 @@
       "mode": "read-only",
       "enabled": true,
       "tools": {"include": ["preview", "confirmed_import"], "exclude": []}
+    },
+    {
+      "id": "gemini_export_backfill",
+      "type": "official-google-takeout",
+      "mode": "read-only",
+      "enabled": true,
+      "default_start_date": "2025-11-01",
+      "content_boundary": "Gemini Apps activity and Gemini-native metadata only; other Takeout products and binary attachments ignored",
+      "tools": {"include": ["preview", "confirmed_import"], "exclude": ["continuous_account_sync", "binary_attachment_execution"]}
     }
   ]
 }

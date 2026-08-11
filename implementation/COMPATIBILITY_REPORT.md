@@ -1,7 +1,7 @@
 # Compatibility Report
 
-**Checked:** 2026-08-04
-**Status:** Updated through Prompt 4 acceptance
+**Checked:** 2026-08-11
+**Status:** Updated through Gemini Takeout acceptance
 
 ## Codex current-conversation synchronization (checked 6 August 2026)
 
@@ -24,9 +24,9 @@ the fallback if the experimental pagination contract changes.
 
 Official source: https://developers.openai.com/codex/app-server
 
-## Gemini Apps export (checked 4 August 2026)
+## Gemini Apps export (checked 11 August 2026)
 
-Google's official Gemini Apps Help documents an official Takeout route. `Gemini` contains Gems data; chats, generated media, and uploads are exported through `My Activity` with only `Gemini Apps` selected. Google states that archive creation can take hours to days and that downloading does not delete server-side activity. Hermes has no continuous personal Gemini-history synchronization route and will treat a future Takeout archive as untrusted evidence requiring schema preview, date filtering, redaction, and explicit import confirmation.
+Google's official Gemini Apps Help documents the Takeout route. The delivered archive confirmed that conversational activity is represented by `Takeout/My Activity/Gemini Apps/My Activity.html`, while Gemini-native Gems and scheduled-action metadata use separate HTML pages. Generated media and uploads appear as separate binary files. The importer therefore validates the complete ZIP but reads only those three known HTML members, never extracts or executes archive content, ignores binary attachments and other Google products, requires preview plus explicit confirmation, redacts credential-shaped values, flags prompt injection, groups activities by immutable Gemini chat identifiers, and preserves archive/member/date provenance. The accepted 1 November 2025 backfill inserted 178 duplicate-safe evidence records. Hermes still has no supported continuous personal Gemini-history synchronization route.
 
 Official source: https://support.google.com/gemini/answer/16920332?hl=en
 
