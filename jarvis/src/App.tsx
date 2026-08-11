@@ -1,0 +1,458 @@
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import type { ContextId, HealthStatus, JarvisState, RunEvent, RunStart } from "./types";
+
+const NAV = ["Now", "Chat", "Work Ledger", "Projects", "Missions", "Radars", "Actions", "Learning", "Capability Studio", "Decisions", "Settings"];
+const CONTEXTS: { id: ContextId; label: string }[] = [
+  { id: "inside-success", label: "Inside Success" },
+  { id: "mitchell", label: "Mitchell · dormant" },
+  { id: "personal", label: "Personal" },
+  { id: "mixed", label: "Mixed" },
+  { id: "unknown", label: "Unknown" },
+];
+
+const fallbackHealth: HealthStatus = {
+  state: "starting", hermesVersion: "0.20.0", backend: "Checking",
+  context: "personal", modelRoute: "DeepSeek V4 Flash", budget: "Checking",
+  writes: "Blocked", wakeListening: false, backgroundMode: "While Jarvis runs",
+  message: "Starting the protected Hermes backend…",
+};
+
+function App() {
+  const isHud = getCurrentWindow().label === "hud";
+  const [health, setHealth] = useState<HealthStatus>(fallbackHealth);
+  const [active, setActive] = useState("Now");
+  const [context, setContext] = useState<ContextId>("personal");
+  const [prompt, setPrompt] = useState("");
+  const [answer, setAnswer] = useState("");
+  const [progress, setProgress] = useState<string[]>([]);
+  const [runId, setRunId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [background, setBackground] = useState("running");
+  const [autostart, setAutostart] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [localState, setLocalState] = useState<JarvisState | null>(null);
+  const [localTitle, setLocalTitle] = useState("");
+  const [localDetails, setLocalDetails] = useState("");
+  const [localNotice, setLocalNotice] = useState("");
+  const [voiceTranscript, setVoiceTranscript] = useState("");
+  const [voiceRetryAvailable, setVoiceRetryAvailable] = useState(false);
+  const [projection, setProjection] = useState<Record<string, unknown> | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const lastRecordingRef = useRef<Blob | null>(null);
+  const recognitionRef = useRef<{ start: () => void; stop: () => void } | null>(null);
+  const runStartedRef = useRef(0);
+  const routeRef = useRef("routine");
+  const voiceToggleRef = useRef<() => Promise<void>>(async () => undefined);
+  const speakResponseRef = useRef(false);
+
+  function spokenProjection(value: string) {
+    const plain = value
+      .replace(/```[\s\S]*?```/g, "")
+      .replace(/https?:\/\/\S+/g, "")
+      .replace(/[*#_`>|\[\]()]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const sentences = plain.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [];
+    return sentences.slice(0, 2).join(" ").trim().slice(0, 420);
+  }
+
+  useEffect(() => {
+    const refreshHealth = () => invoke<HealthStatus>("system_status").then(setHealth).catch((error) => {
+      setHealth({ ...fallbackHealth, state: "degraded", backend: "Unavailable", message: String(error) });
+    });
+    void refreshHealth();
+    const healthTimer = window.setInterval(refreshHealth, 5000);
+    invoke<boolean>("autostart_status").then(setAutostart).catch(() => undefined);
+    const unlisten = listen<RunEvent>("jarvis-run-event", ({ payload }) => {
+      if (payload.event === "message.delta" && payload.delta) setAnswer((old) => old + payload.delta);
+      if (payload.event === "run.completed" && payload.output) {
+        setAnswer(payload.output);
+        const latency = runStartedRef.current ? Date.now() - runStartedRef.current : 0;
+        const input = payload.usage?.input_tokens ?? 0;
+        const output = payload.usage?.output_tokens ?? 0;
+        const rates = routeRef.current === "review" ? [2, 12] : routeRef.current === "difficult" ? [0.435, 0.87] : [0.14, 0.28];
+        const cost = (input * rates[0] + output * rates[1]) / 1_000_000;
+        setProgress((old) => [...old, `Completed · ${(latency / 1000).toFixed(1)}s · ${input + output} tokens · ~$${cost.toFixed(4)}`]);
+        if (speakResponseRef.current && "speechSynthesis" in window) {
+          window.speechSynthesis.cancel();
+          const spoken = spokenProjection(payload.output);
+          const utterance = new SpeechSynthesisUtterance(spoken || "The full result is ready on screen.");
+          const ryan = window.speechSynthesis.getVoices().find((voice) => voice.name.toLowerCase().includes("ryan"));
+          if (ryan) utterance.voice = ryan;
+          utterance.rate = 1.08;
+          window.speechSynthesis.speak(utterance);
+        }
+        speakResponseRef.current = false;
+      }
+      if (payload.event === "tool.started") setProgress((old) => [...old, `Checking ${payload.tool || payload.name || "source"}…`]);
+      if (payload.event === "tool.completed") setProgress((old) => [...old, `Completed ${payload.tool || payload.name || "source"}`]);
+      if (["run.completed", "run.failed", "run.cancelled"].includes(payload.event)) {
+        setBusy(false); setRunId(null);
+      }
+      if (payload.error) setProgress((old) => [...old, `Unavailable: ${payload.error}`]);
+    });
+    const unlistenVoice = listen("jarvis-voice-requested", () => { void voiceToggleRef.current(); });
+    return () => {
+      window.clearInterval(healthTimer);
+      unlisten.then((fn) => fn());
+      unlistenVoice.then((fn) => fn());
+    };
+  }, []);
+
+  useEffect(() => {
+    invoke<JarvisState>("jarvis_state", { context }).then((value) => {
+      setLocalState(value); setBackground(value.backgroundMode || "running");
+    }).catch(() => setLocalState(null));
+  }, [context]);
+
+  useEffect(() => {
+    const current = localState?.focusSessions?.find((item) => !item.stopped_at);
+    if (!current) return;
+    const sample = async () => {
+      await invoke("observe_frontmost", { focusId: current.focus_id, context }).catch(() => undefined);
+      setLocalState(await invoke<JarvisState>("jarvis_state", { context }));
+    };
+    const timer = window.setInterval(() => void sample(), 45_000);
+    return () => window.clearInterval(timer);
+  }, [context, localState?.focusSessions?.map((item) => `${item.focus_id}:${item.stopped_at ?? "active"}`).join("|")]);
+
+  const contextLabel = useMemo(() => CONTEXTS.find((item) => item.id === context)?.label ?? context, [context]);
+
+  async function startPrompt(text: string, speakResponse = false) {
+    if (!text.trim() || busy) return;
+    setBusy(true); setAnswer("");
+    setProgress([`Acknowledged · ${contextLabel}`, "Preparing the smallest relevant source plan…"]);
+    speakResponseRef.current = speakResponse;
+    if (speakResponse && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      const acknowledgement = new SpeechSynthesisUtterance("I'm checking that now.");
+      acknowledgement.rate = 1.08;
+      window.speechSynthesis.speak(acknowledgement);
+    }
+    try {
+      const started = await invoke<RunStart>("start_run", { request: { prompt: text.trim(), context } });
+      setRunId(started.runId);
+      runStartedRef.current = Date.now();
+      routeRef.current = started.route;
+      setProgress((old) => [...old, `Route: ${started.route} · ${started.reason}`]);
+      setPrompt("");
+    } catch (error) {
+      setProgress((old) => [...old, `Could not start: ${String(error)}`]);
+      setBusy(false);
+    }
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    await startPrompt(prompt);
+  }
+
+  async function cancel() {
+    if (runId) await invoke("stop_run", { runId }).catch(() => undefined);
+    setBusy(false); setRunId(null);
+  }
+
+  function stopSpeaking() {
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  }
+
+  async function transcribeBlob(blob: Blob) {
+    setProgress(["Transcribing the complete recording…"]);
+    setVoiceRetryAvailable(false);
+    try {
+      const audio = Array.from(new Uint8Array(await blob.arrayBuffer()));
+      const result = await invoke<{ transcript?: string }>("transcribe_audio", { audio, mimeType: blob.type || "audio/webm" });
+      if (result.transcript?.trim()) {
+        setVoiceTranscript(result.transcript.trim());
+        await startPrompt(result.transcript, true);
+      } else {
+        setProgress(["I did not detect a complete request. Nothing was submitted."]);
+        setVoiceRetryAvailable(true);
+      }
+    } catch (error) {
+      setProgress([`Voice transcription failed safely: ${String(error)}`]);
+      setVoiceRetryAvailable(true);
+    }
+  }
+
+  async function toggleVoice() {
+    if (recording && recorderRef.current) {
+      recognitionRef.current?.stop();
+      recorderRef.current.stop();
+      setRecording(false);
+      return;
+    }
+    stopSpeaking();
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    const recorder = new MediaRecorder(stream);
+    streamRef.current = stream;
+    recorderRef.current = recorder;
+    chunksRef.current = [];
+    setVoiceTranscript("");
+    const Recognition = (window as unknown as { webkitSpeechRecognition?: new () => {
+      continuous: boolean; interimResults: boolean; lang: string;
+      onresult: ((event: { results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean }> }) => void) | null;
+      start: () => void; stop: () => void;
+    } }).webkitSpeechRecognition;
+    if (Recognition) {
+      const recognition = new Recognition();
+      recognition.continuous = true; recognition.interimResults = true; recognition.lang = "en-US";
+      recognition.onresult = (event) => {
+        const text = Array.from(event.results).map((result) => result[0]?.transcript ?? "").join(" ").trim();
+        if (text) setVoiceTranscript(text);
+      };
+      recognitionRef.current = recognition;
+      try { recognition.start(); } catch { recognitionRef.current = null; }
+    }
+    recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data); };
+    recorder.onstop = async () => {
+      const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+      lastRecordingRef.current = blob;
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      recognitionRef.current = null;
+      await transcribeBlob(blob);
+    };
+    recorder.start();
+    setRecording(true);
+    setProgress(["Listening until you press Stop…"]);
+  }
+
+  voiceToggleRef.current = toggleVoice;
+
+  async function lookAtArea() {
+    setActive("Chat");
+    setProgress(["Choose exactly one window or region. Pixels will not be retained…"]);
+    setAnswer("");
+    try {
+      const result = await invoke<{ answer: string }>("look_at_selected_area", {
+        prompt: "Explain the selected area", context,
+      });
+      setAnswer(result.answer);
+      setProgress(["Selected area understood with GPT-5.6 Luna · pixels discarded"]);
+    } catch (error) {
+      setProgress([`Screen understanding stopped safely: ${String(error)}`]);
+    }
+  }
+
+  async function toggleAutostart() {
+    const next = !autostart;
+    await invoke("set_autostart", { enabled: next });
+    setAutostart(next);
+  }
+
+  async function setBackgroundMode(mode: "off" | "running" | "login") {
+    await invoke("local_control", { operation: "setting", request: { mode } });
+    setBackground(mode);
+    if (mode === "login" && !autostart) await toggleAutostart();
+  }
+
+  async function buildCalendarProfile() {
+    setLocalNotice("Reading a bounded year of personal Calendar style metadata…");
+    try {
+      await invoke("local_control", { operation: "calendar-profile", request: {} });
+      setLocalState(await invoke<JarvisState>("jarvis_state", { context }));
+      setLocalNotice("Calendar style profile is ready for your review. No event was changed.");
+    } catch (error) {
+      setLocalNotice(`Calendar style profile unavailable: ${String(error)}`);
+    }
+  }
+
+  async function reviewCalendarProfile() {
+    const profileId = localState?.calendarStyle?.profile_id;
+    if (!profileId) return;
+    await invoke("local_control", {
+      operation: "review-calendar-profile", request: { profileId },
+    });
+    setLocalState(await invoke<JarvisState>("jarvis_state", { context }));
+    setLocalNotice("Calendar style profile marked owner-reviewed. No calendar event was changed.");
+  }
+
+  async function startFocus(minutes: 30 | 60 | 120) {
+    if (["mixed", "unknown"].includes(context)) {
+      setLocalNotice("Choose one explicit context before starting awareness."); return;
+    }
+    setLocalNotice("Starting a visible metadata-only focus session…");
+    const started = await invoke<{ focusId: string }>("local_control", { operation: "focus", request: { context, minutes } });
+    await invoke("observe_frontmost", { focusId: started.focusId, context }).catch(() => undefined);
+    setLocalState(await invoke<JarvisState>("jarvis_state", { context }));
+    setLocalNotice(`Focus session active for ${minutes} minutes · no screenshot retained`);
+  }
+
+  async function loadProjection(mode: "start-of-day" | "end-of-day" | "pre-meeting" | "absence-return") {
+    setLocalNotice("Building a bounded ledger projection…");
+    try {
+      const result = await invoke<{ projection: Record<string, unknown> }>("local_control", {
+        operation: "projection", request: { context, mode },
+      });
+      setProjection(result.projection);
+      setLocalNotice("Ready from the local Work Ledger. Nothing was sent.");
+    } catch (error) {
+      setLocalNotice(`Projection unavailable: ${String(error)}`);
+    }
+  }
+
+  async function capabilityControl(capabilityId: string, action: "useful" | "not-useful" | "disabled" | "archived") {
+    await invoke("local_control", { operation: "capability-control", request: { capabilityId, action } });
+    setLocalState(await invoke<JarvisState>("jarvis_state", { context }));
+    setLocalNotice(`Capability ${action} recorded locally.`);
+  }
+
+  async function recordAutomationOutcome(proposalId: string, outcome: "accepted" | "rejected" | "undone") {
+    await invoke("local_control", { operation: "automation-outcome", request: { proposalId, outcome } });
+    setLocalState(await invoke<JarvisState>("jarvis_state", { context }));
+    setLocalNotice(`Automation proposal ${outcome}.`);
+  }
+
+  async function stopFocus(focusId: string) {
+    await invoke("local_control", { operation: "stop-focus", request: { focusId } });
+    setLocalState(await invoke<JarvisState>("jarvis_state", { context }));
+    setLocalNotice("Focus session stopped.");
+  }
+
+  async function createLocal(kind: "mission" | "radar" | "capability") {
+    if (!localTitle.trim() || !localDetails.trim()) return;
+    setLocalNotice("Validating locally…");
+    try {
+      const result = await invoke<{ status: string }>("create_local_item", {
+        request: {
+          kind, context, title: localTitle.trim(), details: localDetails.trim(),
+          sources: kind === "radar" ? ["public-web"] : [],
+          tools: kind === "capability" ? ["search_evidence", "ledger_query"] : [],
+          requiresCode: false,
+        },
+      });
+      setLocalNotice(`${kind} saved locally · ${result.status}`);
+      setLocalTitle(""); setLocalDetails("");
+      setLocalState(await invoke<JarvisState>("jarvis_state", { context }));
+    } catch (error) {
+      setLocalNotice(`Not created: ${String(error)}`);
+    }
+  }
+
+  if (isHud) return <div className="hud-shell">
+    <div className="hud-title"><span className="orb"/><span>Ask Jarvis</span><small>{contextLabel}</small></div>
+    <form className="hud-composer" onSubmit={submit}>
+      <input autoFocus value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="What needs your attention?"/>
+      <button type="button" className={recording ? "danger" : "quiet"} onClick={toggleVoice}>{recording ? "Stop" : "Talk"}</button>
+      <button type="submit">Ask</button>
+    </form>
+    {voiceTranscript && <div className="live-transcript">{voiceTranscript}</div>}
+    {progress[0] && <div className="hud-status">{progress[0]}</div>}
+  </div>;
+
+  return <div className="shell">
+    <aside>
+      <div className="brand"><span className="orb"/><div><strong>JARVIS</strong><small>Hermes intelligence</small></div></div>
+      <nav>{NAV.map((item) => <button key={item} className={active === item ? "active" : ""} onClick={() => setActive(item)}>{item}</button>)}</nav>
+      <div className="sidebar-foot">
+        <span className={`health-dot ${health.state}`}/><span>{health.state === "ready" ? "Systems nominal" : health.message}</span>
+      </div>
+    </aside>
+    <main>
+      <header>
+        <div><p className="eyebrow">{active}</p><h1>{active === "Now" ? "Good evening, Syed." : active}</h1></div>
+        <select aria-label="Current context" value={context} onChange={(event) => setContext(event.target.value as ContextId)}>
+          {CONTEXTS.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}
+        </select>
+      </header>
+
+      {active === "Now" && <>
+        <section className="hero card">
+          <div><p className="eyebrow">Current attention</p><h2>Ready when you are.</h2><p>{health.message}</p></div>
+          <div className="pulse"><span/><span/><span/></div>
+        </section>
+        <section className="grid">
+          <article className="card"><p className="eyebrow">Today</p><h3>Attention brief</h3><p>Source-backed priorities, meetings, blockers, and people waiting—without mixing contexts.</p><button onClick={() => { setPrompt("Give me my source-backed attention brief for today."); setActive("Chat"); }}>Open brief</button></article>
+          <article className="card"><p className="eyebrow">Projects</p><h3>Resume intelligently</h3><p>Continue from Codex, GitHub, decisions, tasks, and verified evidence.</p><button onClick={() => { setPrompt("Resume my most relevant active project with sources and next three actions."); setActive("Chat"); }}>Resume project</button></article>
+          <article className="card"><p className="eyebrow">Awareness</p><h3>Look once</h3><p>Explicit selected-area understanding. No continuous capture or retained screenshot.</p><button onClick={lookAtArea}>Select area</button></article>
+        </section>
+        <section className="card intelligence-strip">
+          <div><p className="eyebrow">Background intelligence</p><strong>{background === "off" ? "Off" : background === "login" ? "While logged in" : "While Jarvis runs"}</strong><small>{localState?.proactive?.source_count ?? 0} bounded ledger sources in the current brief</small></div>
+          <div className="focus-controls"><button className="quiet" onClick={() => void loadProjection("start-of-day")}>Start day</button><button className="quiet" onClick={() => void loadProjection("end-of-day")}>End day / DLOA</button><button className="quiet" onClick={() => void loadProjection("absence-return")}>Catch up</button><button className="quiet" onClick={() => void startFocus(30)}>Focus 30m</button><button className="quiet" onClick={() => void startFocus(60)}>60m</button>{localState?.focusSessions?.find((item) => !item.stopped_at) && <button className="danger" onClick={() => void stopFocus(localState.focusSessions.find((item) => !item.stopped_at)!.focus_id)}>Stop focus</button>}</div>
+        </section>
+        {projection && <section className="card surface"><p className="eyebrow">Ledger projection · local only</p><pre>{String((projection.dloa as { text?: string } | undefined)?.text ?? JSON.stringify(projection, null, 2))}</pre><button className="quiet" onClick={() => setProjection(null)}>Dismiss</button></section>}
+        {localState?.focusSessions?.find((item) => !item.stopped_at) && <section className="card focus-timeline">
+          <p className="eyebrow">Focus active · visible metadata only</p>
+          <strong>{localState.focusSessions.find((item) => !item.stopped_at)?.observations?.[0]?.app_id ?? "Waiting for the first app sample"}</strong>
+          <small>Profile/domain remain unknown unless proven; Jarvis never guesses. Screenshots retained: 0.</small>
+        </section>}
+        <section className="card state-strip"><strong>{localState?.ledgerCount ?? "—"}</strong><span>ledger entries in {contextLabel}</span><strong>{localState?.openTaskCount ?? "—"}</strong><span>open local tasks</span><strong>{localState?.budget?.level ?? "checking"}</strong><span>model budget</span></section>
+      </>}
+
+      {active === "Work Ledger" && <section className="card surface">
+        <p className="eyebrow">Verified timeline</p><h2>{localState?.ledgerCount ?? 0} source-backed entries</h2>
+        <p>One incremental ledger powers briefs, DLOA, commitments, projects, and catch-up. Context and actor labels stay visible.</p>
+        <div className="item-list">{localState?.recentLedger?.map((item) => <article key={item.entry_id}>
+          <strong>{item.summary}</strong><span>{item.local_date} · {item.confidence_state}</span>
+          <p>{item.kind} · actor {item.actor_state} · fresh {item.freshness_at.slice(0, 10)}</p>
+        </article>)}</div>
+      </section>}
+
+      {active === "Actions" && <section className="card surface">
+        <p className="eyebrow">Action firewall</p><h2>External writes remain fail-closed</h2>
+        <p>Company/client writes are unavailable. DLOA remains exact-preview only. Personal Calendar and Gmail draft execution are disabled until separately granted and accepted.</p>
+        <span className="pill">Global kill switch on</span>
+        <div className="item-list">{localState?.actionPreviews?.map((item) => <article key={item.proposal_id}>
+          <strong>{item.state}</strong><span>{item.updated_at.slice(0, 10)}</span><p>Preview hash {item.preview_hash.slice(0, 16)}… · not executed here</p>
+        </article>)}</div>
+      </section>}
+
+      {active === "Learning" && <section className="card surface">
+        <p className="eyebrow">Inspectable learning</p><h2>Memories, preferences, and workflow proposals</h2>
+        <p>Learning is context-scoped and reversible. Security policy, credentials, permissions, and write destinations cannot be self-modified.</p>
+        <div className="item-list">{localState?.learningItems?.length ? localState.learningItems.map((item) => <article key={item.memory_id}>
+          <strong>{item.statement}</strong><span>{item.status} · {(item.confidence * 100).toFixed(0)}%</span><p>{item.namespace} · {item.created_at.slice(0, 10)}</p>
+        </article>) : <p>No local learned item is stored in this context yet.</p>}</div>
+      </section>}
+
+      {active === "Chat" && <section className="chat-layout">
+        <div className="conversation card">
+          {progress.length > 0 && <div className="progress">{progress.map((line, index) => <div key={`${line}-${index}`}><span className={line.startsWith("Completed") ? "done" : "working"}/>{line}</div>)}</div>}
+          {voiceTranscript && <div className="live-transcript"><small>Live transcript</small>{voiceTranscript}</div>}
+          {answer ? <div className="answer">{answer}</div> : <div className="empty">Ask naturally. Jarvis will show what it checks and cite the result.</div>}
+        </div>
+        <form className="composer" onSubmit={submit}>
+          <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="What needs your attention?" rows={2}/>
+          <div><button type="button" className={recording ? "danger" : "quiet"} onClick={toggleVoice}>{recording ? "Stop listening" : "Talk"}</button>{voiceRetryAvailable && lastRecordingRef.current && <button type="button" className="quiet" onClick={() => void transcribeBlob(lastRecordingRef.current!)}>Retry transcript</button>}<button type="button" className="quiet" onClick={stopSpeaking}>Stop speaking</button>{busy ? <button type="button" className="danger" onClick={cancel}>Cancel</button> : <button type="submit">Ask Jarvis</button>}</div>
+        </form>
+      </section>}
+
+      {["Projects", "Missions", "Radars", "Capability Studio", "Decisions"].includes(active) && <section className="card surface">
+        <p className="eyebrow">{active}</p><h2>{active === "Capability Studio" ? "Teach Jarvis a bounded capability" : `Your ${active.toLowerCase()}`}</h2>
+        <p>{active === "Projects" && "Living objectives, verified progress, decisions, blockers, and the next three actions."}
+          {active === "Missions" && "Persistent goals with completion contracts, evidence, questions, and review cadence."}
+          {active === "Radars" && "Meaningful-change monitoring from approved sources—digest-first, never notification spam."}
+          {active === "Capability Studio" && "Describe a workflow. Jarvis validates tools, context, permissions, dry-runs it, and cannot widen its own authority."}
+          {active === "Decisions" && "Consequential choices, alternatives, reasons, evidence, and later outcomes."}</p>
+        {active === "Projects" && <div className="item-list">{localState?.projects.length ? localState.projects.map((item) => <article key={item.project_id}><strong>{item.name}</strong><span>{item.phase} · {item.lifecycle}</span><p>{item.objective}</p></article>) : <p>No living project is stored in this context yet.</p>}</div>}
+        {active === "Missions" && <div className="item-list">{localState?.missions.map((item) => <article key={item.mission_id}><strong>{item.goal}</strong><span>{item.status} · {item.lifecycle}</span><p>{item.completion_contract}</p></article>)}</div>}
+        {active === "Radars" && <div className="item-list">{localState?.radars.map((item) => <article key={item.radar_id}><strong>{item.question}</strong><span>{item.cadence} · {item.notification_policy}</span></article>)}</div>}
+        {active === "Capability Studio" && <div className="item-list">{localState?.capabilities.map((item) => <article key={item.capability_id}><strong>{item.name}</strong><span>{item.kind} · {item.status}</span><div className="focus-controls"><button className="quiet" onClick={() => void capabilityControl(item.capability_id, "useful")}>Useful</button><button className="quiet" onClick={() => void capabilityControl(item.capability_id, "not-useful")}>Not useful</button><button className="quiet" onClick={() => void capabilityControl(item.capability_id, "disabled")}>Disable</button><button className="quiet" onClick={() => void capabilityControl(item.capability_id, "archived")}>Archive</button></div></article>)}</div>}
+        {active === "Capability Studio" && localState?.automationProposals?.map((item) => <article className="automation-proposal" key={item.proposal_id}><strong>Automation opportunity: {item.signature}</strong><span>{item.status} · {item.occurrence_count} observations · ~{item.estimated_time_saved_minutes.toFixed(0)} minutes potential savings</span><div className="focus-controls"><button className="quiet" onClick={() => void recordAutomationOutcome(item.proposal_id, "accepted")}>Accept</button><button className="quiet" onClick={() => void recordAutomationOutcome(item.proposal_id, "rejected")}>Reject</button><button className="quiet" onClick={() => void recordAutomationOutcome(item.proposal_id, "undone")}>Undo</button></div></article>)}
+        {["Missions", "Radars", "Capability Studio"].includes(active) && <div className="local-create">
+          <input value={localTitle} onChange={(event) => setLocalTitle(event.target.value)} placeholder={active === "Missions" ? "Goal" : active === "Radars" ? "Question to watch" : "Capability name"}/>
+          <textarea value={localDetails} onChange={(event) => setLocalDetails(event.target.value)} placeholder={active === "Missions" ? "What proves this is complete?" : active === "Radars" ? "What would count as a meaningful change?" : "Describe the low-risk workflow"}/>
+          <button onClick={() => void createLocal(active === "Missions" ? "mission" : active === "Radars" ? "radar" : "capability")}>Validate and save locally</button>
+          {localNotice && <small>{localNotice}</small>}
+        </div>}
+        {active === "Decisions" && <button onClick={() => { setActive("Chat"); setPrompt("Show my recent evidence-backed decisions in this context."); }}>Review with Jarvis</button>}
+      </section>}
+
+      {active === "Settings" && <section className="settings-grid">
+        <article className="card"><h3>Activation</h3><p><kbd>⌘</kbd><kbd>⇧</kbd><kbd>Space</kbd> opens Quick Entry.</p><p><kbd>⌃</kbd><kbd>⌥</kbd><kbd>Space</kbd> starts Talk to Jarvis.</p><div className="setting"><span>Wake phrase <small>Off by default · local only</small></span><button disabled>Off</button></div></article>
+        <article className="card"><h3>Background intelligence</h3><div className="segmented"><button className={background === "off" ? "selected" : ""} onClick={() => void setBackgroundMode("off")}>Off</button><button className={background === "running" ? "selected" : ""} onClick={() => void setBackgroundMode("running")}>While running</button><button className={background === "login" ? "selected" : ""} onClick={() => void setBackgroundMode("login")}>While logged in</button></div><div className="setting"><span>Launch at login <small>Visible opt-in</small></span><button onClick={toggleAutostart}>{autostart ? "On" : "Off"}</button></div></article>
+        <article className="card"><h3>Personal Calendar style</h3><p>{localState?.calendarStyle ? `${localState.calendarStyle.review_status} · updated ${localState.calendarStyle.updated_at.slice(0, 10)}` : "No bounded style profile has been generated yet."}</p><span className="pill">Existing personal calendar only</span>{localState?.calendarStyle && <dl><div><dt>Sample</dt><dd>{localState.calendarStyle.profile.sample_size} events</dd></div><div><dt>Typical timed event</dt><dd>{localState.calendarStyle.profile.median_timed_duration_minutes ?? "—"} min</dd></div><div><dt>All-day / recurring</dt><dd>{Math.round(localState.calendarStyle.profile.all_day_ratio * 100)}% / {Math.round(localState.calendarStyle.profile.recurrence_ratio * 100)}%</dd></div><div><dt>Meeting links</dt><dd>{Math.round(localState.calendarStyle.profile.meeting_link_ratio * 100)}%</dd></div></dl>}<div className="setting"><button onClick={() => void buildCalendarProfile()}>Build read-only profile</button>{localState?.calendarStyle?.review_status === "pending-owner-review" && <button className="quiet" onClick={() => void reviewCalendarProfile()}>Looks right</button>}</div>{localNotice && <small>{localNotice}</small>}</article>
+        <article className="card"><h3>Safety</h3><p>Company/client writes unavailable. DLOA remains exact-preview only. Personal actions are capability-scoped.</p><span className="pill">External-action kill switch on</span></article>
+        <article className="card"><h3>Runtime</h3><dl><div><dt>Hermes</dt><dd>{health.hermesVersion}</dd></div><div><dt>Route</dt><dd>{health.modelRoute}</dd></div><div><dt>Budget</dt><dd>{health.budget}</dd></div></dl></article>
+      </section>}
+    </main>
+  </div>;
+}
+
+export default App;

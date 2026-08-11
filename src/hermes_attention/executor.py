@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from hashlib import sha256
+import json
 import os
+import sqlite3
 from typing import Callable, Any
+from uuid import uuid4
 
 from .daily_report import DailyReportLock, validate_daily_report_payload
 from .domain import ActionProposal, ActionState
@@ -58,8 +63,48 @@ class SupervisedActionExecutor:
         stored = self.store.get_action(proposal.proposal_id)
         if not stored or stored["state"] != ActionState.APPROVED:
             raise ExecutionDenied("proposal is not in approved state")
-        response = self.sender(self.destination.channel_id, text)
-        self.store.set_action_state(proposal.proposal_id, ActionState.EXECUTED)
+        attempt_id = str(uuid4())
+        now = datetime.now(UTC)
+        try:
+            with self.store.connection:
+                self.store.connection.execute(
+                    "INSERT INTO action_attempts VALUES(?,?,?,?,?,?,?,?)",
+                    (
+                        attempt_id,
+                        proposal.proposal_id,
+                        (now + timedelta(minutes=2)).isoformat(),
+                        "leased",
+                        None,
+                        None,
+                        now.isoformat(),
+                        now.isoformat(),
+                    ),
+                )
+        except sqlite3.IntegrityError as exc:
+            raise ExecutionDenied("action already has an execution attempt; reconcile before retry") from exc
+        try:
+            response = self.sender(self.destination.channel_id, text)
+        except Exception:
+            # The provider may have accepted the write before a transport failure. Preserve an
+            # uncertain receipt and refuse automatic replay until an owner reconciles it.
+            with self.store.connection:
+                self.store.connection.execute(
+                    "UPDATE action_attempts SET state='uncertain',updated_at=? WHERE attempt_id=?",
+                    (datetime.now(UTC).isoformat(), attempt_id),
+                )
+            raise
+        result_hash = sha256(json.dumps(response, sort_keys=True, default=str).encode()).hexdigest()
+        provider_id = str(response.get("ts") or response.get("id") or "") if isinstance(response, dict) else ""
+        completed_at = datetime.now(UTC).isoformat()
+        with self.store.connection:
+            self.store.connection.execute(
+                "UPDATE action_attempts SET state='executed',provider_id=?,result_hash=?,updated_at=? WHERE attempt_id=?",
+                (provider_id or None, result_hash, completed_at, attempt_id),
+            )
+            self.store.connection.execute(
+                "UPDATE actions SET state=?,updated_at=? WHERE proposal_id=?",
+                (ActionState.EXECUTED, completed_at, proposal.proposal_id),
+            )
         self.store.audit("hermes-executor", "slack.daily-update.publish", "inside-success", "success", {"proposal_id": proposal.proposal_id, "channel_id": self.destination.channel_id})
         return {"executed": True, "proposal_id": proposal.proposal_id, "provider_receipt": bool(response)}
 

@@ -128,9 +128,12 @@ def configure(root: Path, hermes_home: Path, *, dry_run: bool) -> Path:
     # ten minutes. The explicit cap prevents an unbounded recording while
     # avoiding the upstream two-minute default silently cutting long requests.
     voice["max_recording_seconds"] = 600
+    # Jarvis runs from a reviewed copy under ~/.hermes/jarvis-runtime. Scanning
+    # the development checkout under ~/Desktop on every launch causes an
+    # unnecessary macOS Desktop-folder prompt and is not needed for retrieval.
     config["desktop"] = {
-        "repo_scan_enabled": True,
-        "repo_scan_roots": [str(root)],
+        "repo_scan_enabled": False,
+        "repo_scan_roots": [],
         "repo_scan_exclude_paths": [],
     }
     config.setdefault("display", {})["memory_notifications"] = "on"

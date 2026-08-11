@@ -26,8 +26,8 @@
       "provider": "openai",
       "model": "gpt-5.6-luna",
       "endpoint": "https://api.openai.com/v1/responses",
-      "input_usd_per_million": 1.0,
-      "output_usd_per_million": 6.0,
+      "input_usd_per_million": 0.2,
+      "output_usd_per_million": 1.2,
       "capabilities": ["vision", "chat"],
       "purpose": "Explicitly requested screen and image understanding"
     },
@@ -35,8 +35,8 @@
       "provider": "openai",
       "model": "gpt-5.6-terra",
       "endpoint": "https://api.openai.com/v1/responses",
-      "input_usd_per_million": 2.5,
-      "output_usd_per_million": 15.0,
+      "input_usd_per_million": 2.0,
+      "output_usd_per_million": 12.0,
       "capabilities": ["chat", "tool_calls"],
       "purpose": "Rare direct-API high-stakes review"
     }

@@ -322,6 +322,12 @@ class OperationalTests(unittest.TestCase):
         self.assertEqual(10, client.calendar_events("2026-08-01T00:00:00Z", "2026-08-10T00:00:00Z", 50)["count"])
         self.assertEqual(10, client.calendar_events("2026-08-01", "2026-08-10", 50)["count"])
         self.assertIn("%2B05%3A00", client.calls[-1][1])
+        style = client.calendar_style_events(
+            "2026-01-01T00:00:00Z", "2026-08-10T00:00:00Z", maximum=500,
+        )
+        self.assertEqual(20, style["count"])
+        self.assertEqual("primary", style["calendar_id"])
+        self.assertFalse(style["writes_available"])
         self.assertTrue(all("https://" in url for _, url in client.calls))
 
         class SyntheticWork(WorkGoogleDirect):
@@ -519,6 +525,14 @@ class OperationalTests(unittest.TestCase):
         os.environ["HERMES_ACTIONS_KILL_SWITCH"] = "0"
         try:
             self.assertTrue(executor.execute_daily_report(proposal, approved_hash=proposal.preview_hash)["executed"])
+            attempt = self.store.connection.execute(
+                "SELECT state,result_hash FROM action_attempts WHERE proposal_id=?", (proposal.proposal_id,)
+            ).fetchone()
+            self.assertEqual("executed", attempt["state"])
+            self.assertTrue(attempt["result_hash"])
+            self.store.set_action_state(proposal.proposal_id, ActionState.APPROVED)
+            with self.assertRaisesRegex(ExecutionDenied, "execution attempt"):
+                executor.execute_daily_report(proposal, approved_hash=proposal.preview_hash)
             with self.assertRaises(ExecutionDenied):
                 executor.execute_daily_report(replace(proposal, target={"workspace_id": "T_FIXED", "channel_id": "C_OTHER"}), approved_hash=proposal.preview_hash)
         finally:
