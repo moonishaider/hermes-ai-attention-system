@@ -2,7 +2,7 @@
 
 **Authoritative as of:** 12 August 2026
 
-**Prompt 7 state:** Jarvis native application operational; final narrow owner-visible gates and guarded publication are in progress
+**Prompt 7 state:** Jarvis native application operational and privately published; final narrow owner-visible gates are in progress
 
 **Prompt 6 state:** Hermes Agent 0.20.0 / official Desktop migration accepted
 
@@ -35,7 +35,7 @@ Personal Calendar and Gmail-draft wrappers are implemented and negative-tested, 
 
 | Area | Evidence level | Current truth |
 |---|---|---|
-| Safety and repository | Live and acceptance-tested | Marked root, hooks/rules, preflight, command negatives, config doctor, secret scan, database backup/restore, 86 Python tests, one frontend test, three Rust tests, clippy, and production dependency audit pass. Private remote is `moonishaider/hermes-ai-attention-system`. Prompt 7 rollback is tag `prompt7-pre-jarvis-20260812` at `af4b330`; the Gemini rollback checkpoint is `d740478`. |
+| Safety and repository | Live and acceptance-tested | Marked root, hooks/rules, preflight, command negatives, config doctor, secret scan, database backup/restore, 86 Python tests, one frontend test, three Rust tests, clippy, and production dependency audit pass. Private remote is `moonishaider/hermes-ai-attention-system`; guarded private publication reached `50d00c3`. Prompt 7 rollback is tag `prompt7-pre-jarvis-20260812` at `af4b330`; the Gemini rollback checkpoint is `d740478`. |
 | Daily launch and health | Jarvis native app live and acceptance-tested | `/Applications/Jarvis.app` is the normal path and starts one exact owned Hermes backend without Terminal or stock Hermes UI. Quick Entry opened over another app with Command+Shift+Space before and after the main window was hidden; menu-bar Open restored it; Command+Q removed the app and owned backend. Runtime and both plugin links resolve under `~/.hermes/jarvis-runtime`, so restart no longer requests Desktop-folder access. `/Applications/Hermes.app` remains an independent diagnostic/rollback path. No custom daemon, development server, hidden login item, or custom launch agent exists. |
 | Model routes | Live and representative-task tested | Flash, Pro, Luna, and Terra each passed bounded representative tasks. Packaged Jarvis visibly selected Flash for routine work, Pro for attribution-sensitive work, and Terra for synthetic high-stakes review; a successful terminal decision is durably audited. Flash and Luna tied on deterministic routine quality; Luna was slightly faster in the tiny sample but about 14x more expensive, so Flash remains default. Sol remains builder-only. |
 | GitHub personal/company | Live and acceptance-tested for bounded retrieval | Separate `/readonly` connections and 14-tool allowlists remain intact. Personal GitHub participated in two accepted project-resumption runs; company GitHub participated in an accepted source-backed daily-report draft. Write tools remain unavailable. |
