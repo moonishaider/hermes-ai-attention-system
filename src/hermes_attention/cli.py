@@ -9,7 +9,7 @@ from pathlib import Path
 import sys
 
 from .config import ProjectPaths, validate_project_configuration
-from .history import ChatGPTExportImporter, CodexHistoryBridge, ContextRelayImporter
+from .history import ChatGPTExportImporter, CodexHistoryBridge, ContextRelayImporter, GeminiTakeoutImporter
 from .health import startup_health
 from .overlay import run_tk_overlay
 from .overlay_control import OverlayControlSupervisor
@@ -55,6 +55,12 @@ def build_parser() -> argparse.ArgumentParser:
     chatgpt.add_argument("path", type=Path)
     chatgpt.add_argument("--start-date", default="2026-03-01")
     chatgpt.add_argument("--confirmed", action="store_true")
+
+    gemini = commands.add_parser("gemini-export", help="preview or import an official Google Gemini Takeout archive")
+    gemini.add_argument("action", choices=("preview", "import"))
+    gemini.add_argument("path", type=Path)
+    gemini.add_argument("--start-date", default="2025-11-01")
+    gemini.add_argument("--confirmed", action="store_true")
 
     relay = commands.add_parser("context-relay", help="ingest one explicit ChatGPT context relay")
     relay.add_argument("path", type=Path)
@@ -149,6 +155,12 @@ def main(argv: list[str] | None = None) -> int:
             ))
         elif arguments.command == "chatgpt-export":
             importer = ChatGPTExportImporter(service.store, service.router)
+            if arguments.action == "preview":
+                emit(importer.preview(arguments.path, start_date=arguments.start_date))
+            else:
+                emit(importer.ingest(arguments.path, start_date=arguments.start_date, confirmed=arguments.confirmed))
+        elif arguments.command == "gemini-export":
+            importer = GeminiTakeoutImporter(service.store, service.router)
             if arguments.action == "preview":
                 emit(importer.preview(arguments.path, start_date=arguments.start_date))
             else:

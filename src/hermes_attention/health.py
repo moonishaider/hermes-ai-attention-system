@@ -72,6 +72,9 @@ def startup_health(service: Any) -> dict[str, Any]:
     chatgpt_records = int(service.store.connection.execute(
         "SELECT COUNT(*) FROM evidence WHERE evidence_id LIKE 'chatgpt:%' AND tombstoned_at IS NULL"
     ).fetchone()[0])
+    gemini_records = int(service.store.connection.execute(
+        "SELECT COUNT(*) FROM evidence WHERE evidence_id LIKE 'gemini:%' AND tombstoned_at IS NULL"
+    ).fetchone()[0])
     connectors: dict[str, Any] = {}
     for name, record in sorted(service.integrations.connections.items()):
         base = {
@@ -95,6 +98,9 @@ def startup_health(service: Any) -> dict[str, Any]:
         elif name == "chatgpt_export_backfill":
             base["state"] = "imported" if chatgpt_records else "awaiting-user-selected-official-export"
             base["records"] = chatgpt_records
+        elif name == "gemini_export_backfill":
+            base["state"] = "imported" if gemini_records else "awaiting-user-selected-official-takeout"
+            base["records"] = gemini_records
         else:
             base["state"] = "local-ready" if record.get("enabled") else "disabled"
         connectors[name] = base
@@ -137,6 +143,12 @@ def startup_health(service: Any) -> dict[str, Any]:
             "state": "imported" if chatgpt_records else "awaiting-user-selected-official-export",
             "records": chatgpt_records,
             "continuous_sync": False,
+        },
+        "gemini": {
+            "state": "imported" if gemini_records else "awaiting-user-selected-official-takeout",
+            "records": gemini_records,
+            "continuous_sync": False,
+            "binary_attachments_ingested": False,
         },
         "zoom": {"state": connectors.get("zoom_readonly", {}).get("state", "disabled")},
         "external_actions": {

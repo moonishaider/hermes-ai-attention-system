@@ -4,16 +4,21 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from hashlib import sha256
+from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
+from pathlib import PurePosixPath
 import re
 import selectors
 import shutil
+import stat
 import subprocess
 import time
 from typing import Any, Callable, Iterable, Iterator
+from urllib.parse import urlparse
 from zipfile import ZipFile
+from zoneinfo import ZoneInfo
 
 from .domain import ConfidenceState, EvidenceItem, Provenance
 from .routing import ContextRouter
@@ -23,6 +28,82 @@ from .storage import Store
 
 class HistoryFormatError(ValueError):
     pass
+
+
+class _GeminiActivityHTMLParser(HTMLParser):
+    """Parse Google Takeout activity cards without executing or extracting HTML."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.records: list[dict[str, Any]] = []
+        self._current: dict[str, Any] | None = None
+        self._div_depth = 0
+        self._ignored_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = {key: value or "" for key, value in attrs}
+        if tag in {"script", "style", "noscript"}:
+            self._ignored_depth += 1
+            return
+        classes = attributes.get("class", "").split()
+        if self._current is None and tag == "div" and "outer-cell" in classes:
+            self._current = {"text": [], "hrefs": [], "assets": []}
+            self._div_depth = 1
+            return
+        if self._current is None:
+            return
+        if tag == "div":
+            self._div_depth += 1
+        href = attributes.get("href")
+        src = attributes.get("src")
+        if href:
+            self._current["hrefs"].append(href)
+            if not urlparse(href).scheme:
+                self._current["assets"].append(href)
+        if src:
+            self._current["assets"].append(src)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"script", "style", "noscript"} and self._ignored_depth:
+            self._ignored_depth -= 1
+            return
+        if self._current is None or tag != "div":
+            return
+        self._div_depth -= 1
+        if self._div_depth == 0:
+            self.records.append(self._current)
+            self._current = None
+
+    def handle_data(self, data: str) -> None:
+        if self._current is None or self._ignored_depth:
+            return
+        value = " ".join(data.split())
+        if value:
+            self._current["text"].append(value)
+
+
+class _BoundedHTMLTextParser(HTMLParser):
+    """Extract inert text from small Gemini-native metadata pages."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.nodes: list[str] = []
+        self._ignored_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in {"script", "style", "noscript"}:
+            self._ignored_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"script", "style", "noscript"} and self._ignored_depth:
+            self._ignored_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._ignored_depth:
+            return
+        value = " ".join(data.split())
+        if value:
+            self.nodes.append(value)
 
 
 class CodexAppServerError(RuntimeError):
@@ -693,6 +774,372 @@ class ChatGPTExportImporter:
             else:
                 duplicate += 1
         return {"inserted": inserted, "duplicates": duplicate}
+
+
+class GeminiTakeoutImporter:
+    """Bounded importer for the observed official Google Gemini Takeout HTML.
+
+    Only Gemini Apps activity plus the two Gemini-native metadata pages are
+    read. Other Takeout products and binary attachments remain ignored inside
+    the owner-provided archive.
+    """
+
+    ACTIVITY_MEMBER = "Takeout/My Activity/Gemini Apps/My Activity.html"
+    NATIVE_MEMBERS = {
+        "Takeout/Gemini/gemini_gems_data.html": "Gemini Gems configuration export",
+        "Takeout/Gemini/gemini_scheduled_actions_data.html": "Gemini scheduled actions export",
+    }
+    MAX_ARCHIVE_BYTES = 1024 * 1024 * 1024
+    MAX_ARCHIVE_ENTRIES = 50_000
+    MAX_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
+    MAX_ACTIVITY_BYTES = 128 * 1024 * 1024
+    MAX_NATIVE_BYTES = 2 * 1024 * 1024
+    MAX_RECORDS = 20_000
+    MAX_RECORD_CHARS = 256_000
+    MAX_CONVERSATION_CHARS = 1_000_000
+    DATE_PATTERN = re.compile(
+        r"^(?P<day>\d{1,2}) (?P<month>[A-Za-z]{3}) (?P<year>20\d{2}), "
+        r"(?P<time>\d{2}:\d{2}:\d{2}) (?P<zone>[A-Z]{3,5})$"
+    )
+    CHAT_PATTERN = re.compile(r"^https://gemini\.google\.com/app/([^/?#]+)")
+    ZONES = {
+        "PKT": ZoneInfo("Asia/Karachi"),
+        "UTC": UTC,
+        "GMT": UTC,
+        "EST": ZoneInfo("America/New_York"),
+        "EDT": ZoneInfo("America/New_York"),
+    }
+
+    def __init__(self, store: Store, router: ContextRouter) -> None:
+        self.store = store
+        self.router = router
+
+    @staticmethod
+    def _file_sha256(path: Path) -> str:
+        digest = sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    @staticmethod
+    def _archive_timestamp(path: Path, activity_info: Any) -> datetime:
+        match = re.search(r"takeout-(\d{8}T\d{6}Z)", path.name, re.IGNORECASE)
+        if match:
+            return datetime.strptime(match.group(1), "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
+        return datetime(*activity_info.date_time, tzinfo=UTC)
+
+    @classmethod
+    def _parse_timestamp(cls, nodes: list[str]) -> datetime | None:
+        for value in nodes:
+            match = cls.DATE_PATTERN.fullmatch(value)
+            if not match:
+                continue
+            zone = cls.ZONES.get(match.group("zone"))
+            if zone is None:
+                return None
+            local = datetime.strptime(
+                f"{match.group('day')} {match.group('month')} {match.group('year')} {match.group('time')}",
+                "%d %b %Y %H:%M:%S",
+            ).replace(tzinfo=zone)
+            return local.astimezone(UTC)
+        return None
+
+    @classmethod
+    def _clean_record_text(cls, nodes: list[str]) -> str:
+        start = 1 if nodes and nodes[0] == "Gemini Apps" else 0
+        try:
+            end = nodes.index("Products:", start)
+        except ValueError:
+            end = len(nodes)
+        selected = [
+            value for value in nodes[start:end]
+            if value != "Gemini Apps" and not cls.DATE_PATTERN.fullmatch(value)
+        ]
+        return "\n".join(selected)[: cls.MAX_RECORD_CHARS].strip()
+
+    @classmethod
+    def _validate_archive(cls, path: Path, archive: ZipFile) -> dict[str, Any]:
+        if not path.is_file() or path.suffix.casefold() != ".zip":
+            raise HistoryFormatError("Gemini import requires an official Google Takeout ZIP")
+        if path.stat().st_size > cls.MAX_ARCHIVE_BYTES:
+            raise HistoryFormatError("Gemini Takeout archive exceeds the bounded size limit")
+        infos = archive.infolist()
+        if len(infos) > cls.MAX_ARCHIVE_ENTRIES:
+            raise HistoryFormatError("Gemini Takeout archive has too many entries")
+        if sum(info.file_size for info in infos) > cls.MAX_UNCOMPRESSED_BYTES:
+            raise HistoryFormatError("Gemini Takeout archive exceeds the uncompressed size limit")
+        names: set[str] = set()
+        for info in infos:
+            name = info.filename
+            parts = PurePosixPath(name).parts
+            mode = info.external_attr >> 16
+            if (
+                not name
+                or name.startswith("/")
+                or "\\" in name
+                or ".." in parts
+                or stat.S_ISLNK(mode)
+                or info.flag_bits & 1
+            ):
+                raise HistoryFormatError("Gemini Takeout archive contains an unsafe entry")
+            if name in names:
+                raise HistoryFormatError("Gemini Takeout archive contains duplicate paths")
+            names.add(name)
+        if cls.ACTIVITY_MEMBER not in names:
+            raise HistoryFormatError("Gemini Apps activity HTML is missing from the Takeout archive")
+        activity = archive.getinfo(cls.ACTIVITY_MEMBER)
+        if activity.file_size > cls.MAX_ACTIVITY_BYTES:
+            raise HistoryFormatError("Gemini Apps activity exceeds the bounded import limit")
+        for member in cls.NATIVE_MEMBERS:
+            if member in names and archive.getinfo(member).file_size > cls.MAX_NATIVE_BYTES:
+                raise HistoryFormatError("Gemini native metadata page exceeds the bounded import limit")
+        bad_member = archive.testzip()
+        if bad_member is not None:
+            raise HistoryFormatError("Gemini Takeout archive failed its CRC integrity check")
+        return {
+            "infos": infos,
+            "names": names,
+            "activity": activity,
+            "archive_timestamp": cls._archive_timestamp(path, activity),
+        }
+
+    @classmethod
+    def _load(cls, path: Path) -> dict[str, Any]:
+        resolved = path.expanduser().resolve()
+        with ZipFile(resolved) as archive:
+            validation = cls._validate_archive(resolved, archive)
+            parser = _GeminiActivityHTMLParser()
+            parser.feed(archive.read(cls.ACTIVITY_MEMBER).decode("utf-8", errors="replace"))
+            if not parser.records or len(parser.records) > cls.MAX_RECORDS:
+                raise HistoryFormatError("Gemini Apps activity record count is outside the bounded limit")
+            records: list[dict[str, Any]] = []
+            for index, raw_record in enumerate(parser.records):
+                nodes = list(raw_record["text"])
+                content = cls._clean_record_text(nodes)
+                if not content:
+                    continue
+                chat_id = None
+                for href in raw_record["hrefs"]:
+                    match = cls.CHAT_PATTERN.match(href)
+                    if match:
+                        chat_id = match.group(1)
+                        break
+                records.append({
+                    "index": index,
+                    "chat_id": chat_id,
+                    "timestamp": cls._parse_timestamp(nodes),
+                    "content": content,
+                    "asset_count": len(set(raw_record["assets"])),
+                })
+            native: list[dict[str, str]] = []
+            for member, title in cls.NATIVE_MEMBERS.items():
+                if member not in validation["names"]:
+                    continue
+                native_parser = _BoundedHTMLTextParser()
+                native_parser.feed(archive.read(member).decode("utf-8", errors="replace"))
+                content = "\n".join(native_parser.nodes)[: cls.MAX_CONVERSATION_CHARS].strip()
+                if content:
+                    native.append({"member": member, "title": title, "content": content})
+            return {
+                "path": resolved,
+                "archive_sha256": cls._file_sha256(resolved),
+                "archive_timestamp": validation["archive_timestamp"],
+                "archive_entries": len(validation["infos"]),
+                "records": records,
+                "native": native,
+                "relevant_binary_entries": sum(
+                    1 for info in validation["infos"]
+                    if info.filename.startswith("Takeout/My Activity/Gemini Apps/")
+                    and info.filename != cls.ACTIVITY_MEMBER
+                ),
+                "ignored_takeout_entries": sum(
+                    1 for info in validation["infos"]
+                    if not info.filename.startswith("Takeout/My Activity/Gemini Apps/")
+                    and not info.filename.startswith("Takeout/Gemini/")
+                ),
+            }
+
+    @staticmethod
+    def _threshold(start_date: str) -> datetime:
+        try:
+            return datetime.fromisoformat(start_date).replace(tzinfo=UTC)
+        except ValueError as exc:
+            raise HistoryFormatError("Gemini import start date must use YYYY-MM-DD") from exc
+
+    @classmethod
+    def _groups(cls, loaded: dict[str, Any], *, start_date: str) -> tuple[list[dict[str, Any]], dict[str, int]]:
+        threshold = cls._threshold(start_date)
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        skipped_before = 0
+        for record in loaded["records"]:
+            timestamp = record["timestamp"]
+            if timestamp is not None and timestamp < threshold:
+                skipped_before += 1
+                continue
+            key = record["chat_id"] or "activity-" + sha256(
+                f"{record['index']}\n{record['content']}".encode("utf-8")
+            ).hexdigest()[:24]
+            grouped.setdefault(key, []).append(record)
+        groups: list[dict[str, Any]] = []
+        for source_id, records in grouped.items():
+            records.sort(key=lambda item: (item["timestamp"] is None, item["timestamp"] or loaded["archive_timestamp"], item["index"]))
+            chunks = []
+            for record in records:
+                label = record["timestamp"].isoformat() if record["timestamp"] else "timestamp unavailable in export"
+                chunks.append(f"[Gemini activity: {label}]\n{record['content']}")
+            content = "\n\n".join(chunks)[: cls.MAX_CONVERSATION_CHARS]
+            timestamps = [record["timestamp"] for record in records if record["timestamp"] is not None]
+            groups.append({
+                "source_id": source_id,
+                "content": content,
+                "first_at": min(timestamps) if timestamps else None,
+                "last_at": max(timestamps) if timestamps else None,
+                "record_count": len(records),
+                "asset_count": sum(int(record["asset_count"]) for record in records),
+                "timestamp_inferred": not timestamps,
+            })
+        groups.sort(key=lambda item: item["last_at"] or loaded["archive_timestamp"])
+        return groups, {
+            "records_skipped_before_start": skipped_before,
+            "undated_records_selected": sum(record["timestamp"] is None for records in grouped.values() for record in records),
+        }
+
+    def preview(self, path: Path, *, start_date: str = "2025-11-01") -> dict[str, Any]:
+        loaded = self._load(path)
+        groups, stats = self._groups(loaded, start_date=start_date)
+        dates = [record["timestamp"] for record in loaded["records"] if record["timestamp"] is not None]
+        return {
+            "source": str(loaded["path"]),
+            "format": "google-takeout-gemini-apps-html-v1",
+            "archive_sha256": loaded["archive_sha256"],
+            "archive_entries": loaded["archive_entries"],
+            "activity_records_total": len(loaded["records"]),
+            "activity_records_selected": sum(group["record_count"] for group in groups),
+            "evidence_groups_selected": len(groups),
+            "native_metadata_pages_selected": len(loaded["native"]),
+            "activity_start_at": min(dates).isoformat() if dates else None,
+            "activity_end_at": max(dates).isoformat() if dates else None,
+            "start_date": start_date,
+            "records_skipped_before_start": stats["records_skipped_before_start"],
+            "undated_records_selected": stats["undated_records_selected"],
+            "binary_attachments_ignored": loaded["relevant_binary_entries"],
+            "other_takeout_entries_ignored": loaded["ignored_takeout_entries"],
+            "requires_confirmation": True,
+            "raw_content_printed": False,
+        }
+
+    @staticmethod
+    def _title(content: str) -> str:
+        first = next((line.strip() for line in content.splitlines() if line.strip() and not line.startswith("[Gemini activity:")), "")
+        first = re.sub(r"^Prompted\s+", "", first, flags=re.IGNORECASE)
+        redacted, _ = redact_secrets(first)
+        return redacted[:160] or "Gemini conversation"
+
+    def ingest(self, path: Path, *, start_date: str = "2025-11-01", confirmed: bool = False) -> dict[str, int | str | bool]:
+        if not confirmed:
+            raise PermissionError("Gemini import requires explicit confirmation after preview")
+        loaded = self._load(path)
+        groups, stats = self._groups(loaded, start_date=start_date)
+        inserted = duplicates = redactions = injection_flags = 0
+        retrieved_at = datetime.now(UTC).isoformat()
+        archive_timestamp = loaded["archive_timestamp"]
+        for group in groups:
+            content, secret_count = redact_secrets(group["content"])
+            flags = detect_prompt_injection(content)
+            redactions += secret_count
+            injection_flags += len(flags)
+            revision = sha256(content.encode("utf-8")).hexdigest()
+            source_id = str(group["source_id"])
+            source_timestamp = (group["last_at"] or archive_timestamp).isoformat()
+            provenance = Provenance(
+                source_system="gemini_export",
+                connection_id="gemini_official_takeout",
+                source_id=source_id,
+                source_timestamp=source_timestamp,
+                retrieved_at=retrieved_at,
+                account_id="owner-google-takeout",
+                container=self.ACTIVITY_MEMBER,
+                uri=f"gemini-takeout://activity/{source_id}",
+                revision=revision,
+                permission_ref="owner-provided-official-export",
+                metadata={
+                    "archive_sha256": loaded["archive_sha256"],
+                    "format": "google-takeout-gemini-apps-html-v1",
+                    "record_count": group["record_count"],
+                    "asset_references": group["asset_count"],
+                    "activity_start_at": group["first_at"].isoformat() if group["first_at"] else None,
+                    "activity_end_at": group["last_at"].isoformat() if group["last_at"] else None,
+                    "timestamp_inferred_from_archive": group["timestamp_inferred"],
+                    "binary_assets_ingested": False,
+                },
+            )
+            evidence_id = f"gemini:{source_id}:{revision[:16]}"
+            if self.store.connection.execute("SELECT 1 FROM evidence WHERE evidence_id=?", (evidence_id,)).fetchone():
+                duplicates += 1
+                continue
+            item = EvidenceItem(
+                evidence_id=evidence_id,
+                title=self._title(content),
+                content=content,
+                provenance=provenance,
+                contexts=self.router.classify(provenance),
+                confidence_state=ConfidenceState.UNCERTAIN if flags or group["timestamp_inferred"] else ConfidenceState.INFERRED,
+            )
+            inserted += int(self.store.add_evidence(item))
+
+        for native in loaded["native"]:
+            content, secret_count = redact_secrets(native["content"])
+            flags = detect_prompt_injection(content)
+            redactions += secret_count
+            injection_flags += len(flags)
+            revision = sha256(content.encode("utf-8")).hexdigest()
+            source_id = Path(native["member"]).stem
+            provenance = Provenance(
+                source_system="gemini_export",
+                connection_id="gemini_official_takeout",
+                source_id=source_id,
+                source_timestamp=archive_timestamp.isoformat(),
+                retrieved_at=retrieved_at,
+                account_id="owner-google-takeout",
+                container=native["member"],
+                uri=f"gemini-takeout://native/{source_id}",
+                revision=revision,
+                permission_ref="owner-provided-official-export",
+                metadata={
+                    "archive_sha256": loaded["archive_sha256"],
+                    "format": "google-takeout-gemini-native-html-v1",
+                    "timestamp_inferred_from_archive": True,
+                    "binary_assets_ingested": False,
+                },
+            )
+            evidence_id = f"gemini:{source_id}:{revision[:16]}"
+            if self.store.connection.execute("SELECT 1 FROM evidence WHERE evidence_id=?", (evidence_id,)).fetchone():
+                duplicates += 1
+                continue
+            item = EvidenceItem(
+                evidence_id=evidence_id,
+                title=native["title"],
+                content=content,
+                provenance=provenance,
+                contexts=self.router.classify(provenance),
+                confidence_state=ConfidenceState.UNCERTAIN if flags else ConfidenceState.INFERRED,
+            )
+            inserted += int(self.store.add_evidence(item))
+
+        result: dict[str, int | str | bool] = {
+            "inserted": inserted,
+            "duplicates": duplicates,
+            "start_date": start_date,
+            "records_skipped_before_start": stats["records_skipped_before_start"],
+            "undated_records_selected": stats["undated_records_selected"],
+            "secret_redactions": redactions,
+            "prompt_injection_flags": injection_flags,
+            "binary_attachments_ingested": False,
+            "external_writes": False,
+        }
+        self.store.audit("gemini-import", "gemini.takeout.confirmed-import", None, "success", result)
+        return result
 
 
 class ContextRelayImporter:

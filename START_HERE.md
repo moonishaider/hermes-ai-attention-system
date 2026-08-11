@@ -33,6 +33,8 @@ For work questions, “today” and “yesterday” use **Miami / America-New_Yo
 
 For a fresh activity report, ask **“Generate my DLOA for yesterday.”** Hermes refreshes recent Codex work first and keeps the result as a draft. You can also open **Attention** and click **Sync latest Codex work** for an explicit manual refresh.
 
-Normal limitations: there is no separate global voice shortcut beyond the visible microphone and wake mode; wake listening uses some CPU and is optional; local speech recognition can mishear very short phrases; Zoom transcript depth depends on the provider; Slack/email/calendar writes, payments, logged-in browser control, continuous screen capture, continuous ChatGPT sync, and mobile access remain unavailable.
+Imported Gemini history from 1 November 2025 onward is available as source-backed evidence. Ask Hermes to **search my imported Gemini history** when you want it included. Because ambiguous historical records remain safely classified as Unknown, use an explicit cross-context request when the answer may span personal and work topics.
+
+Normal limitations: there is no separate global voice shortcut beyond the visible microphone and wake mode; wake listening uses some CPU and is optional; local speech recognition can mishear very short phrases; Zoom transcript depth depends on the provider; Slack/email/calendar writes, payments, logged-in browser control, continuous screen capture, continuous ChatGPT/Gemini sync, and mobile access remain unavailable.
 
 To quit completely, choose **Hermes → Quit Hermes** or press **Command+Q**. Closing the window may leave the native app available for Quick Entry and optional wake mode.
