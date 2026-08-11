@@ -2,6 +2,18 @@
 
 Current evidence levels are authoritative in `implementation/CURRENT_OPERATIONAL_STATE.md`.
 
+## Prompt 7 Jarvis visible acceptance — in progress
+
+The separate production-only Tauri application is packaged and installed at `/Applications/Jarvis.app`. The Work Ledger, model governor, projects, Missions, Radars, Capability Studio, generalized Action Firewall, personal Calendar/Gmail-draft wrappers, typed Hermes adapter, explicit screen adapter, voice controls, single-instance/tray lifecycle, and default-off launch-at-login control are implemented. Safety/config/secret checks, 86 Python tests, one frontend test, three Rust tests, Rust clippy, the static/release build, and the production dependency audit pass.
+
+The first real local DLOA showed generic Codex role labels. The projection now derives bounded action statements from the same immutable local evidence, deduplicates them, preserves the required “worked on the reps' performance analyzer system” wording, and never copies raw evidence or sends externally. The accepted 11 August window supported five distinct granular claims. It was not padded with fabricated work to reach an arbitrary ten. Other proactive groups remain sparse until more evidence receives deterministic semantic kinds beyond generic work/activity.
+
+Visible acceptance now covers launch, single-instance behavior, close/menu-bar reopen, Quick Entry, quiet typed chat, visible Flash/Pro/Terra delegation, route/cost/latency display, full Quit, no-retention screen cleanup, and Zoom MCP health. The remaining checks are real microphone transcript/retry/stop, Jarvis-originated Luna selection, optional Launch-at-Login, Calendar-style owner review, and correct-profile guided navigation. Wake phrase remains intentionally absent/off. Real personal Calendar creation and Gmail draft creation are code-complete but not exercised because `AGENTS.md` forbids Codex from performing live email/calendar mutations during the build.
+
+Repeated Desktop-folder consent prompts were fixed by moving operational code/data to owner-only `~/.hermes/jarvis-runtime`, disabling repository scanning, and pointing the Hermes project plugin at that runtime. The Desktop checkout remains the development source and rollback record, but Jarvis no longer needs to access it during normal use.
+
+The Jarvis bundle is ad-hoc signed for this Mac because no Apple Developer identity is installed. It is suitable for this local private installation, not notarized external distribution. The app starts only an exact owned loopback Hermes gateway and exposes no generic renderer shell, filesystem, process, or network authority.
+
 ## Prompt 6 visible acceptance — resolved
 
 The official Desktop migration passed owner-visible Stop speaking, wake-off silence, native Attention selected-area interpretation with no retained screenshot, explicit preference learning, plain learning status, close/reopen Quick Entry, full quit with no residual processes, and clean relaunch. The radial Memory Graph remains an advanced view because it was not self-explanatory; Attention now provides the ordinary plain-language learning summary.

@@ -44,6 +44,10 @@ dist/
 build/
 coverage/
 
+# Project-local compiler/tool caches
+.tooling/
+target/
+
 # macOS/editor
 .DS_Store
 .vscode/

@@ -178,6 +178,47 @@ class GoogleDirect:
         } for row in list(payload.get("items") or [])[:_bounded_limit(limit)]]
         return self._result("calendar", items)
 
+    def calendar_style_events(
+        self, start_time: str, end_time: str, *, maximum: int = 500,
+    ) -> dict[str, Any]:
+        """Read a bounded style sample without exposing any write surface."""
+        try:
+            start = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+            end = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise GoogleDirectError("Calendar bounds must be ISO 8601 timestamps") from exc
+        if end <= start:
+            raise GoogleDirectError("Calendar end must be after start")
+        maximum = max(5, min(int(maximum), 500))
+        rows: list[dict[str, Any]] = []
+        page_token = ""
+        while len(rows) < maximum:
+            query_values = {
+                "timeMin": start.isoformat(), "timeMax": end.isoformat(),
+                "singleEvents": "false", "maxResults": min(250, maximum - len(rows)),
+                "fields": "nextPageToken,items(id,summary,start,end,colorId,reminders,recurringEventId,recurrence,location,hangoutLink,conferenceData)",
+            }
+            if page_token:
+                query_values["pageToken"] = page_token
+            payload = self._request_json(
+                "calendar",
+                "https://www.googleapis.com/calendar/v3/calendars/primary/events?" + urlencode(query_values),
+            )
+            rows.extend(list(payload.get("items") or [])[: maximum - len(rows)])
+            page_token = str(payload.get("nextPageToken") or "")
+            if not page_token:
+                break
+        return {
+            "connection_id": f"google_{self.account}_calendar_readonly",
+            "account_boundary": self.account,
+            "calendar_id": "primary",
+            "context": self.context,
+            "retrieved_at": datetime.now(UTC).isoformat(),
+            "events": rows,
+            "count": len(rows),
+            "writes_available": False,
+        }
+
     def _result(self, resource: str, items: list[dict[str, Any]]) -> dict[str, Any]:
         connection_id = f"google_{self.account}_{resource}_readonly"
         return {

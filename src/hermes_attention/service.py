@@ -11,17 +11,25 @@ from uuid import uuid4
 
 from .actions import ActionController
 from .attention import AttentionEngine
+from .automation_miner import AutomationMiner
+from .calendar_style import CalendarStyleProfiler
+from .capabilities import CapabilityStudio
+from .computer_awareness import ComputerAwareness
 from .config import ProjectPaths, load_json, validate_project_configuration
 from .context_time import resolve_context_window
 from .domain import ConfidenceState, EvidenceItem, Provenance, RiskClass, TaskRecord
 from .extraction import extract_task_candidates
 from .history import CodexAppServerBridge
 from .models import ModelRouter
+from .model_governor import ModelGovernor, ModelSignals
 from .policy import PolicyEngine
+from .projects import MissionRegistry, Portfolio, RadarRegistry
+from .proactive import ProactiveChiefOfStaff
 from .registry import IntegrationRegistry, SpecialistRegistry
 from .routing import ContextRouter
 from .security import detect_prompt_injection, redact_secrets
 from .storage import Store
+from .work_ledger import LedgerEntryInput, WorkLedger
 
 
 class AttentionService:
@@ -46,6 +54,18 @@ class AttentionService:
         self.actions = ActionController(self.store, self.policy)
         self.attention = AttentionEngine(self.store)
         self.models = ModelRouter(self.model_config, self.store)
+        self.model_governor = ModelGovernor(self.models, self.store)
+        self.ledger = WorkLedger(self.store)
+        self.portfolio = Portfolio(self.store)
+        self.missions = MissionRegistry(self.store)
+        self.radars = RadarRegistry(self.store)
+        self.proactive = ProactiveChiefOfStaff(self.ledger)
+        self.automation_miner = AutomationMiner(self.store)
+        self.calendar_style = CalendarStyleProfiler(self.store)
+        self.computer_awareness = ComputerAwareness(self.store)
+        self.capabilities = CapabilityStudio(
+            self.store, {"search_evidence", "public_web_search", "ledger_query", "daily_brief"}
+        )
         self.specialists = SpecialistRegistry(self.paths.specialist_dir)
         self.integrations = IntegrationRegistry(self.integration_config)
 
@@ -66,6 +86,9 @@ class AttentionService:
             "external_writes_enabled": self.policy.external_writes_enabled,
             "kill_switch": self.policy.kill_switch,
             "contexts": sorted(self.router.contexts),
+            "context_lifecycle": {
+                key: value.get("lifecycle", "active") for key, value in self.router.contexts.items()
+            },
             "specialists": sorted(self.specialists.specialists),
             "integrations": {key: value["mode"] for key, value in self.integrations.connections.items()},
             "budget": self.models.budget_status(),
@@ -74,7 +97,28 @@ class AttentionService:
                 "last_updated_at": codex_last_sync,
                 "scheduled": False,
             },
+            "work_ledger": {"schema_version": 4, "single_source_of_activity_state": True},
+            "model_governor": {"automatic": True, "builder_model_runtime_dependency": False},
         }
+
+    def record_work_ledger_entry(self, value: dict[str, Any]) -> dict[str, Any]:
+        entry = LedgerEntryInput(
+            kind=str(value["kind"]), occurred_at_utc=str(value["occurred_at_utc"]),
+            context_id=str(value["context_id"]), summary=str(value["summary"]),
+            evidence_ids=tuple(value["evidence_ids"]), actor_id=value.get("actor_id"),
+            actor_state=str(value.get("actor_state", "uncertain")),
+            confidence_state=str(value.get("confidence_state", "inferred")),
+            project_id=value.get("project_id"), task_id=value.get("task_id"),
+        )
+        entry_id, inserted = self.ledger.record(entry, timezone=value.get("timezone"))
+        return {"entry_id": entry_id, "inserted": inserted}
+
+    def refresh_work_ledger(self, *, limit: int = 500) -> dict[str, Any]:
+        return self.ledger.refresh_from_evidence(limit=limit)
+
+    def model_decision(self, signals: dict[str, Any]) -> dict[str, Any]:
+        decision = self.model_governor.decide(ModelSignals(**signals))
+        return asdict(decision)
 
     def context_time_window(self, context_id: str, relative_date: str = "today") -> dict[str, Any]:
         return resolve_context_window(self.context_config, context_id, relative_date)
