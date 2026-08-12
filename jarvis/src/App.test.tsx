@@ -194,9 +194,24 @@ describe("Jarvis desktop shell", () => {
     await waitFor(() => expect(screen.getAllByRole("button", { name: "Stop listening" })).toHaveLength(2));
     fireEvent.click(screen.getAllByRole("button", { name: "Stop listening" })[1]);
     await waitFor(() => expect(screen.getByRole("button", { name: "Retry transcription" })).toBeTruthy());
+    expect(screen.getByRole("button", { name: "Retry delivery" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Edit transcript" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Discard" })).toBeTruthy();
     expect(screen.getByText(/recording is retained only in memory/i)).toBeTruthy();
     expect(stopTrack).toHaveBeenCalledOnce();
+  });
+
+  it("visibly stages and retries a fail-safe voice delivery", async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Stage recovery check" }));
+    await waitFor(() => expect(screen.getByText(/Diagnostic backend rejection injected before delivery/)).toBeTruthy());
+    expect(screen.getAllByText("Reply with exactly: Voice recovery passed.")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Retry delivery" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Edit transcript" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Discard" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry delivery" }));
+    await waitFor(() => expect(screen.getByText(/Route: routine/)).toBeTruthy());
+    expect(screen.queryByRole("button", { name: "Retry delivery" })).toBeNull();
   });
 });
