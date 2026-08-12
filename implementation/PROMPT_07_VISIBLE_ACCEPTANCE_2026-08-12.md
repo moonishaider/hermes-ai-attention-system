@@ -20,7 +20,7 @@ This record separates owner-visible evidence from configuration and automated te
 
 ## Automated support completed
 
-- Marked-root preflight, hook/rule negatives, secret scan, configuration doctor, Python compile, Rust formatting/clippy, 90 Python tests, three frontend tests, five Rust tests, static/release frontend build, and the production dependency audit pass.
+- Marked-root preflight, hook/rule negatives, secret scan, configuration doctor, Python compile, Rust formatting/clippy, 90 Python tests, five frontend tests, six Rust tests, static/release frontend build, and the production dependency audit pass.
 - The Work Ledger contains 11,424 evidence projections with immutable source links and a durable cursor so completed rows are not rescanned. Actor attribution is 11,199 owner and 225 uncertain; uncertainty was preserved rather than forced.
 - Model selection, context-before-limit retrieval, Mitchell dormancy, owner-origin action policy, personal Google endpoint restrictions, capability protection, radar change detection, no-retention screen handling, and absence of builder-only Sol from runtime routes have deterministic tests.
 - Three independent source-backed DLOA occurrences produced one proposed local-draft automation. It cannot send and awaits an explicit useful/not-useful owner outcome.

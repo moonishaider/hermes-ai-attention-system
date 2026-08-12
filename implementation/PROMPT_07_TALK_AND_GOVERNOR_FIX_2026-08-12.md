@@ -50,7 +50,7 @@ The previously accepted direct Terra connectivity result remains valid provider 
 - 5 Rust policy/lifecycle tests passed.
 - TypeScript/Vite production build, Rust formatting, Clippy with warnings denied, release application build, ad-hoc code-signature verification, secret scan, configuration doctor, safety preflight, command-rule negatives, and production npm audit passed.
 - Production npm audit reported zero vulnerabilities.
-- Current installed binary SHA-256: `66e74d73f2fb9787f15083ca2dea2df93e9e952748436593a7403b94eae7afac` (the later production-only build adds transcript-disagreement review and recoverable Capability Studio feedback; the governor implementation remains unchanged).
+- Current installed binary SHA-256: `f61b90d240ced22184cb9920251de762781fe879d7148826ac6f79a6e1498b26` (the later production-only build adds fixed-destination navigation, transcript-disagreement review, and recoverable Capability Studio feedback; the governor implementation remains unchanged).
 - The installed app owns one Hermes gateway on a fresh authenticated loopback-only port selected by macOS per launch; no development server is involved.
 - Normal application Quit terminated the exact gateway process group, and two clean reopens each received a different healthy loopback port with one app and one owned gateway.
 - The immediately preceding app is preserved at `backups/Jarvis-pre-talk-fix-20260812T000151Z.app`.

@@ -11,7 +11,7 @@
 | Gmail send | impossible | impossible | no method/tool/endpoint exists |
 | One-shot screen | explicit selected region | explicit selected region | Luna; pixels discarded |
 | Focus metadata | bounded app/window/domain/profile metadata | fail closed if profile cannot be proven | local policy implemented; full native profile acceptance pending |
-| Guided navigation | open/search/scroll/read only | no company mutation | not enabled in Jarvis release |
+| Guided navigation | fixed reviewed destinations and public search only, with exact Profile 1/Profile 2, account, domain, context, and action preview | no arbitrary URL, typing, submission, setting change, download, company mutation, shell, or generic computer control | enabled as native preview-then-open; owner-visible acceptance pending |
 | Generic click/type/submit | unavailable | unavailable | deliberately absent |
 
 Personal action wrappers enforce exact account/context/target locks, `sendUpdates=none`, no bulk recipients, no attendee/recurrence auto path, Jarvis-created resource ownership, permission hashes, idempotency, and global/per-capability kill switches. Retrieved content cannot mint owner intent.

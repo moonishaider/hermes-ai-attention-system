@@ -82,6 +82,29 @@ struct LocalItemRequest {
     requires_code: bool,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GuidedNavigationRequest {
+    destination: String,
+    context: String,
+    #[serde(default)]
+    query: String,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GuidedNavigationPlan {
+    destination: String,
+    label: String,
+    context: String,
+    account: String,
+    profile: String,
+    domain: String,
+    action: String,
+    query: String,
+    mutation: bool,
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RunStart {
@@ -135,6 +158,130 @@ struct GovernedPlan {
 }
 
 impl HermesAdapter {
+    fn percent_encode_query(value: &str) -> Result<String, String> {
+        let value = value.trim();
+        if value.is_empty() || value.chars().count() > 200 || value.chars().any(char::is_control) {
+            return Err("search query must contain 1 to 200 visible characters".into());
+        }
+        let mut encoded = String::new();
+        for byte in value.as_bytes() {
+            match byte {
+                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                    encoded.push(char::from(*byte));
+                }
+                b' ' => encoded.push('+'),
+                _ => encoded.push_str(&format!("%{byte:02X}")),
+            }
+        }
+        Ok(encoded)
+    }
+
+    fn guided_navigation_plan(
+        request: &GuidedNavigationRequest,
+    ) -> Result<(GuidedNavigationPlan, String), String> {
+        let (label, context, account, profile, domain, base_url, needs_query) =
+            match request.destination.as_str() {
+                "personal-calendar" => (
+                    "Personal Calendar",
+                    "personal",
+                    "moonishaider12@gmail.com",
+                    "Profile 1",
+                    "calendar.google.com",
+                    "https://calendar.google.com/",
+                    false,
+                ),
+                "personal-gmail" => (
+                    "Personal Gmail",
+                    "personal",
+                    "moonishaider12@gmail.com",
+                    "Profile 1",
+                    "mail.google.com",
+                    "https://mail.google.com/",
+                    false,
+                ),
+                "personal-upwork" => (
+                    "Upwork",
+                    "personal",
+                    "Personal / Upwork",
+                    "Profile 1",
+                    "upwork.com",
+                    "https://www.upwork.com/ab/messages/",
+                    false,
+                ),
+                "mitchell-work" => (
+                    "Mitchell work",
+                    "mitchell",
+                    "Mitchell",
+                    "Profile 1",
+                    "upwork.com",
+                    "https://www.upwork.com/ab/messages/",
+                    false,
+                ),
+                "inside-success-calendar" => (
+                    "Inside Success Calendar",
+                    "inside-success",
+                    "syed.haider@insidesuccess.com",
+                    "Profile 2",
+                    "calendar.google.com",
+                    "https://calendar.google.com/",
+                    false,
+                ),
+                "inside-success-zoom" => (
+                    "Inside Success Zoom",
+                    "inside-success",
+                    "syed.haider@insidesuccess.com",
+                    "Profile 2",
+                    "zoom.us",
+                    "https://zoom.us/recording",
+                    false,
+                ),
+                "public-search" => (
+                    "Public web search",
+                    "personal",
+                    "Personal / public web",
+                    "Profile 1",
+                    "google.com",
+                    "https://www.google.com/search?q=",
+                    true,
+                ),
+                _ => return Err("destination is not in Jarvis's fixed navigation allowlist".into()),
+            };
+        if request.context != context {
+            return Err("destination does not match the selected context".into());
+        }
+        let query = if needs_query {
+            request.query.trim().to_string()
+        } else {
+            if !request.query.trim().is_empty() {
+                return Err("this fixed destination does not accept a query".into());
+            }
+            String::new()
+        };
+        let url = if needs_query {
+            format!("{base_url}{}", Self::percent_encode_query(&query)?)
+        } else {
+            base_url.into()
+        };
+        Ok((
+            GuidedNavigationPlan {
+                destination: request.destination.clone(),
+                label: label.into(),
+                context: context.into(),
+                account: account.into(),
+                profile: profile.into(),
+                domain: domain.into(),
+                action: if needs_query {
+                    "search".into()
+                } else {
+                    "open".into()
+                },
+                query,
+                mutation: false,
+            },
+            url,
+        ))
+    }
+
     fn discover_project_root() -> Result<PathBuf, String> {
         let home = std::env::var_os("HOME").ok_or("HOME is unavailable")?;
         let home = PathBuf::from(home);
@@ -1087,6 +1234,39 @@ async fn observe_frontmost(
 }
 
 #[tauri::command]
+fn guided_navigation_preview(
+    request: GuidedNavigationRequest,
+) -> Result<GuidedNavigationPlan, String> {
+    HermesAdapter::guided_navigation_plan(&request).map(|(plan, _)| plan)
+}
+
+#[tauri::command]
+fn guided_navigation_open(
+    request: GuidedNavigationRequest,
+) -> Result<GuidedNavigationPlan, String> {
+    let (plan, url) = HermesAdapter::guided_navigation_plan(&request)?;
+    #[cfg(target_os = "macos")]
+    {
+        let chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+        if !std::path::Path::new(chrome).is_file() {
+            return Err("Google Chrome is not installed at the reviewed application path".into());
+        }
+        Command::new(chrome)
+            .arg(format!("--profile-directory={}", plan.profile))
+            .arg("--new-tab")
+            .arg(url)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|error| format!("reviewed Chrome navigation failed: {error}"))?;
+    }
+    #[cfg(not(target_os = "macos"))]
+    return Err("guided navigation is available only in the packaged macOS app".into());
+    Ok(plan)
+}
+
+#[tauri::command]
 fn autostart_status(app: AppHandle) -> Result<bool, String> {
     app.autolaunch()
         .is_enabled()
@@ -1184,6 +1364,8 @@ pub fn run() {
             create_local_item,
             local_control,
             observe_frontmost,
+            guided_navigation_preview,
+            guided_navigation_open,
             autostart_status,
             set_autostart
         ])
@@ -1234,6 +1416,8 @@ mod tests {
             "create_local_item",
             "local_control",
             "observe_frontmost",
+            "guided_navigation_preview",
+            "guided_navigation_open",
             "autostart_status",
             "set_autostart",
         ];
@@ -1276,6 +1460,51 @@ mod tests {
             .iter()
             .all(|model| !model.contains("sol"))
         );
+    }
+
+    #[test]
+    fn guided_navigation_is_fixed_contextual_and_non_mutating() {
+        let personal = GuidedNavigationRequest {
+            destination: "personal-upwork".into(),
+            context: "personal".into(),
+            query: "".into(),
+        };
+        let (plan, url) = HermesAdapter::guided_navigation_plan(&personal).expect("personal plan");
+        assert_eq!(plan.profile, "Profile 1");
+        assert_eq!(plan.domain, "upwork.com");
+        assert!(!plan.mutation);
+        assert_eq!(url, "https://www.upwork.com/ab/messages/");
+
+        let work = GuidedNavigationRequest {
+            destination: "inside-success-zoom".into(),
+            context: "inside-success".into(),
+            query: "".into(),
+        };
+        let (plan, _) = HermesAdapter::guided_navigation_plan(&work).expect("work plan");
+        assert_eq!(plan.profile, "Profile 2");
+        assert_eq!(plan.account, "syed.haider@insidesuccess.com");
+
+        let search = GuidedNavigationRequest {
+            destination: "public-search".into(),
+            context: "personal".into(),
+            query: "safe laptop stand".into(),
+        };
+        let (plan, url) = HermesAdapter::guided_navigation_plan(&search).expect("search plan");
+        assert_eq!(plan.action, "search");
+        assert_eq!(url, "https://www.google.com/search?q=safe+laptop+stand");
+
+        let mismatch = GuidedNavigationRequest {
+            destination: "inside-success-calendar".into(),
+            context: "personal".into(),
+            query: "".into(),
+        };
+        assert!(HermesAdapter::guided_navigation_plan(&mismatch).is_err());
+        let arbitrary = GuidedNavigationRequest {
+            destination: "https://example.com".into(),
+            context: "personal".into(),
+            query: "".into(),
+        };
+        assert!(HermesAdapter::guided_navigation_plan(&arbitrary).is_err());
     }
 
     #[test]
