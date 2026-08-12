@@ -19,9 +19,9 @@ Choose **Quit Jarvis completely** from its menu-bar item. Confirm the Jarvis pro
 
 The immediately preceding signed application packages are preserved under the
 project-local ignored `backups/` directory. The exact pre-final package is
-`backups/jarvis-app-voice-recovery-20260812T205000Z/Jarvis-installed-copy.app`;
+`backups/Jarvis-pre-exact-stop-parser-20260813T011000Z.app`;
 the installed final binary has SHA-256
-`6b80e7364aa7612a436cada9e9c1a795ae68c6931da97b1e5594f6cf4766a096`.
+`9e224eda108750e0d15713b2d2a6d5f75294d0cc82ef98eecb8d828ecf82b385`.
 The final database backup and restore drill is preserved under
 `backups/prompt7-final-20260812T211500Z`; both copies passed SQLite
 `quick_check=ok`. Keep them project-local and inspect the exact path before any restore.

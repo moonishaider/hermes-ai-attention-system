@@ -36,6 +36,22 @@ export function spokenProjection(value: string) {
   return sentences.slice(0, 2).map((sentence) => sentence.trim()).join(" ").slice(0, 420);
 }
 
+export function isSpokenStopCommand(value: string) {
+  const normalized = value.toLowerCase().replace(/[^a-z\s']/g, " ").replace(/\s+/g, " ").trim();
+  return /^(?:(?:hey\s+)?jarvis\s+)?(?:stop|stop speaking|be quiet|cancel)(?:\s+(?:now|please))?$/.test(normalized);
+}
+
+type BrowserSpeechRecognition = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: { results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean }> }) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
 const fallbackHealth: HealthStatus = {
   state: "starting", hermesVersion: "0.20.0", backend: "Checking",
   context: "personal", modelRoute: "DeepSeek V4 Flash", budget: "Checking",
@@ -67,6 +83,7 @@ function App() {
   const [voiceTranscript, setVoiceTranscript] = useState("");
   const [voiceRetryAvailable, setVoiceRetryAvailable] = useState(false);
   const [voiceDeliveryFailed, setVoiceDeliveryFailed] = useState(false);
+  const [speechStatus, setSpeechStatus] = useState<"idle" | "speaking" | "completed" | "stopped">("idle");
   const [modelOverride, setModelOverride] = useState<"auto" | "routine" | "difficult" | "review">("auto");
   const [projection, setProjection] = useState<Record<string, unknown> | null>(null);
   const [navigationDestination, setNavigationDestination] = useState("personal-upwork");
@@ -85,6 +102,77 @@ function App() {
   const voiceToggleRef = useRef<() => Promise<void>>(async () => undefined);
   const speakResponseRef = useRef(false);
   const voiceDeliveryIdRef = useRef<string | null>(null);
+  const speechSessionRef = useRef(0);
+  const bargeRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+
+  function stopBargeListener() {
+    const listener = bargeRecognitionRef.current;
+    bargeRecognitionRef.current = null;
+    if (listener) {
+      listener.onend = null;
+      listener.onerror = null;
+      try { listener.stop(); } catch { /* already stopped */ }
+    }
+  }
+
+  function cancelSpeech(session: number, status: "stopped" | "completed") {
+    if (!("speechSynthesis" in window) || speechSessionRef.current !== session) return;
+    ++speechSessionRef.current;
+    stopBargeListener();
+    window.speechSynthesis.cancel();
+    setSpeechStatus(status);
+  }
+
+  function startBargeListener(session: number) {
+    stopBargeListener();
+    const Recognition = (window as unknown as { webkitSpeechRecognition?: new () => BrowserSpeechRecognition }).webkitSpeechRecognition;
+    if (!Recognition) return;
+    const recognition = new Recognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognition.onresult = (event) => {
+      const latest = Array.from(event.results).slice(-2).map((result) => result[0]?.transcript ?? "").join(" ").trim();
+      if (isSpokenStopCommand(latest)) cancelSpeech(session, "stopped");
+    };
+    recognition.onend = () => {
+      if (bargeRecognitionRef.current !== recognition || speechSessionRef.current !== session || !window.speechSynthesis.speaking) return;
+      window.setTimeout(() => {
+        if (bargeRecognitionRef.current === recognition && speechSessionRef.current === session && window.speechSynthesis.speaking) {
+          try { recognition.start(); } catch { /* fail closed; button remains available */ }
+        }
+      }, 120);
+    };
+    recognition.onerror = () => undefined;
+    bargeRecognitionRef.current = recognition;
+    try { recognition.start(); } catch { bargeRecognitionRef.current = null; }
+  }
+
+  function speakText(value: string) {
+    if (!("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const session = ++speechSessionRef.current;
+    const utterance = new SpeechSynthesisUtterance(value);
+    const ryan = window.speechSynthesis.getVoices().find((voice) => voice.name.toLowerCase().includes("ryan"));
+    if (ryan) utterance.voice = ryan;
+    utterance.rate = 1.08;
+    utterance.onstart = () => {
+      if (speechSessionRef.current !== session) return;
+      setSpeechStatus("speaking");
+      startBargeListener(session);
+    };
+    utterance.onend = () => {
+      if (speechSessionRef.current !== session) return;
+      stopBargeListener();
+      setSpeechStatus("completed");
+    };
+    utterance.onerror = () => {
+      if (speechSessionRef.current !== session) return;
+      stopBargeListener();
+      setSpeechStatus("stopped");
+    };
+    window.speechSynthesis.speak(utterance);
+  }
 
   useEffect(() => {
     const refreshHealth = () => invoke<HealthStatus>("system_status").then(setHealth).catch((error) => {
@@ -114,13 +202,8 @@ function App() {
         const tokens = stageTokensRef.current + input + output;
         setProgress((old) => [...old, `Completed · ${(latency / 1000).toFixed(1)}s · ${tokens} tokens · ~$${cost.toFixed(4)}`]);
         if (speakResponseRef.current && "speechSynthesis" in window) {
-          window.speechSynthesis.cancel();
           const spoken = spokenProjection(payload.output);
-          const utterance = new SpeechSynthesisUtterance(spoken || "The full result is ready on screen.");
-          const ryan = window.speechSynthesis.getVoices().find((voice) => voice.name.toLowerCase().includes("ryan"));
-          if (ryan) utterance.voice = ryan;
-          utterance.rate = 1.08;
-          window.speechSynthesis.speak(utterance);
+          speakText(spoken || "The full result is ready on screen.");
         }
         speakResponseRef.current = false;
       }
@@ -175,10 +258,7 @@ function App() {
     stageCostRef.current = 0; stageTokensRef.current = 0;
     speakResponseRef.current = speakResponse;
     if (speakResponse && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      const acknowledgement = new SpeechSynthesisUtterance("I'm checking that now.");
-      acknowledgement.rate = 1.08;
-      window.speechSynthesis.speak(acknowledgement);
+      speakText("I'm checking that now.");
     }
     try {
       const started = await invoke<RunStart>("start_run", {
@@ -208,7 +288,10 @@ function App() {
   }
 
   function stopSpeaking() {
-    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    if (!("speechSynthesis" in window)) return;
+    const wasSpeaking = speechStatus === "speaking" || window.speechSynthesis.speaking;
+    if (wasSpeaking) cancelSpeech(speechSessionRef.current, "stopped");
+    else stopBargeListener();
   }
 
   async function transcribeBlob(blob: Blob) {
@@ -284,6 +367,13 @@ function App() {
     ]);
   }
 
+  function runSpokenStopDiagnostic() {
+    setActive("Chat");
+    setAnswer("Spoken Stop diagnostic. Jarvis is reading a harmless local passage. Say “Stop” once; no request or recording will be submitted.");
+    setProgress(["Local spoken-interruption diagnostic · no model call · no submission"]);
+    speakText("This is a harmless local interruption test. Jarvis will keep reading this neutral passage while the temporary listener waits for your explicit command. Ordinary conversation is ignored. When the command is heard, speech ends immediately and the screen confirms that no replay is scheduled. This passage is intentionally long enough to make the interruption obvious. The test sends no request, submits no recording, and stores no transcript.");
+  }
+
   async function toggleVoice() {
     if (recording && recorderRef.current) {
       recognitionRef.current?.stop();
@@ -325,11 +415,7 @@ function App() {
       voiceDeliveryIdRef.current = crypto.randomUUID();
       liveTranscriptRef.current = "";
       setVoiceTranscript("");
-      const Recognition = (window as unknown as { webkitSpeechRecognition?: new () => {
-        continuous: boolean; interimResults: boolean; lang: string;
-        onresult: ((event: { results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean }> }) => void) | null;
-        start: () => void; stop: () => void;
-      } }).webkitSpeechRecognition;
+      const Recognition = (window as unknown as { webkitSpeechRecognition?: new () => BrowserSpeechRecognition }).webkitSpeechRecognition;
       if (Recognition) {
         const recognition = new Recognition();
         recognition.continuous = true; recognition.interimResults = true; recognition.lang = "en-US";
@@ -340,6 +426,8 @@ function App() {
             setVoiceTranscript(text);
           }
         };
+        recognition.onend = null;
+        recognition.onerror = null;
         recognitionRef.current = recognition;
         try { recognition.start(); } catch { recognitionRef.current = null; }
       }
@@ -356,6 +444,7 @@ function App() {
       // long dictated request. Chunks remain memory-only.
       recorder.start(500);
       setRecording(true);
+      if (speechStatus === "speaking") setSpeechStatus("stopped");
       setProgress(["Listening until you press Stop…"]);
     } catch (error) {
       setRecording(false);
@@ -647,6 +736,7 @@ function App() {
         <div className="conversation card">
           {progress.length > 0 && <div className="progress">{progress.map((line, index) => <div key={`${line}-${index}`}><span className={line.startsWith("Completed") ? "done" : "working"}/>{line}</div>)}</div>}
           {voiceTranscript && <div className="live-transcript"><small>Live transcript</small>{voiceTranscript}</div>}
+          {speechStatus !== "idle" && <div className={`speech-status ${speechStatus}`} role="status">{speechStatus === "speaking" ? "Speaking · Talk or Stop speaking interrupts immediately" : speechStatus === "stopped" ? "Speech stopped · no replay scheduled" : "Spoken reply completed"}</div>}
           {answer ? <div className="answer">{answer}</div> : <div className="empty">Ask naturally. Jarvis will show what it checks and cite the result.</div>}
         </div>
         <form className="composer" onSubmit={submit}>
@@ -681,6 +771,7 @@ function App() {
       {active === "Settings" && <section className="settings-grid">
         <article className="card"><h3>Activation</h3><p><kbd>⌘</kbd><kbd>⇧</kbd><kbd>Space</kbd> opens Quick Entry.</p><p><kbd>⌃</kbd><kbd>⌥</kbd><kbd>Space</kbd> starts Talk to Jarvis.</p><div className="setting"><span>Wake phrase <small>Off by default · local only</small></span><button disabled>Off</button></div></article>
         <article className="card"><h3>Voice recovery</h3><p>Run a private diagnostic rejection to prove a failed delivery preserves the transcript and exposes Retry delivery, Edit, and Discard. It records and submits nothing until Retry is chosen.</p><button className="quiet" onClick={runVoiceRecoveryDiagnostic}>Stage recovery check</button></article>
+        <article className="card"><h3>Spoken interruption</h3><p>Play a harmless local passage and listen only for an explicit Stop command. No dictation or model request is submitted.</p><button className="quiet" onClick={runSpokenStopDiagnostic}>Test spoken Stop</button></article>
         <article className="card"><h3>Background intelligence</h3><div className="segmented"><button className={background === "off" ? "selected" : ""} onClick={() => void setBackgroundMode("off")}>Off</button><button className={background === "running" ? "selected" : ""} onClick={() => void setBackgroundMode("running")}>While running</button><button className={background === "login" ? "selected" : ""} onClick={() => void setBackgroundMode("login")}>While logged in</button></div><div className="setting"><span>Launch at login <small>Visible opt-in</small></span><button onClick={toggleAutostart}>{autostart ? "On" : "Off"}</button></div></article>
         <article className="card"><h3>Personal Calendar style</h3><p>{localState?.calendarStyle ? `${localState.calendarStyle.review_status} · updated ${localState.calendarStyle.updated_at.slice(0, 10)}` : "No bounded style profile has been generated yet."}</p><span className="pill">Existing personal calendar only</span>{localState?.calendarStyle && <dl><div><dt>Sample</dt><dd>{localState.calendarStyle.profile.sample_size} events</dd></div><div><dt>Typical timed event</dt><dd>{localState.calendarStyle.profile.median_timed_duration_minutes ?? "—"} min</dd></div><div><dt>All-day / recurring</dt><dd>{Math.round(localState.calendarStyle.profile.all_day_ratio * 100)}% / {Math.round(localState.calendarStyle.profile.recurrence_ratio * 100)}%</dd></div><div><dt>Meeting links</dt><dd>{Math.round(localState.calendarStyle.profile.meeting_link_ratio * 100)}%</dd></div></dl>}<div className="setting"><button onClick={() => void buildCalendarProfile()}>Build read-only profile</button>{localState?.calendarStyle?.review_status === "pending-owner-review" && <button className="quiet" onClick={() => void reviewCalendarProfile()}>Looks right</button>}</div>{localNotice && <small>{localNotice}</small>}</article>
         <article className="card"><h3>Safety</h3><p>Company/client writes unavailable. DLOA remains exact-preview only. Personal actions are capability-scoped.</p><span className="pill">External-action kill switch on</span></article>
