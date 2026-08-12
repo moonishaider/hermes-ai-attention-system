@@ -10,6 +10,7 @@ from email.message import EmailMessage
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import sys
 from typing import Any
@@ -42,6 +43,8 @@ PERSONAL_ACCOUNT = "moonishaider12@gmail.com"
 CALENDAR_CAPABILITY = "personal-calendar-owned"
 GMAIL_CAPABILITY = "personal-gmail-draft-only"
 PERSONAL_ACTIONS_SETTING = "personal_google_actions_enabled"
+PERSONAL_ACTIONS_MODE_SETTING = "personal_google_actions_mode"
+PERSONAL_ACTION_MODES = {"off", "preview", "auto-explicit", "earned-auto"}
 
 
 def bounded(value: Any, *, maximum: int, name: str) -> str:
@@ -79,8 +82,39 @@ def _set_personal_actions_enabled(service: AttentionService, enabled: bool) -> N
         )
 
 
-def _register_personal_capabilities(service: AttentionService, *, enable: bool) -> ActionFirewall:
+def _personal_action_mode(service: AttentionService) -> str:
+    row = service.store.connection.execute(
+        "SELECT value_json FROM runtime_settings WHERE key=?", (PERSONAL_ACTIONS_MODE_SETTING,),
+    ).fetchone()
+    if row:
+        value = str(json.loads(row["value_json"]))
+        if value in PERSONAL_ACTION_MODES:
+            return value
+    return "auto-explicit" if _personal_actions_enabled(service) else "off"
+
+
+def _set_personal_action_mode(service: AttentionService, mode: str) -> None:
+    if mode not in PERSONAL_ACTION_MODES:
+        raise ValueError("invalid personal action mode")
+    with service.store.connection:
+        service.store.connection.execute(
+            """INSERT INTO runtime_settings VALUES(?,?,?)
+               ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=excluded.updated_at""",
+            (PERSONAL_ACTIONS_MODE_SETTING, json.dumps(mode), utc_now()),
+        )
+
+
+def _register_personal_capabilities(
+    service: AttentionService, *, enable: bool, mode: str | None = None
+) -> ActionFirewall:
     firewall = ActionFirewall(service.store, _firewall_secret(), global_kill_switch=False)
+    effective_mode = mode or _personal_action_mode(service)
+    autonomy_stage = {
+        "off": 0,
+        "preview": 3,
+        "auto-explicit": 4,
+        "earned-auto": 5,
+    }[effective_mode]
     specs = ((CALENDAR_CAPABILITY, {"account": PERSONAL_ACCOUNT, "calendar_id": "primary"}, True),
              (GMAIL_CAPABILITY, {"account": PERSONAL_ACCOUNT, "resource": "draft"}, False))
     for capability, target, reversible in specs:
@@ -88,7 +122,8 @@ def _register_personal_capabilities(service: AttentionService, *, enable: bool) 
                      "methods": ["POST", "PATCH", "DELETE"] if reversible else ["POST", "PUT", "GET"]}
         firewall.register_capability(capability_id=capability, context_id="personal",
             account_id=PERSONAL_ACCOUNT, target_lock=target, permission_inventory=inventory,
-            browser_profile="Profile 1", autonomy_stage=1, reversible=reversible, enabled=enable)
+            browser_profile="Profile 1", autonomy_stage=autonomy_stage,
+            reversible=reversible, enabled=enable)
         firewall.set_capability_kill_switch(capability, not enable)
     return firewall
 
@@ -96,14 +131,17 @@ def _register_personal_capabilities(service: AttentionService, *, enable: bool) 
 def personal_action_status(service: AttentionService, _value: dict[str, Any]) -> dict[str, Any]:
     status_value = PersonalGoogleActionTokenManager().status()
     enabled = bool(status_value["connected"] and _personal_actions_enabled(service))
-    _register_personal_capabilities(service, enable=enabled)
+    mode = _personal_action_mode(service)
+    _register_personal_capabilities(service, enable=enabled, mode=mode)
     resources = [dict(row) for row in service.store.connection.execute(
-        "SELECT resource_id,capability_id,provider_id,state,created_at,updated_at FROM external_resources "
+        "SELECT resource_id,capability_id,provider_id,state,metadata_json,created_at,updated_at FROM external_resources "
         "WHERE capability_id IN (?,?) ORDER BY updated_at DESC LIMIT 10",
         (CALENDAR_CAPABILITY, GMAIL_CAPABILITY),
     )]
+    for resource in resources:
+        resource["metadata"] = json.loads(resource.pop("metadata_json") or "{}")
     return {"ok": True, **status_value, "resources": resources, "genericKillSwitch": True,
-            "personalCapabilitiesEnabled": enabled}
+            "personalCapabilitiesEnabled": enabled, "mode": mode}
 
 
 def personal_action_setting(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
@@ -113,13 +151,20 @@ def personal_action_setting(service: AttentionService, value: dict[str, Any]) ->
     connected = bool(PersonalGoogleActionTokenManager().status()["connected"])
     if enabled and not connected:
         raise PermissionError("personal Google actions must be connected before enabling capability execution")
+    mode = str(value.get("mode") or ("auto-explicit" if enabled else "off"))
+    if not enabled:
+        mode = "off"
+    if mode not in PERSONAL_ACTION_MODES:
+        raise ValueError("invalid personal action mode")
     _set_personal_actions_enabled(service, enabled)
-    _register_personal_capabilities(service, enable=enabled)
+    _set_personal_action_mode(service, mode)
+    _register_personal_capabilities(service, enable=enabled, mode=mode)
     service.store.audit(
         "owner-local-ui", "personal-google-actions.setting", "personal", "success",
-        {"enabled": enabled, "account": PERSONAL_ACCOUNT, "generic_kill_switch_unchanged": True},
+        {"enabled": enabled, "mode": mode, "account": PERSONAL_ACCOUNT,
+         "generic_kill_switch_unchanged": True},
     )
-    return {"ok": True, "enabled": enabled, "connected": connected}
+    return {"ok": True, "enabled": enabled, "mode": mode, "connected": connected}
 
 
 def personal_action_preview(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
@@ -193,10 +238,14 @@ def personal_action_execute(service: AttentionService, value: dict[str, Any]) ->
     inventory = {"account": PERSONAL_ACCOUNT, "capability": capability,
                  "methods": ["POST", "PATCH", "DELETE"] if capability == CALENDAR_CAPABILITY else ["POST", "PUT", "GET"]}
     session_nonce = bounded(value.get("nativeNonce"), maximum=160, name="native owner interaction")
+    owner_request = str(value.get("ownerRequest") or proposal.preview_hash).strip()
+    if not owner_request or len(owner_request) > 2_000:
+        raise PermissionError("native owner request is absent or too large")
+    bound_request = stable_hash({"owner_request": owner_request, "preview_hash": proposal.preview_hash})
     token = firewall.issue_owner_intent(session_nonce=session_nonce, action_type=proposal.action_type,
-        request_text=proposal.preview_hash, trusted_local_interaction=True)
+        request_text=bound_request, trusted_local_interaction=True)
     fw = firewall.validate(capability_id=capability, owner_token=token, session_nonce=session_nonce,
-        action_type=proposal.action_type, request_text=proposal.preview_hash, context_id="personal",
+        action_type=proposal.action_type, request_text=bound_request, context_id="personal",
         account_id=PERSONAL_ACCOUNT, target=proposal.target, permission_inventory=inventory,
         recipients=[proposal.payload["recipient"]] if proposal.payload.get("recipient") else None)
     if not fw.allowed:
@@ -229,6 +278,38 @@ def personal_action_execute(service: AttentionService, value: dict[str, Any]) ->
             service.store.connection.execute("UPDATE action_attempts SET state='uncertain',updated_at=? WHERE attempt_id=?",
                 (utc_now(), attempt))
         raise
+
+
+def personal_action_explicit(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    """Execute only a deterministic direct owner request in Auto Explicit mode."""
+    request_text = bounded(value.get("ownerRequest"), maximum=2_000, name="owner request")
+    normalized = " ".join(request_text.lower().split())
+    action = str(value.get("action") or "")
+    if _personal_action_mode(service) not in {"auto-explicit", "earned-auto"}:
+        raise PermissionError("personal actions are not in Auto Explicit Request mode")
+    if str(value.get("context") or "") != "personal":
+        raise PermissionError("automatic personal actions require the Personal context")
+    if any(term in normalized for term in (
+        "maybe ", "if you think", "if possible", "invite ", "attendee", "recurring", "every week",
+        "work calendar", "company calendar", "send the email", "send email", "send it",
+    )):
+        raise PermissionError("ambiguous, attendee, recurring, work, or send requests require a preview")
+    if action == "calendar":
+        if not re.search(r"\b(add|create|schedule|put)\b", normalized) or not re.search(
+            r"\b(event|appointment|calendar|session|meeting)\b", normalized
+        ):
+            raise PermissionError("calendar execution requires an explicit create request")
+    elif action == "gmail-draft":
+        if not re.search(r"\b(create|write|prepare|draft)\b", normalized) or "draft" not in normalized:
+            raise PermissionError("draft execution requires an explicit unsent-draft request")
+    else:
+        raise ValueError("unsupported personal action")
+    staged = personal_action_preview(service, value)
+    return personal_action_execute(service, {
+        "proposalId": staged["proposalId"], "previewHash": staged["previewHash"],
+        "nativeNonce": bounded(value.get("nativeNonce"), maximum=160, name="native owner interaction"),
+        "ownerRequest": request_text,
+    })
 
 
 def personal_calendar_undo(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
@@ -622,7 +703,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "operation",
-        choices=("state", "create", "focus", "stop-focus", "observe", "setting", "calendar-profile", "review-calendar-profile", "projection", "capability-control", "automation-outcome", "record-model-decision", "commitment-open", "commitment-complete", "personal-action-status", "personal-action-setting", "personal-action-preview", "personal-action-execute", "personal-calendar-undo", "guided-public-read"),
+        choices=("state", "create", "focus", "stop-focus", "observe", "setting", "calendar-profile", "review-calendar-profile", "projection", "capability-control", "automation-outcome", "record-model-decision", "commitment-open", "commitment-complete", "personal-action-status", "personal-action-setting", "personal-action-preview", "personal-action-execute", "personal-action-explicit", "personal-calendar-undo", "guided-public-read"),
     )
     parser.add_argument("--context")
     arguments = parser.parse_args()
@@ -652,6 +733,7 @@ def main() -> int:
                     "personal-action-setting": personal_action_setting,
                     "personal-action-preview": personal_action_preview,
                     "personal-action-execute": personal_action_execute,
+                    "personal-action-explicit": personal_action_explicit,
                     "personal-calendar-undo": personal_calendar_undo,
                     "guided-public-read": guided_public_read,
                 }[arguments.operation](service, value)

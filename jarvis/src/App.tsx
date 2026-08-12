@@ -4,7 +4,8 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ContextId, GuidedNavigationPlan, GuidedReadResult, HealthStatus, JarvisState, PersonalActionPreview, PersonalActionStatus, RunEvent, RunStart } from "./types";
 
-const NAV = ["Now", "Chat", "Work Ledger", "Projects", "Missions", "Radars", "Actions", "Learning", "Capability Studio", "Decisions", "Settings"];
+const EVERYDAY_NAV = ["Now", "Chat", "Work Ledger", "Projects", "Actions"];
+const ADVANCED_NAV = ["Missions", "Radars", "Learning", "Capability Studio", "Decisions", "Settings"];
 const CONTEXTS: { id: ContextId; label: string }[] = [
   { id: "inside-success", label: "Inside Success" },
   { id: "mitchell", label: "Mitchell · dormant" },
@@ -18,6 +19,42 @@ function nextLocalHour() {
   value.setMinutes(0, 0, 0);
   const offset = value.getTimezoneOffset();
   return new Date(value.getTime() - offset * 60_000).toISOString().slice(0, 16);
+}
+
+type ExplicitPersonalAction = {
+  action: "calendar" | "gmail-draft";
+  payload: Record<string, unknown>;
+};
+
+export function parseExplicitPersonalAction(value: string, now = new Date()): ExplicitPersonalAction | null {
+  const text = value.trim();
+  const lower = text.toLowerCase().replace(/\s+/g, " ");
+  if (/\b(invite|attendee|recurr|every (day|week|month)|work calendar|company calendar|send (the )?(email|draft|it))\b/.test(lower)) return null;
+  const calendar = text.match(/^(?:please\s+)?(?:add|create|schedule|put)\s+(?:a\s+)?(?:personal\s+)?(?:calendar\s+)?(?:event|appointment|session|meeting)\s+(?:called|named|titled)\s+["“]?(.+?)["”]?\s+(today|tomorrow|on\s+\d{4}-\d{2}-\d{2})\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)(?:\s+for\s+(15|30|60)\s+minutes?)?\.?$/i);
+  if (calendar) {
+    const start = new Date(now);
+    const day = calendar[2].toLowerCase();
+    if (day === "tomorrow") start.setDate(start.getDate() + 1);
+    else if (day.startsWith("on ")) {
+      const [year, month, date] = day.slice(3).split("-").map(Number);
+      start.setFullYear(year, month - 1, date);
+    }
+    let hour = Number(calendar[3]) % 12;
+    if (calendar[5].toLowerCase() === "pm") hour += 12;
+    start.setHours(hour, Number(calendar[4] || 0), 0, 0);
+    if (start.getTime() <= now.getTime()) return null;
+    const duration = Number(calendar[6] || 30);
+    return { action: "calendar", payload: {
+      title: calendar[1].trim(), start: start.toISOString(),
+      end: new Date(start.getTime() + duration * 60_000).toISOString(),
+      reminderMinutes: 10, colorId: "9",
+    } };
+  }
+  const draft = text.match(/^(?:please\s+)?(?:create|write|prepare|draft)\s+(?:an?\s+)?(?:unsent\s+)?(?:personal\s+)?(?:gmail\s+)?draft(?:\s+to\s+([^\s,;]+@[^\s,;]+))?\s+with\s+subject\s+["“]?(.+?)["”]?\s+and\s+(?:body|message)\s+["“]?([\s\S]+?)["”]?\.?$/i);
+  if (draft) return { action: "gmail-draft", payload: {
+    recipient: draft[1] || "", subject: draft[2].trim(), body: draft[3].trim(),
+  } };
+  return null;
 }
 
 export function transcriptsMateriallyDisagree(live: string, final: string) {
@@ -106,6 +143,9 @@ function App() {
   const [draftRecipient, setDraftRecipient] = useState("");
   const [draftSubject, setDraftSubject] = useState("Jarvis draft acceptance check");
   const [draftBody, setDraftBody] = useState("This is a private unsent draft created through Jarvis acceptance. It has not been sent.");
+  const [showAdvancedActions, setShowAdvancedActions] = useState(false);
+  const [showAdvancedNav, setShowAdvancedNav] = useState(false);
+  const [showActionPolicy, setShowActionPolicy] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -198,6 +238,7 @@ function App() {
     void refreshHealth();
     const healthTimer = window.setInterval(refreshHealth, 5000);
     invoke<boolean>("autostart_status").then(setAutostart).catch(() => undefined);
+    invoke<PersonalActionStatus>("personal_action_status").then(setPersonalActions).catch(() => undefined);
     const unlisten = listen<RunEvent>("jarvis-run-event", ({ payload }) => {
       if (payload.event === "message.delta" && payload.delta) setAnswer((old) => old + payload.delta);
       if (["governor.review_started", "governor.escalation_started"].includes(payload.event)) {
@@ -270,6 +311,25 @@ function App() {
 
   async function startPrompt(text: string, speakResponse = false, deliveryId?: string): Promise<boolean> {
     if (!text.trim() || busy) return false;
+    const personalAction = context === "personal" ? parseExplicitPersonalAction(text) : null;
+    if (personalAction && personalActions?.connected && personalActions.personalCapabilitiesEnabled && personalActions.mode === "auto-explicit") {
+      setBusy(true); setAnswer(""); setProgress(["Explicit personal request recognized", "Checking account, target, permission snapshot, and Action Firewall…"]);
+      try {
+        const result = await invoke<{ providerId: string; resourceKind: string; undoAvailable: boolean }>("personal_action_explicit", {
+          request: { action: personalAction.action, context, ownerRequest: text.trim(), ...personalAction.payload },
+        });
+        setPersonalResult(result); await refreshPersonalActions(); setPrompt("");
+        const message = result.resourceKind === "gmail-draft"
+          ? "I created the unsent personal Gmail draft and opened it. Sending is unavailable."
+          : "I created the personal calendar event exactly as requested. Undo is available in Actions.";
+        setAnswer(message); setProgress((old) => [...old, "Completed through the bounded personal capability"]);
+        if (speakResponse) speakText(message);
+        return true;
+      } catch (error) {
+        setProgress((old) => [...old, `Personal action stopped safely: ${String(error)}`]);
+        return false;
+      } finally { setBusy(false); }
+    }
     setBusy(true); setAnswer("");
     setProgress([`Acknowledged · ${contextLabel}`, "Preparing the smallest relevant source plan…"]);
     stageCostRef.current = 0; stageTokensRef.current = 0;
@@ -650,7 +710,7 @@ function App() {
       await refreshPersonalActions();
       setPersonalPreview(null); setPersonalResult(null);
       setLocalNotice(enabled
-        ? "Personal Calendar and unsent-draft execution enabled behind exact owner previews. Generic and company/client writes remain killed."
+        ? "Natural personal Calendar and unsent-draft requests are enabled. Ambiguous requests still stop for review; generic and company/client writes remain killed."
         : "Personal Calendar and unsent-draft execution disabled. Existing personal resources were not changed.");
     } catch (error) { setLocalNotice(`Personal action setting was not changed: ${String(error)}`); }
   }
@@ -691,10 +751,10 @@ function App() {
     } catch (error) { setLocalNotice(`Personal action stopped safely: ${String(error)}`); }
   }
 
-  async function undoCalendarEvent() {
-    if (!personalResult?.undoAvailable) return;
+  async function undoCalendarEvent(providerId = personalResult?.providerId) {
+    if (!providerId) return;
     try {
-      await invoke("personal_calendar_undo", { providerId: personalResult.providerId });
+      await invoke("personal_calendar_undo", { providerId });
       setPersonalResult(null); await refreshPersonalActions();
       setLocalNotice("Jarvis-created event was undone. No other calendar item was changed.");
     } catch (error) { setLocalNotice(`Undo stopped safely: ${String(error)}`); }
@@ -752,7 +812,10 @@ function App() {
   return <div className="shell">
     <aside>
       <div className="brand"><span className="orb"/><div><strong>JARVIS</strong><small>Hermes intelligence</small></div></div>
-      <nav>{NAV.map((item) => <button key={item} className={active === item ? "active" : ""} onClick={() => setActive(item)}>{item}</button>)}</nav>
+      <nav>{EVERYDAY_NAV.map((item) => <button key={item} className={active === item ? "active" : ""} onClick={() => setActive(item)}>{item}</button>)}
+        <button className={ADVANCED_NAV.includes(active) ? "active nav-more" : "nav-more"} onClick={() => setShowAdvancedNav(!showAdvancedNav)}>{showAdvancedNav ? "Hide more" : "More"}</button>
+        {showAdvancedNav && <div className="advanced-nav">{ADVANCED_NAV.map((item) => <button key={item} className={active === item ? "active" : ""} onClick={() => setActive(item)}>{item}</button>)}</div>}
+      </nav>
       <div className="sidebar-foot">
         <span className={`health-dot ${health.state}`}/><span>{health.state === "ready" ? "Systems nominal" : health.message}</span>
       </div>
@@ -808,28 +871,32 @@ function App() {
 
       {active === "Actions" && <section className="card surface">
         <p className="eyebrow">Action firewall</p><h2>External writes remain fail-closed</h2>
-        <p>Company/client writes are unavailable. DLOA remains exact-preview only. Personal Calendar and Gmail draft execution use a separate owner-only grant and exact native preview.</p>
+        <p>Ask naturally for simple personal events or unsent drafts. Company/client writes are unavailable, Gmail sending is absent, and ambiguous requests stop for review.</p>
         <span className="pill">Global kill switch on</span>
         <h3>Personal action acceptance</h3>
-        <div className="setting"><span>{personalActions?.connected ? `Connected · ${personalActions.account}` : "Separate personal grant not connected"}<small>Calendar owned-events and Gmail compose scopes only; draft send is structurally absent</small></span><button className="quiet" onClick={() => void refreshPersonalActions()}>Check status</button>{!personalActions?.connected && <button onClick={() => void connectPersonalActions()}>Connect personal actions</button>}{personalActions?.connected && <button className={personalActions.personalCapabilitiesEnabled ? "danger" : "quiet"} onClick={() => void togglePersonalActions(!personalActions.personalCapabilitiesEnabled)}>{personalActions.personalCapabilitiesEnabled ? "Disable personal actions" : "Enable personal actions"}</button>}</div>
+        <div className="setting"><span>{personalActions?.connected ? `Connected · ${personalActions.account}` : "Separate personal grant not connected"}<small>{personalActions?.mode === "auto-explicit" ? "Auto Explicit Request · ask naturally in Chat" : "Calendar owned-events and Gmail compose scopes only"} · Gmail send is structurally absent</small></span><button className="quiet" onClick={() => void refreshPersonalActions()}>Refresh</button>{!personalActions?.connected && <button onClick={() => void connectPersonalActions()}>Connect personal actions</button>}{personalActions?.connected && <button className={personalActions.personalCapabilitiesEnabled ? "danger" : "quiet"} onClick={() => void togglePersonalActions(!personalActions.personalCapabilitiesEnabled)}>{personalActions.personalCapabilitiesEnabled ? "Turn personal actions off" : "Enable Auto Explicit Request"}</button>}</div>
         {personalActions?.connected && !personalActions.personalCapabilitiesEnabled && <p className="notice">The grant is stored owner-only, but execution remains off until you visibly enable these two personal capabilities.</p>}
-        {personalActions?.personalCapabilitiesEnabled && <div className="permission-matrix item-list">
+        {personalActions?.personalCapabilitiesEnabled && <article className="navigation-preview"><strong>Use natural language in Chat</strong><span>Unambiguous personal requests run immediately; ambiguous or consequential requests preview.</span><p>Try: Create a personal calendar event called Focus block tomorrow at 3 PM for 30 minutes.</p><p>Or: Create an unsent personal Gmail draft with subject Follow up and body Thanks for your time today.</p></article>}
+        {personalActions?.resources?.filter((item) => item.state === "active").map((item) => <article className="navigation-preview" key={item.resource_id}><strong>{item.capability_id === "personal-calendar-owned" ? "Jarvis-created calendar event" : "Jarvis-created unsent draft"}</strong><span>{item.capability_id === "personal-calendar-owned" ? String(item.metadata?.summary || "Personal event") : "Unsent Gmail draft"} · {item.updated_at.slice(0, 16)}</span>{item.capability_id === "personal-calendar-owned" && <button className="danger" onClick={() => { setPersonalResult({ providerId: item.provider_id, resourceKind: "calendar-event", undoAvailable: true }); void undoCalendarEvent(item.provider_id); }}>Undo this exact event</button>}</article>)}
+        {personalActions?.personalCapabilitiesEnabled && <button className="quiet" onClick={() => setShowAdvancedActions(!showAdvancedActions)}>{showAdvancedActions ? "Hide advanced exact preview" : "Advanced exact preview"}</button>}
+        {personalActions?.personalCapabilitiesEnabled && showAdvancedActions && <div className="permission-matrix item-list">
           <article><strong>Create one simple personal event</strong><span>Personal · primary calendar · Profile 1</span><input value={eventTitle} onChange={(event) => setEventTitle(event.target.value)} placeholder="Exact event title"/><div className="setting"><input type="datetime-local" value={eventStart} onChange={(event) => setEventStart(event.target.value)}/><select aria-label="Event duration" value={eventDuration} onChange={(event) => setEventDuration(event.target.value)}><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">60 minutes</option></select></div><p>10-minute popup · blue color · no attendee · no recurrence · no invitations</p><button onClick={() => void previewCalendarEvent()}>Preview event</button></article>
           <article><strong>Create one unsent personal draft</strong><span>Personal Gmail · Profile 1 · sending absent</span><input value={draftRecipient} onChange={(event) => setDraftRecipient(event.target.value)} placeholder="One recipient or leave blank"/><input value={draftSubject} onChange={(event) => setDraftSubject(event.target.value)} placeholder="Exact subject"/><textarea value={draftBody} onChange={(event) => setDraftBody(event.target.value)} rows={4}/><button onClick={() => void previewGmailDraft()}>Preview unsent draft</button></article>
         </div>}
         {personalPreview && <article className="navigation-preview"><strong>Exact personal action preview</strong><span>{personalPreview.capabilityId} · Personal · Profile 1</span><span>Expires {new Date(personalPreview.expiresAt).toLocaleTimeString()}</span><pre>{JSON.stringify(personalPreview.payload, null, 2)}</pre><span>Preview hash {personalPreview.previewHash}</span><button onClick={() => void executePersonalPreview()}>{personalPreview.capabilityId.includes("calendar") ? "Create exactly this event" : "Create this unsent draft"}</button><button className="quiet" onClick={() => setPersonalPreview(null)}>Cancel</button></article>}
-        {personalResult?.undoAvailable && <article className="navigation-preview"><strong>Event created by Jarvis</strong><span>{personalResult.providerId}</span><button className="danger" onClick={() => void undoCalendarEvent()}>Undo this exact event</button></article>}
-        <h3>Capability and permission matrix</h3>
+        {personalResult?.undoAvailable && !personalActions?.resources?.some((item) => item.provider_id === personalResult.providerId && item.state === "active") && <article className="navigation-preview"><strong>Event created by Jarvis</strong><span>{personalResult.providerId}</span><button className="danger" onClick={() => void undoCalendarEvent()}>Undo this exact event</button></article>}
+        <button className="quiet" onClick={() => setShowActionPolicy(!showActionPolicy)}>{showActionPolicy ? "Hide safety details" : "Safety details"}</button>
+        {showActionPolicy && <><h3>What Jarvis can safely do</h3>
         <div className="item-list permission-matrix">
-          <article><strong>Personal Calendar</strong><span>Selected calendar only · exact owner click</span><p>Only the selected personal calendar can be targeted. Attendees, recurrence, ambiguity, or unusual reminders fail closed; only Jarvis-created events can be undone.</p></article>
-          <article><strong>Personal Gmail drafts</strong><span>Create/update owned draft only · exact owner click</span><p>Draft sending is absent. Jarvis cannot call Gmail send endpoints, and can update only a draft it previously created.</p></article>
+          <article><strong>Personal Calendar</strong><span>Ask naturally · selected calendar only</span><p>A direct, unambiguous request can create a simple event immediately. Attendees, recurrence, work calendars, or ambiguity stop for review; only Jarvis-created events can be undone.</p></article>
+          <article><strong>Personal Gmail drafts</strong><span>Ask naturally · unsent drafts only</span><p>A direct request can create and open an unsent draft. Gmail sending is absent, and Jarvis can update only a draft it previously created.</p></article>
           <article><strong>Work Google accounts</strong><span>Read-only · write tools absent</span><p>Work Gmail and Calendar write capabilities are not registered. The interface cannot widen scopes or substitute the personal account.</p></article>
           <article><strong>Owner authorization</strong><span>Local exact intent required</span><p>Retrieved email, Slack, web, meeting, or document text is untrusted evidence and cannot approve an action. A changed target, permission snapshot, preview hash, or expired request fails closed.</p></article>
           <article><strong>Guided navigation</strong><span>Exact preview before opening</span><p>Fixed profile, account, domain, context, and read-only action are shown first. No arbitrary URL, typing, submission, download, settings change, or generic computer control exists.</p></article>
         </div>
         <div className="item-list">{localState?.actionPreviews?.map((item) => <article key={item.proposal_id}>
           <strong>{item.state}</strong><span>{item.updated_at.slice(0, 10)}</span><p>Preview hash {item.preview_hash.slice(0, 16)}… · not executed here</p>
-        </article>)}</div>
+        </article>)}</div></>}
       </section>}
 
       {active === "Learning" && <section className="card surface">

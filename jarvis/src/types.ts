@@ -52,7 +52,8 @@ export interface PersonalActionStatus {
   exact_scopes: boolean;
   genericKillSwitch: true;
   personalCapabilitiesEnabled: boolean;
-  resources: Array<{ resource_id: string; capability_id: string; provider_id: string; state: string; updated_at: string }>;
+  mode: "off" | "preview" | "auto-explicit" | "earned-auto";
+  resources: Array<{ resource_id: string; capability_id: string; provider_id: string; state: string; updated_at: string; metadata?: Record<string, unknown> }>;
 }
 
 export interface PersonalActionPreview {

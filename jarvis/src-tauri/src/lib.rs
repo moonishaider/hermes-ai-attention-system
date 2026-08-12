@@ -1414,6 +1414,44 @@ async fn personal_action_execute(
 }
 
 #[tauri::command]
+async fn personal_action_explicit(
+    adapter: State<'_, HermesAdapter>,
+    mut request: Value,
+) -> Result<Value, String> {
+    let object = request
+        .as_object_mut()
+        .ok_or("explicit personal action must be an object")?;
+    let mut nonce_bytes = [0_u8; 32];
+    fill(&mut nonce_bytes).map_err(|error| format!("owner nonce failed: {error}"))?;
+    object.insert(
+        "nativeNonce".into(),
+        Value::String(
+            nonce_bytes
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect(),
+        ),
+    );
+    let bytes = serde_json::to_vec(&request)
+        .map_err(|error| format!("explicit personal action encoding failed: {error}"))?;
+    if bytes.len() > 16_384 {
+        return Err("explicit personal action is too large".into());
+    }
+    let owned = adapter.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        owned.run_python(
+            "jarvis_local_state.py",
+            &["personal-action-explicit"],
+            Some(&bytes),
+        )
+    })
+    .await
+    .map_err(|error| format!("explicit personal action worker failed: {error}"))??;
+    open_personal_result_url(&result)?;
+    Ok(result)
+}
+
+#[tauri::command]
 async fn personal_calendar_undo(
     adapter: State<'_, HermesAdapter>,
     provider_id: String,
@@ -1642,6 +1680,7 @@ pub fn run() {
             authorize_personal_google_actions,
             personal_action_preview,
             personal_action_execute,
+            personal_action_explicit,
             personal_calendar_undo,
             observe_frontmost,
             guided_navigation_preview,
@@ -1701,6 +1740,7 @@ mod tests {
             "authorize_personal_google_actions",
             "personal_action_preview",
             "personal_action_execute",
+            "personal_action_explicit",
             "personal_calendar_undo",
             "observe_frontmost",
             "guided_navigation_preview",

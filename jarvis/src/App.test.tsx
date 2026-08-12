@@ -23,6 +23,14 @@ vi.mock("@tauri-apps/api/core", () => ({
       focusSessions: [], automationProposals: [], backgroundMode: "running",
     };
     if (command === "autostart_status") return false;
+    if (command === "personal_action_status") return {
+      ok: true, connected: true, account: "moonishaider12@gmail.com", refreshable: true,
+      exact_scopes: true, genericKillSwitch: true, personalCapabilitiesEnabled: true,
+      mode: "auto-explicit", resources: [],
+    };
+    if (command === "personal_action_explicit") return {
+      providerId: "owned-resource-1", resourceKind: "calendar-event", undoAvailable: true,
+    };
     if (command === "request_microphone_access") return "authorized";
     if (command === "transcribe_audio") return { transcript: "review my personal tasks", provider: "openai" };
     if (command === "look_at_selected_area") {
@@ -51,7 +59,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   }),
 }));
 
-import App, { isSpokenStopCommand, spokenProjection, transcriptsMateriallyDisagree } from "./App";
+import App, { isSpokenStopCommand, parseExplicitPersonalAction, spokenProjection, transcriptsMateriallyDisagree } from "./App";
 
 afterEach(() => {
   cleanup();
@@ -90,12 +98,34 @@ describe("Jarvis desktop shell", () => {
     }
   });
 
+  it("parses only deterministic low-risk explicit personal actions", () => {
+    const now = new Date("2026-08-12T12:00:00+05:00");
+    expect(parseExplicitPersonalAction("Create a personal calendar event called Focus block tomorrow at 3 PM for 30 minutes.", now)?.action).toBe("calendar");
+    expect(parseExplicitPersonalAction("Create an unsent personal Gmail draft with subject Follow up and body Thanks for your time.", now)?.action).toBe("gmail-draft");
+    expect(parseExplicitPersonalAction("Maybe schedule a meeting tomorrow at 3 PM", now)).toBeNull();
+    expect(parseExplicitPersonalAction("Create a meeting called Review tomorrow at 3 PM and invite the team", now)).toBeNull();
+    expect(parseExplicitPersonalAction("Send the email now", now)).toBeNull();
+  });
+
+  it("executes an unambiguous personal request from normal Chat", async () => {
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("Systems nominal")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Chat" }));
+    const composer = screen.getByPlaceholderText("What needs your attention?");
+    fireEvent.change(composer, { target: { value: "Create a personal calendar event called Focus block tomorrow at 3 PM for 30 minutes." } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask Jarvis" }));
+    await waitFor(() => expect(screen.getByText(/created the personal calendar event exactly as requested/i)).toBeTruthy());
+    expect(screen.getByText(/Completed through the bounded personal capability/)).toBeTruthy();
+  });
+
   it("shows protected daily-use surfaces and refreshed local state", async () => {
     render(<App />);
     expect(screen.getByText("JARVIS")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Capability Studio" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Work Ledger" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Actions" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Capability Studio" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    expect(screen.getByRole("button", { name: "Capability Studio" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Learning" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Talk" })).toBeTruthy();
     await waitFor(() => expect(screen.getByText("12")).toBeTruthy());
@@ -105,10 +135,13 @@ describe("Jarvis desktop shell", () => {
 
   it("makes absent and preview-only action authority visible", async () => {
     render(<App />);
+    await waitFor(() => expect(screen.getByText("Systems nominal")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Actions" }));
-    expect(screen.getByText("Capability and permission matrix")).toBeTruthy();
-    expect(screen.getByText("Create/update owned draft only · exact owner click")).toBeTruthy();
-    expect(screen.getByText(/Calendar owned-events and Gmail compose scopes only/)).toBeTruthy();
+    expect(screen.queryByText("What Jarvis can safely do")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Safety details" }));
+    expect(screen.getByText("What Jarvis can safely do")).toBeTruthy();
+    expect(screen.getByText("Ask naturally · unsent drafts only")).toBeTruthy();
+    await waitFor(() => expect(screen.getAllByText(/Auto Explicit Request/).length).toBeGreaterThan(0));
     expect(screen.queryByRole("button", { name: "Create exactly this event" })).toBeNull();
     expect(screen.getByText("Read-only · write tools absent")).toBeTruthy();
     expect(screen.getByText(/Retrieved email, Slack, web, meeting, or document text is untrusted evidence/)).toBeTruthy();
@@ -133,6 +166,7 @@ describe("Jarvis desktop shell", () => {
 
   it("requires an exact guided-navigation preview before opening", async () => {
     render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Preview exact navigation" }));
     await waitFor(() => expect(screen.getByText("Profile 1 · Personal / Upwork")).toBeTruthy());
@@ -151,6 +185,7 @@ describe("Jarvis desktop shell", () => {
 
   it("renders a code-requiring capability as a Codex spec without activation", async () => {
     render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
     fireEvent.click(screen.getByRole("button", { name: "Capability Studio" }));
     fireEvent.change(screen.getByPlaceholderText("Capability name"), { target: { value: "Add a private local parser" } });
     fireEvent.change(screen.getByPlaceholderText("Describe the low-risk workflow"), { target: { value: "Build and test a new parser integration" } });
@@ -214,6 +249,7 @@ describe("Jarvis desktop shell", () => {
 
   it("visibly stages and retries a fail-safe voice delivery", async () => {
     render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Stage recovery check" }));
     await waitFor(() => expect(screen.getByText(/Diagnostic backend rejection injected before delivery/)).toBeTruthy());
@@ -228,6 +264,7 @@ describe("Jarvis desktop shell", () => {
 
   it("exposes a local spoken-stop diagnostic without submitting a request", async () => {
     render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     expect(screen.getByText(/No dictation or model request is submitted/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Test spoken Stop" }));

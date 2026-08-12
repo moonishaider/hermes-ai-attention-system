@@ -127,7 +127,12 @@ class PersonalCalendarActions:
                    ON CONFLICT(resource_id) DO UPDATE SET etag=excluded.etag,
                    metadata_json=excluded.metadata_json,updated_at=excluded.updated_at""",
                 (f"calendar:{provider_id}", self.capability_id, provider_id, 1,
-                 payload.get("etag"), "active", json.dumps({"calendar_id_hash": stable_hash(self.calendar_id)}), now, now),
+                 payload.get("etag"), "active", json.dumps({
+                     "calendar_id_hash": stable_hash(self.calendar_id),
+                     "summary": str(payload.get("summary") or "")[:200],
+                     "start": payload.get("start", {}), "end": payload.get("end", {}),
+                     "colorId": payload.get("colorId"), "reminders": payload.get("reminders", {}),
+                 }), now, now),
             )
 
 
