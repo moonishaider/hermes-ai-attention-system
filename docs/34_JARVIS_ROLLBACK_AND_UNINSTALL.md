@@ -18,9 +18,13 @@ Choose **Quit Jarvis completely** from its menu-bar item. Confirm the Jarvis pro
 ## Installed-app rollback copies
 
 The immediately preceding signed application packages are preserved under the
-project-local ignored `backups/` directory, including timestamped
-`Jarvis-before-final-voice-ui-*.app` and `Jarvis-before-voice-delivery-*.app`
-copies. Keep them project-local and inspect the exact path before any restore.
+project-local ignored `backups/` directory. The exact pre-final package is
+`backups/jarvis-app-voice-recovery-20260812T205000Z/Jarvis-installed-copy.app`;
+the installed final binary has SHA-256
+`6b80e7364aa7612a436cada9e9c1a795ae68c6931da97b1e5594f6cf4766a096`.
+The final database backup and restore drill is preserved under
+`backups/prompt7-final-20260812T211500Z`; both copies passed SQLite
+`quick_check=ok`. Keep them project-local and inspect the exact path before any restore.
 Restoring means quitting Jarvis, moving the current exact app to a new backup
 name, copying one reviewed rollback app to `/Applications/Jarvis.app`, verifying
 its deep signature, and reopening it. Never broadly delete or overwrite the

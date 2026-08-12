@@ -4,6 +4,8 @@
 
 **Prompt 7 state:** Jarvis native application operational; Talk capture, fail-safe voice delivery recovery, one-shot Luna selected-area understanding, Pro-to-Terra routing, reversible Capability Studio, Calendar-style review, Automation Miner outcome, and bounded Focus lifecycle are visibly accepted. Final dictation quality/interruption remains owner-experiential; live personal Calendar/Gmail mutation conflicts with mandatory build rules
 
+**Daily entry point:** `/Applications/Jarvis.app`; `START_HERE.md` now describes only the native Jarvis workflow. Stock Hermes and Terminal launchers are diagnostic fallbacks, not competing normal interfaces.
+
 **Prompt 6 state:** Hermes Agent 0.20.0 / official Desktop migration accepted
 
 **Prompt 4 rollback checkpoints:** milestone start `015948b`; pre-closeout `ac43070`; pre-Google-refresh `bf04f22`
