@@ -66,6 +66,7 @@ function App() {
   const [selectedCommitment, setSelectedCommitment] = useState<string | null>(null);
   const [voiceTranscript, setVoiceTranscript] = useState("");
   const [voiceRetryAvailable, setVoiceRetryAvailable] = useState(false);
+  const [voiceDeliveryFailed, setVoiceDeliveryFailed] = useState(false);
   const [modelOverride, setModelOverride] = useState<"auto" | "routine" | "difficult" | "review">("auto");
   const [projection, setProjection] = useState<Record<string, unknown> | null>(null);
   const [navigationDestination, setNavigationDestination] = useState("personal-upwork");
@@ -213,6 +214,7 @@ function App() {
   async function transcribeBlob(blob: Blob) {
     setProgress(["Transcribing the complete recording…"]);
     setVoiceRetryAvailable(false);
+    setVoiceDeliveryFailed(false);
     try {
       const audio = Array.from(new Uint8Array(await blob.arrayBuffer()));
       const result = await invoke<{ transcript?: string; provider?: string }>("transcribe_audio", { audio, mimeType: blob.type || "audio/webm" });
@@ -238,6 +240,7 @@ function App() {
         } else {
           setProgress((old) => [...old, "The recording is retained only in memory so you can retry, edit, or discard it."]);
           setVoiceRetryAvailable(true);
+          setVoiceDeliveryFailed(true);
         }
       } else {
         setProgress(["I did not detect a complete request. Nothing was submitted."]);
@@ -247,6 +250,38 @@ function App() {
       setProgress([`Voice transcription failed safely: ${String(error)}`]);
       setVoiceRetryAvailable(true);
     }
+  }
+
+  async function retryVoiceDelivery() {
+    const transcript = voiceTranscript.trim();
+    if (!transcript) return;
+    if (!voiceDeliveryIdRef.current) voiceDeliveryIdRef.current = crypto.randomUUID();
+    const delivered = await startPrompt(transcript, true, voiceDeliveryIdRef.current);
+    if (delivered) {
+      lastRecordingRef.current = null;
+      voiceDeliveryIdRef.current = null;
+      setVoiceRetryAvailable(false);
+      setVoiceDeliveryFailed(false);
+    } else {
+      setVoiceRetryAvailable(true);
+      setVoiceDeliveryFailed(true);
+      setProgress((old) => [...old, "Delivery still failed. The transcript and recording remain in memory; nothing was duplicated."]);
+    }
+  }
+
+  function runVoiceRecoveryDiagnostic() {
+    const transcript = "Reply with exactly: Voice recovery passed.";
+    stopSpeaking();
+    setActive("Chat");
+    setVoiceTranscript(transcript);
+    setPrompt(transcript);
+    voiceDeliveryIdRef.current = crypto.randomUUID();
+    setVoiceRetryAvailable(true);
+    setVoiceDeliveryFailed(true);
+    setProgress([
+      "Diagnostic backend rejection injected before delivery. Nothing was submitted.",
+      "The exact transcript is retained in memory. Choose Retry delivery, Edit transcript, or Discard.",
+    ]);
   }
 
   async function toggleVoice() {
@@ -345,6 +380,7 @@ function App() {
     liveTranscriptRef.current = "";
     setVoiceTranscript("");
     setVoiceRetryAvailable(false);
+    setVoiceDeliveryFailed(false);
     setProgress(["Recording and transcript discarded. Nothing else was submitted."]);
   }
 
@@ -615,7 +651,7 @@ function App() {
         </div>
         <form className="composer" onSubmit={submit}>
           <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="What needs your attention?" rows={2}/>
-          <div><select aria-label="Model routing" value={modelOverride} onChange={(event) => setModelOverride(event.target.value as typeof modelOverride)}><option value="auto">Model · Auto</option><option value="routine">Flash</option><option value="difficult">Pro</option><option value="review">Pro + Terra review</option></select><button type="button" className={recording ? "danger" : "quiet"} onClick={() => void toggleVoice()}>{recording ? "Stop listening" : "Talk"}</button>{voiceRetryAvailable && lastRecordingRef.current && <button type="button" className="quiet" onClick={() => void transcribeBlob(lastRecordingRef.current!)}>Retry transcription</button>}{voiceRetryAvailable && voiceTranscript && <button type="button" className="quiet" onClick={editVoiceTranscript}>Edit transcript</button>}{voiceRetryAvailable && (voiceTranscript || lastRecordingRef.current) && <button type="button" className="quiet" onClick={discardVoiceRecording}>Discard</button>}<button type="button" className="quiet" onClick={stopSpeaking}>Stop speaking</button>{busy ? <button type="button" className="danger" onClick={cancel}>Cancel</button> : <button type="submit">Ask Jarvis</button>}</div>
+          <div><select aria-label="Model routing" value={modelOverride} onChange={(event) => setModelOverride(event.target.value as typeof modelOverride)}><option value="auto">Model · Auto</option><option value="routine">Flash</option><option value="difficult">Pro</option><option value="review">Pro + Terra review</option></select><button type="button" className={recording ? "danger" : "quiet"} onClick={() => void toggleVoice()}>{recording ? "Stop listening" : "Talk"}</button>{voiceDeliveryFailed && voiceTranscript && <button type="button" onClick={() => void retryVoiceDelivery()}>Retry delivery</button>}{voiceRetryAvailable && lastRecordingRef.current && <button type="button" className="quiet" onClick={() => void transcribeBlob(lastRecordingRef.current!)}>Retry transcription</button>}{voiceRetryAvailable && voiceTranscript && <button type="button" className="quiet" onClick={editVoiceTranscript}>Edit transcript</button>}{voiceRetryAvailable && (voiceTranscript || lastRecordingRef.current) && <button type="button" className="quiet" onClick={discardVoiceRecording}>Discard</button>}<button type="button" className="quiet" onClick={stopSpeaking}>Stop speaking</button>{busy ? <button type="button" className="danger" onClick={cancel}>Cancel</button> : <button type="submit">Ask Jarvis</button>}</div>
         </form>
       </section>}
 
@@ -644,6 +680,7 @@ function App() {
 
       {active === "Settings" && <section className="settings-grid">
         <article className="card"><h3>Activation</h3><p><kbd>⌘</kbd><kbd>⇧</kbd><kbd>Space</kbd> opens Quick Entry.</p><p><kbd>⌃</kbd><kbd>⌥</kbd><kbd>Space</kbd> starts Talk to Jarvis.</p><div className="setting"><span>Wake phrase <small>Off by default · local only</small></span><button disabled>Off</button></div></article>
+        <article className="card"><h3>Voice recovery</h3><p>Run a private diagnostic rejection to prove a failed delivery preserves the transcript and exposes Retry delivery, Edit, and Discard. It records and submits nothing until Retry is chosen.</p><button className="quiet" onClick={runVoiceRecoveryDiagnostic}>Stage recovery check</button></article>
         <article className="card"><h3>Background intelligence</h3><div className="segmented"><button className={background === "off" ? "selected" : ""} onClick={() => void setBackgroundMode("off")}>Off</button><button className={background === "running" ? "selected" : ""} onClick={() => void setBackgroundMode("running")}>While running</button><button className={background === "login" ? "selected" : ""} onClick={() => void setBackgroundMode("login")}>While logged in</button></div><div className="setting"><span>Launch at login <small>Visible opt-in</small></span><button onClick={toggleAutostart}>{autostart ? "On" : "Off"}</button></div></article>
         <article className="card"><h3>Personal Calendar style</h3><p>{localState?.calendarStyle ? `${localState.calendarStyle.review_status} · updated ${localState.calendarStyle.updated_at.slice(0, 10)}` : "No bounded style profile has been generated yet."}</p><span className="pill">Existing personal calendar only</span>{localState?.calendarStyle && <dl><div><dt>Sample</dt><dd>{localState.calendarStyle.profile.sample_size} events</dd></div><div><dt>Typical timed event</dt><dd>{localState.calendarStyle.profile.median_timed_duration_minutes ?? "—"} min</dd></div><div><dt>All-day / recurring</dt><dd>{Math.round(localState.calendarStyle.profile.all_day_ratio * 100)}% / {Math.round(localState.calendarStyle.profile.recurrence_ratio * 100)}%</dd></div><div><dt>Meeting links</dt><dd>{Math.round(localState.calendarStyle.profile.meeting_link_ratio * 100)}%</dd></div></dl>}<div className="setting"><button onClick={() => void buildCalendarProfile()}>Build read-only profile</button>{localState?.calendarStyle?.review_status === "pending-owner-review" && <button className="quiet" onClick={() => void reviewCalendarProfile()}>Looks right</button>}</div>{localNotice && <small>{localNotice}</small>}</article>
         <article className="card"><h3>Safety</h3><p>Company/client writes unavailable. DLOA remains exact-preview only. Personal actions are capability-scoped.</p><span className="pill">External-action kill switch on</span></article>
