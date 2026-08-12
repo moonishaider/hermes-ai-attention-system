@@ -19,15 +19,17 @@ This record separates owner-visible evidence from configuration and automated te
 - Syed reviewed the bounded Personal Calendar-style profile and confirmed it looked right. Jarvis stored `owner-reviewed` without changing any event.
 - Three immutable DLOA occurrences produced the local-only automation proposal; Syed authorized completion and the packaged UI visibly recorded the proposal as accepted. Slack execution remains unavailable.
 - A packaged 30-minute Focus session visibly showed only active-app metadata, kept profile/domain unknown rather than guessing, retained zero screenshots, and stopped cleanly.
+- A code-requiring Capability Studio request visibly produced a bounded Codex-ready specification and explicitly performed no code change, activation, installation, or deployment.
+- Start day, Pre-meeting, End day/DLOA, and Catch up visibly rendered as bounded local Work Ledger projections with no connector fan-out or external write. Sparse evidence remained visibly sparse rather than being fabricated.
 - No company/client message, calendar change, email, purchase, form submission, unrestricted computer control, or other forbidden external action occurred.
 
 ## Automated support completed
 
-- Marked-root preflight, hook/rule negatives, secret scan, configuration doctor, Python compile, Rust formatting/clippy, 90 Python tests, eight frontend tests, six Rust tests, static/release frontend build, and the production dependency audit pass.
+- Marked-root preflight, hook/rule negatives, secret scan, configuration doctor, Python compile, Rust formatting/clippy, 90 Python tests, ten frontend tests, six Rust tests, static/release frontend build, and the production dependency audit pass.
 - The Work Ledger contains 11,424 evidence projections with immutable source links and a durable cursor so completed rows are not rescanned. Actor attribution is 11,199 owner and 225 uncertain; uncertainty was preserved rather than forced.
 - Model selection, context-before-limit retrieval, Mitchell dormancy, owner-origin action policy, personal Google endpoint restrictions, capability protection, radar change detection, no-retention screen handling, and absence of builder-only Sol from runtime routes have deterministic tests.
 - Capability feedback is deterministic and recoverable: useful promotes a draft/disabled capability only to shadow, not-useful disables it, feedback provenance is retained, and disabled/archived entries can be restored to draft. The packaged owner-visible lifecycle and Automation Miner acceptance are complete.
-- Four proactive projections ran against the runtime ledger with external writes false. End-of-day was useful; the start-day, pre-meeting, and absence-return groups were sparse because historical ledger kinds remain mostly generic work/activity. That quality gap is recorded rather than hidden.
+- Four proactive projections ran visibly against the runtime ledger with external writes false. End-of-day was useful; the start-day, pre-meeting, and absence-return groups were sparse because historical ledger kinds remain mostly generic work/activity. That quality gap is recorded rather than hidden.
 
 ## Pending owner-visible checks
 

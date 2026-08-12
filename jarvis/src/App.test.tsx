@@ -6,7 +6,7 @@ const mockState = vi.hoisted(() => ({ failRunStart: false, cancelScreen: false }
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ label: "main" }) }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => undefined) }));
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(async (command: string) => {
+  invoke: vi.fn(async (command: string, args?: Record<string, unknown>) => {
     if (command === "system_status") return {
       state: "ready", hermesVersion: "0.20.0", backend: "Authenticated loopback",
       context: "personal", modelRoute: "DeepSeek V4 Flash · governed", budget: "Within monthly policy",
@@ -28,6 +28,15 @@ vi.mock("@tauri-apps/api/core", () => ({
     if (command === "look_at_selected_area") {
       if (mockState.cancelScreen) throw new Error("adapter returned no valid result");
       return { answer: "Harmless selected area" };
+    }
+    if (command === "create_local_item") {
+      const request = args?.request as { requiresCode?: boolean; title?: string; details?: string };
+      if (request?.requiresCode) return { status: "codex-spec-only", activationPerformed: false, implementationSpec: { kind: "workflow", context_id: "personal", name: request.title, description: request.details, tools: ["search_evidence", "ledger_query"], requires_code: true } };
+      return { status: "draft", activationPerformed: false };
+    }
+    if (command === "local_control" && (args?.operation as string) === "projection") {
+      const request = args?.request as { mode?: string };
+      return { projection: { mode: request?.mode, bounded: true, connector_fanout_performed: false, context_id: "personal", source_count: 1 } };
     }
     if (command === "start_run") {
       if (mockState.failRunStart) throw new Error("synthetic backend unavailable");
@@ -116,6 +125,28 @@ describe("Jarvis desktop shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Select area" }));
     await waitFor(() => expect(screen.getByText("Screen selection was cancelled or no region was chosen. Nothing was captured or retained.")).toBeTruthy());
     expect(screen.queryByText(/adapter returned/i)).toBeNull();
+  });
+
+  it("renders a code-requiring capability as a Codex spec without activation", async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Capability Studio" }));
+    fireEvent.change(screen.getByPlaceholderText("Capability name"), { target: { value: "Add a private local parser" } });
+    fireEvent.change(screen.getByPlaceholderText("Describe the low-risk workflow"), { target: { value: "Build and test a new parser integration" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Requires new code or integration" }));
+    fireEvent.click(screen.getByRole("button", { name: "Validate and save locally" }));
+    await waitFor(() => expect(screen.getByText("Codex-ready implementation specification")).toBeTruthy());
+    expect(screen.getByText("No code change · no activation · no deployment")).toBeTruthy();
+    expect(screen.getByText(/Jarvis did not modify code/i)).toBeTruthy();
+  });
+
+  it("exposes all four bounded proactive projection modes", async () => {
+    render(<App />);
+    for (const name of ["Start day", "Pre-meeting", "End day / DLOA", "Catch up"]) {
+      expect(screen.getByRole("button", { name })).toBeTruthy();
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Pre-meeting" }));
+    await waitFor(() => expect(screen.getByText(/"mode": "pre-meeting"/)).toBeTruthy());
+    expect(screen.getByText(/"connector_fanout_performed": false/)).toBeTruthy();
   });
 
   it("retains failed dictation and exposes retry edit and discard", async () => {
