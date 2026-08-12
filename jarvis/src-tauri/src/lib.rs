@@ -38,6 +38,7 @@ struct HermesInner {
     starting: Mutex<()>,
     project_root: PathBuf,
     state: Mutex<String>,
+    voice_deliveries: Mutex<std::collections::HashMap<String, RunStart>>,
 }
 
 #[derive(Serialize)]
@@ -62,6 +63,8 @@ struct RunRequest {
     context: String,
     #[serde(default)]
     override_route: Option<String>,
+    #[serde(default)]
+    delivery_id: Option<String>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -79,7 +82,7 @@ struct LocalItemRequest {
     requires_code: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RunStart {
     run_id: String,
@@ -171,6 +174,7 @@ impl HermesAdapter {
                 starting: Mutex::new(()),
                 project_root: Self::discover_project_root()?,
                 state: Mutex::new("starting".into()),
+                voice_deliveries: Mutex::new(std::collections::HashMap::new()),
             }),
         })
     }
@@ -849,6 +853,20 @@ fn start_run(
     request: RunRequest,
 ) -> Result<RunStart, String> {
     adapter.ensure_started()?;
+    if let Some(delivery_id) = request.delivery_id.as_deref() {
+        if delivery_id.len() > 80
+            || !delivery_id
+                .chars()
+                .all(|value| value.is_ascii_alphanumeric() || value == '-')
+        {
+            return Err("invalid voice delivery id".into());
+        }
+        if let Ok(deliveries) = adapter.inner.voice_deliveries.lock()
+            && let Some(existing) = deliveries.get(delivery_id)
+        {
+            return Ok(existing.clone());
+        }
+    }
     let plan = HermesAdapter::governed_plan(
         &request.prompt,
         &request.context,
@@ -862,11 +880,23 @@ fn start_run(
         request.context,
         request.prompt,
     );
-    Ok(RunStart {
+    let started = RunStart {
         run_id,
         route: plan.primary.route.into(),
         reason: plan.primary.reason.into(),
-    })
+    };
+    if let Some(delivery_id) = request.delivery_id {
+        let mut deliveries = adapter
+            .inner
+            .voice_deliveries
+            .lock()
+            .map_err(|_| "voice delivery lock poisoned")?;
+        if deliveries.len() >= 128 {
+            deliveries.clear();
+        }
+        deliveries.insert(delivery_id, started.clone());
+    }
+    Ok(started)
 }
 
 #[tauri::command]
@@ -1258,5 +1288,14 @@ mod tests {
             "gpt-5.6-terra"
         );
         assert!(HermesAdapter::governed_plan("test", "personal", Some("sol")).is_err());
+    }
+
+    #[test]
+    fn voice_delivery_ids_are_bounded_and_renderer_supplied() {
+        let source = include_str!("lib.rs");
+        assert!(source.contains("delivery_id: Option<String>"));
+        assert!(source.contains("voice_deliveries: Mutex"));
+        assert!(source.contains("invalid voice delivery id"));
+        assert!(source.contains("delivery_id.len() > 80"));
     }
 }

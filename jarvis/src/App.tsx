@@ -54,6 +54,7 @@ function App() {
   const stageTokensRef = useRef(0);
   const voiceToggleRef = useRef<() => Promise<void>>(async () => undefined);
   const speakResponseRef = useRef(false);
+  const voiceDeliveryIdRef = useRef<string | null>(null);
 
   function spokenProjection(value: string) {
     const plain = value
@@ -138,7 +139,7 @@ function App() {
 
   const contextLabel = useMemo(() => CONTEXTS.find((item) => item.id === context)?.label ?? context, [context]);
 
-  async function startPrompt(text: string, speakResponse = false): Promise<boolean> {
+  async function startPrompt(text: string, speakResponse = false, deliveryId?: string): Promise<boolean> {
     if (!text.trim() || busy) return false;
     setBusy(true); setAnswer("");
     setProgress([`Acknowledged · ${contextLabel}`, "Preparing the smallest relevant source plan…"]);
@@ -152,7 +153,7 @@ function App() {
     }
     try {
       const started = await invoke<RunStart>("start_run", {
-        request: { prompt: text.trim(), context, overrideRoute: modelOverride },
+        request: { prompt: text.trim(), context, overrideRoute: modelOverride, deliveryId },
       });
       setRunId(started.runId);
       runStartedRef.current = Date.now();
@@ -190,9 +191,11 @@ function App() {
       if (result.transcript?.trim()) {
         const transcript = result.transcript.trim();
         setVoiceTranscript(transcript);
-        const delivered = await startPrompt(transcript, true);
+        if (!voiceDeliveryIdRef.current) voiceDeliveryIdRef.current = crypto.randomUUID();
+        const delivered = await startPrompt(transcript, true, voiceDeliveryIdRef.current);
         if (delivered) {
           lastRecordingRef.current = null;
+          voiceDeliveryIdRef.current = null;
           setVoiceRetryAvailable(false);
         } else {
           setProgress((old) => [...old, "The recording is retained only in memory so you can retry, edit, or discard it."]);
@@ -246,6 +249,7 @@ function App() {
       streamRef.current = stream;
       recorderRef.current = recorder;
       chunksRef.current = [];
+      voiceDeliveryIdRef.current = crypto.randomUUID();
       setVoiceTranscript("");
       const Recognition = (window as unknown as { webkitSpeechRecognition?: new () => {
         continuous: boolean; interimResults: boolean; lang: string;
@@ -294,6 +298,7 @@ function App() {
 
   function discardVoiceRecording() {
     lastRecordingRef.current = null;
+    voiceDeliveryIdRef.current = null;
     chunksRef.current = [];
     setVoiceTranscript("");
     setVoiceRetryAvailable(false);
