@@ -4,7 +4,7 @@ import os
 import unittest
 from unittest.mock import Mock, patch
 
-from scripts.jarvis_transcribe_audio import JARVIS_CLOUD_STT_MODEL, transcribe_for_jarvis
+from scripts.jarvis_transcribe_audio import JARVIS_CLOUD_STT_MODEL, JARVIS_STT_PROMPT, transcribe_for_jarvis
 
 
 class JarvisTranscriptionTests(unittest.TestCase):
@@ -19,6 +19,9 @@ class JarvisTranscriptionTests(unittest.TestCase):
 
     def test_default_cloud_route_uses_high_accuracy_model(self) -> None:
         self.assertEqual(JARVIS_CLOUD_STT_MODEL, "gpt-4o-transcribe")
+        self.assertIn("Inside Success", JARVIS_STT_PROMPT)
+        self.assertIn("DLOA", JARVIS_STT_PROMPT)
+        self.assertIn("negation", JARVIS_STT_PROMPT)
 
     def test_local_transcription_is_a_visible_fallback(self) -> None:
         cloud = Mock(return_value={"success": False, "error": "offline"})

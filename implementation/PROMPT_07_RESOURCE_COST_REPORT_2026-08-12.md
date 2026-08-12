@@ -3,7 +3,7 @@
 **Mac:** Apple Silicon, 8 GB profile, macOS 26.5.2
 
 - Final static frontend bundle: about 231 KB JavaScript and 7.5 KB CSS before gzip.
-- Installed Jarvis plus its exact owned Hermes gateway used about 66 MiB combined RSS at healthy idle and 89.1 MiB immediately after a completed Terra review; sampled steady CPU was approximately 0–0.2%, with a brief post-run sample at 0.6% combined.
+- Installed Jarvis plus its exact owned Hermes gateway used about 66 MiB combined RSS at healthy idle and 89.1 MiB immediately after a completed Terra review. The final voice-recovery build sampled at about 88 MiB combined shortly after launch; startup CPU was transiently higher while connectors initialized and steady samples returned near idle.
 - Hermes gateway is a separately owned child bound only to loopback. Visible Flash, Pro, and Terra runs completed through it; no custom daemon remains after full Quit.
 - Wake phrase is absent/off, so it consumes no wake-listener RAM/CPU.
 - The Work Ledger now holds 11,424 rows behind a durable cursor; it is not a resident worker or broad periodic rescan.

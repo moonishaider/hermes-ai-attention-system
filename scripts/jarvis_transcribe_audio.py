@@ -14,6 +14,35 @@ import tempfile
 HERMES_ROOT = Path.home() / ".hermes" / "hermes-agent"
 sys.path.insert(0, str(HERMES_ROOT))
 JARVIS_CLOUD_STT_MODEL = "gpt-4o-transcribe"
+JARVIS_STT_PROMPT = (
+    "A personal productivity request to Jarvis. Expected names and terms include: "
+    "Syed, Moonis, Hermes, Jarvis, Codex, Inside Success, DLOA, Magic Mike, "
+    "Mitchell, Upwork, Slack, Zoom, GitHub, Miami, Karachi. Preserve the "
+    "speaker's wording, dates, negation, and technical product names."
+)
+
+
+def _transcribe_openai_guided(path: str) -> dict:
+    """Use supported language and prompt hints for the owner's vocabulary."""
+    try:
+        from openai import OpenAI
+        from tools.transcription_tools import _resolve_openai_audio_client_config
+
+        api_key, base_url = _resolve_openai_audio_client_config()
+        client = OpenAI(api_key=api_key, base_url=base_url, timeout=30, max_retries=0)
+        with open(path, "rb") as audio_file:
+            result = client.audio.transcriptions.create(
+                model=JARVIS_CLOUD_STT_MODEL,
+                file=audio_file,
+                response_format="json",
+                language="en",
+                prompt=JARVIS_STT_PROMPT,
+                temperature=0,
+            )
+        transcript = str(getattr(result, "text", "") or "").strip()
+        return {"success": bool(transcript), "transcript": transcript, "provider": "openai"}
+    except Exception as exc:
+        return {"success": False, "transcript": "", "error": type(exc).__name__}
 
 
 def transcribe_for_jarvis(path: str, *, cloud_transcriber=None, local_transcriber=None) -> dict:
@@ -25,11 +54,9 @@ def transcribe_for_jarvis(path: str, *, cloud_transcriber=None, local_transcribe
     ``JARVIS_STT_PROVIDER=local`` keeps the entire request on this Mac.
     """
     if cloud_transcriber is None or local_transcriber is None:
-        from tools.transcription_tools import _transcribe_openai, transcribe_audio
+        from tools.transcription_tools import transcribe_audio
 
-        cloud_transcriber = cloud_transcriber or (
-            lambda recording: _transcribe_openai(recording, JARVIS_CLOUD_STT_MODEL)
-        )
+        cloud_transcriber = cloud_transcriber or _transcribe_openai_guided
         local_transcriber = local_transcriber or transcribe_audio
 
     if os.getenv("JARVIS_STT_PROVIDER", "cloud").strip().lower() == "local":

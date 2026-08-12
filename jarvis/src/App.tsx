@@ -138,8 +138,8 @@ function App() {
 
   const contextLabel = useMemo(() => CONTEXTS.find((item) => item.id === context)?.label ?? context, [context]);
 
-  async function startPrompt(text: string, speakResponse = false) {
-    if (!text.trim() || busy) return;
+  async function startPrompt(text: string, speakResponse = false): Promise<boolean> {
+    if (!text.trim() || busy) return false;
     setBusy(true); setAnswer("");
     setProgress([`Acknowledged · ${contextLabel}`, "Preparing the smallest relevant source plan…"]);
     stageCostRef.current = 0; stageTokensRef.current = 0;
@@ -159,9 +159,11 @@ function App() {
       routeRef.current = started.route;
       setProgress((old) => [...old, `Route: ${started.route} · ${started.reason}`]);
       setPrompt("");
+      return true;
     } catch (error) {
       setProgress((old) => [...old, `Could not start: ${String(error)}`]);
       setBusy(false);
+      return false;
     }
   }
 
@@ -184,10 +186,18 @@ function App() {
     setVoiceRetryAvailable(false);
     try {
       const audio = Array.from(new Uint8Array(await blob.arrayBuffer()));
-      const result = await invoke<{ transcript?: string }>("transcribe_audio", { audio, mimeType: blob.type || "audio/webm" });
+      const result = await invoke<{ transcript?: string; provider?: string }>("transcribe_audio", { audio, mimeType: blob.type || "audio/webm" });
       if (result.transcript?.trim()) {
-        setVoiceTranscript(result.transcript.trim());
-        await startPrompt(result.transcript, true);
+        const transcript = result.transcript.trim();
+        setVoiceTranscript(transcript);
+        const delivered = await startPrompt(transcript, true);
+        if (delivered) {
+          lastRecordingRef.current = null;
+          setVoiceRetryAvailable(false);
+        } else {
+          setProgress((old) => [...old, "The recording is retained only in memory so you can retry, edit, or discard it."]);
+          setVoiceRetryAvailable(true);
+        }
       } else {
         setProgress(["I did not detect a complete request. Nothing was submitted."]);
         setVoiceRetryAvailable(true);
@@ -229,7 +239,9 @@ function App() {
       if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
         throw new Error("this packaged WebView does not expose microphone capture");
       }
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
+      });
       const recorder = new MediaRecorder(stream);
       streamRef.current = stream;
       recorderRef.current = recorder;
@@ -259,7 +271,9 @@ function App() {
         recognitionRef.current = null;
         await transcribeBlob(blob);
       };
-      recorder.start();
+      // Timesliced capture avoids relying on one final WebKit buffer for a
+      // long dictated request. Chunks remain memory-only.
+      recorder.start(500);
       setRecording(true);
       setProgress(["Listening until you press Stop…"]);
     } catch (error) {
@@ -271,6 +285,20 @@ function App() {
   }
 
   voiceToggleRef.current = toggleVoice;
+
+  function editVoiceTranscript() {
+    if (!voiceTranscript.trim()) return;
+    setPrompt(voiceTranscript.trim());
+    setProgress(["Transcript moved to the composer. Edit it, then choose Ask Jarvis."]);
+  }
+
+  function discardVoiceRecording() {
+    lastRecordingRef.current = null;
+    chunksRef.current = [];
+    setVoiceTranscript("");
+    setVoiceRetryAvailable(false);
+    setProgress(["Recording and transcript discarded. Nothing else was submitted."]);
+  }
 
   async function lookAtArea() {
     setActive("Chat");
@@ -493,7 +521,7 @@ function App() {
         </div>
         <form className="composer" onSubmit={submit}>
           <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="What needs your attention?" rows={2}/>
-          <div><select aria-label="Model routing" value={modelOverride} onChange={(event) => setModelOverride(event.target.value as typeof modelOverride)}><option value="auto">Model · Auto</option><option value="routine">Flash</option><option value="difficult">Pro</option><option value="review">Pro + Terra review</option></select><button type="button" className={recording ? "danger" : "quiet"} onClick={() => void toggleVoice()}>{recording ? "Stop listening" : "Talk"}</button>{voiceRetryAvailable && lastRecordingRef.current && <button type="button" className="quiet" onClick={() => void transcribeBlob(lastRecordingRef.current!)}>Retry transcript</button>}<button type="button" className="quiet" onClick={stopSpeaking}>Stop speaking</button>{busy ? <button type="button" className="danger" onClick={cancel}>Cancel</button> : <button type="submit">Ask Jarvis</button>}</div>
+          <div><select aria-label="Model routing" value={modelOverride} onChange={(event) => setModelOverride(event.target.value as typeof modelOverride)}><option value="auto">Model · Auto</option><option value="routine">Flash</option><option value="difficult">Pro</option><option value="review">Pro + Terra review</option></select><button type="button" className={recording ? "danger" : "quiet"} onClick={() => void toggleVoice()}>{recording ? "Stop listening" : "Talk"}</button>{voiceRetryAvailable && lastRecordingRef.current && <button type="button" className="quiet" onClick={() => void transcribeBlob(lastRecordingRef.current!)}>Retry delivery</button>}{voiceRetryAvailable && voiceTranscript && <button type="button" className="quiet" onClick={editVoiceTranscript}>Edit transcript</button>}{voiceRetryAvailable && (voiceTranscript || lastRecordingRef.current) && <button type="button" className="quiet" onClick={discardVoiceRecording}>Discard</button>}<button type="button" className="quiet" onClick={stopSpeaking}>Stop speaking</button>{busy ? <button type="button" className="danger" onClick={cancel}>Cancel</button> : <button type="submit">Ask Jarvis</button>}</div>
         </form>
       </section>}
 
