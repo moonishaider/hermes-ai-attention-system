@@ -586,6 +586,14 @@ function App() {
         <p className="eyebrow">Action firewall</p><h2>External writes remain fail-closed</h2>
         <p>Company/client writes are unavailable. DLOA remains exact-preview only. Personal Calendar and Gmail draft execution are disabled until separately granted and accepted.</p>
         <span className="pill">Global kill switch on</span>
+        <h3>Capability and permission matrix</h3>
+        <div className="item-list permission-matrix">
+          <article><strong>Personal Calendar</strong><span>Wrapper reviewed · execution disabled</span><p>Only the selected personal calendar can ever be targeted. Attendees, recurrence, ambiguity, or unusual reminders require an exact preview; no event is created during this build.</p></article>
+          <article><strong>Personal Gmail drafts</strong><span>Create/update owned draft only · execution disabled</span><p>Draft sending is absent. Jarvis cannot call Gmail send endpoints, and can update only a draft it previously created after the capability is separately accepted.</p></article>
+          <article><strong>Work Google accounts</strong><span>Read-only · write tools absent</span><p>Work Gmail and Calendar write capabilities are not registered. The interface cannot widen scopes or substitute the personal account.</p></article>
+          <article><strong>Owner authorization</strong><span>Local exact intent required</span><p>Retrieved email, Slack, web, meeting, or document text is untrusted evidence and cannot approve an action. A changed target, permission snapshot, preview hash, or expired request fails closed.</p></article>
+          <article><strong>Guided navigation</strong><span>Exact preview before opening</span><p>Fixed profile, account, domain, context, and read-only action are shown first. No arbitrary URL, typing, submission, download, settings change, or generic computer control exists.</p></article>
+        </div>
         <div className="item-list">{localState?.actionPreviews?.map((item) => <article key={item.proposal_id}>
           <strong>{item.state}</strong><span>{item.updated_at.slice(0, 10)}</span><p>Preview hash {item.preview_hash.slice(0, 16)}… · not executed here</p>
         </article>)}</div>
