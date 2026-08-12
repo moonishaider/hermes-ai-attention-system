@@ -59,6 +59,8 @@ function App() {
   const [localState, setLocalState] = useState<JarvisState | null>(null);
   const [localTitle, setLocalTitle] = useState("");
   const [localDetails, setLocalDetails] = useState("");
+  const [capabilityRequiresCode, setCapabilityRequiresCode] = useState(false);
+  const [codexSpec, setCodexSpec] = useState<Record<string, unknown> | null>(null);
   const [localNotice, setLocalNotice] = useState("");
   const [commitmentTitle, setCommitmentTitle] = useState("");
   const [selectedCommitment, setSelectedCommitment] = useState<string | null>(null);
@@ -435,16 +437,23 @@ function App() {
     if (!localTitle.trim() || !localDetails.trim()) return;
     setLocalNotice("Validating locally…");
     try {
-      const result = await invoke<{ status: string }>("create_local_item", {
+      const result = await invoke<{ status: string; implementationSpec?: Record<string, unknown>; activationPerformed?: boolean }>("create_local_item", {
         request: {
           kind, context, title: localTitle.trim(), details: localDetails.trim(),
           sources: kind === "radar" ? ["public-web"] : [],
           tools: kind === "capability" ? ["search_evidence", "ledger_query"] : [],
-          requiresCode: false,
+          requiresCode: kind === "capability" && capabilityRequiresCode,
         },
       });
-      setLocalNotice(`${kind} saved locally · ${result.status}`);
+      if (result.status === "codex-spec-only" && result.implementationSpec) {
+        setCodexSpec(result.implementationSpec);
+        setLocalNotice("Codex-ready specification generated. Jarvis did not modify code, install, activate, or deploy anything.");
+      } else {
+        setCodexSpec(null);
+        setLocalNotice(`${kind} saved locally · ${result.status}`);
+      }
       setLocalTitle(""); setLocalDetails("");
+      setCapabilityRequiresCode(false);
       setLocalState(await invoke<JarvisState>("jarvis_state", { context }));
     } catch (error) {
       setLocalNotice(`Not created: ${String(error)}`);
@@ -534,7 +543,7 @@ function App() {
         </section>
         <section className="card intelligence-strip">
           <div><p className="eyebrow">Background intelligence</p><strong>{background === "off" ? "Off" : background === "login" ? "While logged in" : "While Jarvis runs"}</strong><small>{localState?.proactive?.source_count ?? 0} bounded ledger sources in the current brief</small></div>
-          <div className="focus-controls"><button className="quiet" onClick={() => void loadProjection("start-of-day")}>Start day</button><button className="quiet" onClick={() => void loadProjection("end-of-day")}>End day / DLOA</button><button className="quiet" onClick={() => void loadProjection("absence-return")}>Catch up</button><button className="quiet" onClick={() => void startFocus(30)}>Focus 30m</button><button className="quiet" onClick={() => void startFocus(60)}>60m</button>{localState?.focusSessions?.find((item) => !item.stopped_at) && <button className="danger" onClick={() => void stopFocus(localState.focusSessions.find((item) => !item.stopped_at)!.focus_id)}>Stop focus</button>}</div>
+          <div className="focus-controls"><button className="quiet" onClick={() => void loadProjection("start-of-day")}>Start day</button><button className="quiet" onClick={() => void loadProjection("pre-meeting")}>Pre-meeting</button><button className="quiet" onClick={() => void loadProjection("end-of-day")}>End day / DLOA</button><button className="quiet" onClick={() => void loadProjection("absence-return")}>Catch up</button><button className="quiet" onClick={() => void startFocus(30)}>Focus 30m</button><button className="quiet" onClick={() => void startFocus(60)}>60m</button>{localState?.focusSessions?.find((item) => !item.stopped_at) && <button className="danger" onClick={() => void stopFocus(localState.focusSessions.find((item) => !item.stopped_at)!.focus_id)}>Stop focus</button>}</div>
         </section>
         {projection && <section className="card surface"><p className="eyebrow">Ledger projection · local only</p><pre>{String((projection.dloa as { text?: string } | undefined)?.text ?? JSON.stringify(projection, null, 2))}</pre><button className="quiet" onClick={() => setProjection(null)}>Dismiss</button></section>}
         {localState?.focusSessions?.find((item) => !item.stopped_at) && <section className="card focus-timeline">
@@ -607,7 +616,9 @@ function App() {
         {["Missions", "Radars", "Capability Studio"].includes(active) && <div className="local-create">
           <input value={localTitle} onChange={(event) => setLocalTitle(event.target.value)} placeholder={active === "Missions" ? "Goal" : active === "Radars" ? "Question to watch" : "Capability name"}/>
           <textarea value={localDetails} onChange={(event) => setLocalDetails(event.target.value)} placeholder={active === "Missions" ? "What proves this is complete?" : active === "Radars" ? "What would count as a meaningful change?" : "Describe the low-risk workflow"}/>
+          {active === "Capability Studio" && <label className="setting"><span>Requires new code or integration <small>Generate a Codex spec only; never self-modify or deploy</small></span><input aria-label="Requires new code or integration" type="checkbox" checked={capabilityRequiresCode} onChange={(event) => setCapabilityRequiresCode(event.target.checked)}/></label>}
           <button onClick={() => void createLocal(active === "Missions" ? "mission" : active === "Radars" ? "radar" : "capability")}>Validate and save locally</button>
+          {active === "Capability Studio" && codexSpec && <article className="navigation-preview"><strong>Codex-ready implementation specification</strong><span>Context: {String(codexSpec.context_id)}</span><span>Requested tools: {Array.isArray(codexSpec.tools) ? codexSpec.tools.join(", ") : "none"}</span><span>No code change · no activation · no deployment</span><pre>{JSON.stringify(codexSpec, null, 2)}</pre></article>}
           {localNotice && <small>{localNotice}</small>}
         </div>}
         {active === "Decisions" && <button onClick={() => { setActive("Chat"); setPrompt("Show my recent evidence-backed decisions in this context."); }}>Review with Jarvis</button>}

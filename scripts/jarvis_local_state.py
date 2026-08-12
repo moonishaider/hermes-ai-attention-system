@@ -189,7 +189,13 @@ def create(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
         spec, permission_inventory={tool: "read/local" for tool in APPROVED_CAPABILITY_TOOLS},
     )
     if result.get("status") == "codex-spec-only":
-        return {"ok": True, "kind": kind, "status": "codex-spec-only", "activationPerformed": False}
+        return {
+            "ok": True,
+            "kind": kind,
+            "status": "codex-spec-only",
+            "activationPerformed": False,
+            "implementationSpec": result["implementation_spec"],
+        }
     dry = studio.dry_run(
         result["capability_id"],
         current_permission_inventory={tool: "read/local" for tool in APPROVED_CAPABILITY_TOOLS},
