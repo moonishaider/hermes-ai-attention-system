@@ -38,7 +38,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   }),
 }));
 
-import App, { transcriptsMateriallyDisagree } from "./App";
+import App, { spokenProjection, transcriptsMateriallyDisagree } from "./App";
 
 afterEach(() => {
   cleanup();
@@ -56,6 +56,15 @@ describe("Jarvis desktop shell", () => {
       "show my meetings for tomorrow morning",
       "please show my meetings tomorrow morning",
     )).toBe(false);
+  });
+
+  it("speaks two natural sentences while leaving display detail untouched", () => {
+    const displayed = "**Direct answer:** You have one meeting. It starts at 2 PM. Full evidence follows. https://example.com/source\n```private technical block```";
+    const spoken = spokenProjection(displayed);
+    expect(spoken).toBe("Direct answer: You have one meeting. It starts at 2 PM.");
+    expect(spoken).not.toContain("https://");
+    expect(spoken).not.toContain("technical block");
+    expect(displayed).toContain("Full evidence follows");
   });
 
   it("shows protected daily-use surfaces and refreshed local state", async () => {

@@ -25,6 +25,17 @@ export function transcriptsMateriallyDisagree(live: string, final: string) {
   return union > 0 && shared / union < 0.45;
 }
 
+export function spokenProjection(value: string) {
+  const plain = value
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/[*#_`>|\[\]()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const sentences = plain.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [];
+  return sentences.slice(0, 2).map((sentence) => sentence.trim()).join(" ").slice(0, 420);
+}
+
 const fallbackHealth: HealthStatus = {
   state: "starting", hermesVersion: "0.20.0", backend: "Checking",
   context: "personal", modelRoute: "DeepSeek V4 Flash", budget: "Checking",
@@ -71,17 +82,6 @@ function App() {
   const voiceToggleRef = useRef<() => Promise<void>>(async () => undefined);
   const speakResponseRef = useRef(false);
   const voiceDeliveryIdRef = useRef<string | null>(null);
-
-  function spokenProjection(value: string) {
-    const plain = value
-      .replace(/```[\s\S]*?```/g, "")
-      .replace(/https?:\/\/\S+/g, "")
-      .replace(/[*#_`>|\[\]()]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    const sentences = plain.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [];
-    return sentences.slice(0, 2).join(" ").trim().slice(0, 420);
-  }
 
   useEffect(() => {
     const refreshHealth = () => invoke<HealthStatus>("system_status").then(setHealth).catch((error) => {
