@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const mockState = vi.hoisted(() => ({ failRunStart: false }));
+
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ label: "main" }) }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => undefined) }));
 vi.mock("@tauri-apps/api/core", () => ({
@@ -22,6 +24,11 @@ vi.mock("@tauri-apps/api/core", () => ({
     };
     if (command === "autostart_status") return false;
     if (command === "request_microphone_access") return "authorized";
+    if (command === "transcribe_audio") return { transcript: "review my personal tasks", provider: "openai" };
+    if (command === "start_run") {
+      if (mockState.failRunStart) throw new Error("synthetic backend unavailable");
+      return { runId: "run-1", route: "routine", reason: "routine request" };
+    }
     if (command === "guided_navigation_preview") return {
       destination: "personal-upwork", label: "Upwork", context: "personal",
       account: "Personal / Upwork", profile: "Profile 1", domain: "upwork.com",
@@ -36,6 +43,7 @@ import App, { transcriptsMateriallyDisagree } from "./App";
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  mockState.failRunStart = false;
 });
 
 describe("Jarvis desktop shell", () => {
@@ -86,5 +94,36 @@ describe("Jarvis desktop shell", () => {
     expect(screen.getByText("upwork.com · personal")).toBeTruthy();
     expect(screen.getByText("No mutation")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Open this exact page" })).toBeTruthy();
+  });
+
+  it("retains failed dictation and exposes retry edit and discard", async () => {
+    mockState.failRunStart = true;
+    const stopTrack = vi.fn();
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: vi.fn(async () => ({ getTracks: () => [{ stop: stopTrack }] })) },
+    });
+    class SyntheticRecorder {
+      mimeType = "audio/webm";
+      ondataavailable: ((event: { data: Blob }) => void) | null = null;
+      onstop: (() => void) | null = null;
+      constructor(_stream: unknown) {}
+      start(_timeslice: number) {}
+      stop() {
+        this.ondataavailable?.({ data: new Blob(["synthetic audio"], { type: this.mimeType }) });
+        this.onstop?.();
+      }
+    }
+    Object.defineProperty(globalThis, "MediaRecorder", { configurable: true, value: SyntheticRecorder });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Talk" }));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Stop listening" })).toHaveLength(2));
+    fireEvent.click(screen.getAllByRole("button", { name: "Stop listening" })[1]);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Retry transcription" })).toBeTruthy());
+    expect(screen.getByRole("button", { name: "Edit transcript" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Discard" })).toBeTruthy();
+    expect(screen.getByText(/recording is retained only in memory/i)).toBeTruthy();
+    expect(stopTrack).toHaveBeenCalledOnce();
   });
 });
