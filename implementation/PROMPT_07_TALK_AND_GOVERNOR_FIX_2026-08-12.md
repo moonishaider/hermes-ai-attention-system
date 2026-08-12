@@ -47,10 +47,10 @@ The previously accepted direct Terra connectivity result remains valid provider 
 
 - 90 Python unit/security/contract tests passed.
 - 3 renderer tests passed.
-- 4 Rust policy/lifecycle tests passed.
+- 5 Rust policy/lifecycle tests passed.
 - TypeScript/Vite production build, Rust formatting, Clippy with warnings denied, release application build, ad-hoc code-signature verification, secret scan, configuration doctor, safety preflight, command-rule negatives, and production npm audit passed.
 - Production npm audit reported zero vulnerabilities.
-- Installed binary SHA-256: `c3d086527ff5461619d072eed1f83b92ed21ff4ea22db2fa0656e745f722e6bf`.
+- Installed binary SHA-256: `c042ddd99497a0bdea778344a6c856e26d6f479a09f9d8c3949fb317df8b01f8`.
 - The installed app owns one Hermes gateway on a fresh authenticated loopback-only port selected by macOS per launch; no development server is involved.
 - Normal application Quit terminated the exact gateway process group, and two clean reopens each received a different healthy loopback port with one app and one owned gateway.
 - The immediately preceding app is preserved at `backups/Jarvis-pre-talk-fix-20260812T000151Z.app`.
