@@ -22,6 +22,11 @@ vi.mock("@tauri-apps/api/core", () => ({
     };
     if (command === "autostart_status") return false;
     if (command === "request_microphone_access") return "authorized";
+    if (command === "guided_navigation_preview") return {
+      destination: "personal-upwork", label: "Upwork", context: "personal",
+      account: "Personal / Upwork", profile: "Profile 1", domain: "upwork.com",
+      action: "open", query: "", mutation: false,
+    };
     return {};
   }),
 }));
@@ -71,5 +76,15 @@ describe("Jarvis desktop shell", () => {
     await waitFor(() => expect(screen.getByText("Finish verified work")).toBeTruthy());
     expect(screen.getByText("Evidence required")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Open commitment from this evidence" })).toBeTruthy();
+  });
+
+  it("requires an exact guided-navigation preview before opening", async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview exact navigation" }));
+    await waitFor(() => expect(screen.getByText("Profile 1 · Personal / Upwork")).toBeTruthy());
+    expect(screen.getByText("upwork.com · personal")).toBeTruthy();
+    expect(screen.getByText("No mutation")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open this exact page" })).toBeTruthy();
   });
 });

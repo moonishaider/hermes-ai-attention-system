@@ -32,6 +32,18 @@ export interface RunEvent {
 
 export interface RunStart { runId: string; route: string; reason: string; }
 
+export interface GuidedNavigationPlan {
+  destination: string;
+  label: string;
+  context: string;
+  account: string;
+  profile: string;
+  domain: string;
+  action: string;
+  query: string;
+  mutation: false;
+}
+
 export interface JarvisState {
   ok: boolean;
   context: ContextId;

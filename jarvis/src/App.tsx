@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import type { ContextId, HealthStatus, JarvisState, RunEvent, RunStart } from "./types";
+import type { ContextId, GuidedNavigationPlan, HealthStatus, JarvisState, RunEvent, RunStart } from "./types";
 
 const NAV = ["Now", "Chat", "Work Ledger", "Projects", "Missions", "Radars", "Actions", "Learning", "Capability Studio", "Decisions", "Settings"];
 const CONTEXTS: { id: ContextId; label: string }[] = [
@@ -55,6 +55,9 @@ function App() {
   const [voiceRetryAvailable, setVoiceRetryAvailable] = useState(false);
   const [modelOverride, setModelOverride] = useState<"auto" | "routine" | "difficult" | "review">("auto");
   const [projection, setProjection] = useState<Record<string, unknown> | null>(null);
+  const [navigationDestination, setNavigationDestination] = useState("personal-upwork");
+  const [navigationQuery, setNavigationQuery] = useState("");
+  const [navigationPlan, setNavigationPlan] = useState<GuidedNavigationPlan | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -461,6 +464,32 @@ function App() {
     } catch (error) { setLocalNotice(`Completion not accepted: ${String(error)}`); }
   }
 
+  async function previewNavigation() {
+    try {
+      const plan = await invoke<GuidedNavigationPlan>("guided_navigation_preview", {
+        request: { destination: navigationDestination, context, query: navigationQuery },
+      });
+      setNavigationPlan(plan);
+      setLocalNotice("Review the exact profile, account, domain, and read-only action. Nothing has opened yet.");
+    } catch (error) {
+      setNavigationPlan(null);
+      setLocalNotice(`Navigation not staged: ${String(error)}`);
+    }
+  }
+
+  async function openNavigation() {
+    if (!navigationPlan) return;
+    try {
+      await invoke<GuidedNavigationPlan>("guided_navigation_open", {
+        request: { destination: navigationPlan.destination, context: navigationPlan.context, query: navigationPlan.query },
+      });
+      setLocalNotice(`Opened ${navigationPlan.label} in ${navigationPlan.profile}. Jarvis did not type or submit anything.`);
+      setNavigationPlan(null);
+    } catch (error) {
+      setLocalNotice(`Navigation stopped safely: ${String(error)}`);
+    }
+  }
+
   if (isHud) return <div className="hud-shell">
     <div className="hud-title"><span className="orb"/><span>Ask Jarvis</span><small>{contextLabel}</small></div>
     <form className="hud-composer" onSubmit={submit}>
@@ -584,6 +613,15 @@ function App() {
         <article className="card"><h3>Background intelligence</h3><div className="segmented"><button className={background === "off" ? "selected" : ""} onClick={() => void setBackgroundMode("off")}>Off</button><button className={background === "running" ? "selected" : ""} onClick={() => void setBackgroundMode("running")}>While running</button><button className={background === "login" ? "selected" : ""} onClick={() => void setBackgroundMode("login")}>While logged in</button></div><div className="setting"><span>Launch at login <small>Visible opt-in</small></span><button onClick={toggleAutostart}>{autostart ? "On" : "Off"}</button></div></article>
         <article className="card"><h3>Personal Calendar style</h3><p>{localState?.calendarStyle ? `${localState.calendarStyle.review_status} · updated ${localState.calendarStyle.updated_at.slice(0, 10)}` : "No bounded style profile has been generated yet."}</p><span className="pill">Existing personal calendar only</span>{localState?.calendarStyle && <dl><div><dt>Sample</dt><dd>{localState.calendarStyle.profile.sample_size} events</dd></div><div><dt>Typical timed event</dt><dd>{localState.calendarStyle.profile.median_timed_duration_minutes ?? "—"} min</dd></div><div><dt>All-day / recurring</dt><dd>{Math.round(localState.calendarStyle.profile.all_day_ratio * 100)}% / {Math.round(localState.calendarStyle.profile.recurrence_ratio * 100)}%</dd></div><div><dt>Meeting links</dt><dd>{Math.round(localState.calendarStyle.profile.meeting_link_ratio * 100)}%</dd></div></dl>}<div className="setting"><button onClick={() => void buildCalendarProfile()}>Build read-only profile</button>{localState?.calendarStyle?.review_status === "pending-owner-review" && <button className="quiet" onClick={() => void reviewCalendarProfile()}>Looks right</button>}</div>{localNotice && <small>{localNotice}</small>}</article>
         <article className="card"><h3>Safety</h3><p>Company/client writes unavailable. DLOA remains exact-preview only. Personal actions are capability-scoped.</p><span className="pill">External-action kill switch on</span></article>
+        <article className="card"><h3>Guided navigation</h3><p>Open one reviewed page in the correct existing Chrome profile. No arbitrary URL, typing, submission, setting change, download, or computer control.</p><select aria-label="Reviewed destination" value={navigationDestination} onChange={(event) => { setNavigationDestination(event.target.value); setNavigationPlan(null); }}>
+          <option value="personal-upwork">Personal · Upwork messages · Profile 1</option>
+          <option value="personal-calendar">Personal · Calendar · Profile 1</option>
+          <option value="personal-gmail">Personal · Gmail · Profile 1</option>
+          <option value="mitchell-work">Mitchell · Upwork messages · Profile 1</option>
+          <option value="inside-success-calendar">Inside Success · Calendar · Profile 2</option>
+          <option value="inside-success-zoom">Inside Success · Zoom recordings · Profile 2</option>
+          <option value="public-search">Personal · public search · Profile 1</option>
+        </select>{navigationDestination === "public-search" && <input value={navigationQuery} onChange={(event) => { setNavigationQuery(event.target.value); setNavigationPlan(null); }} placeholder="Public search query"/>}<div className="setting"><button className="quiet" onClick={() => void previewNavigation()}>Preview exact navigation</button></div>{navigationPlan && <div className="navigation-preview"><strong>{navigationPlan.action} · {navigationPlan.label}</strong><span>{navigationPlan.profile} · {navigationPlan.account}</span><span>{navigationPlan.domain} · {navigationPlan.context}</span><span>No mutation</span><button onClick={() => void openNavigation()}>Open this exact page</button><button className="quiet" onClick={() => setNavigationPlan(null)}>Cancel</button></div>}{localNotice && <small>{localNotice}</small>}</article>
         <article className="card"><h3>Runtime</h3><dl><div><dt>Hermes</dt><dd>{health.hermesVersion}</dd></div><div><dt>Route</dt><dd>{health.modelRoute}</dd></div><div><dt>Budget</dt><dd>{health.budget}</dd></div></dl></article>
       </section>}
     </main>
