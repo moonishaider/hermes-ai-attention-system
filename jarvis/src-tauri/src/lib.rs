@@ -3,7 +3,7 @@ use reqwest::blocking::{Client, Response};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::fs::OpenOptions;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
@@ -39,6 +39,7 @@ struct HermesInner {
     project_root: PathBuf,
     state: Mutex<String>,
     voice_deliveries: Mutex<std::collections::HashMap<String, RunStart>>,
+    personal_previews: Mutex<std::collections::HashMap<String, (String, Instant)>>,
 }
 
 #[derive(Serialize)]
@@ -322,6 +323,7 @@ impl HermesAdapter {
                 project_root: Self::discover_project_root()?,
                 state: Mutex::new("starting".into()),
                 voice_deliveries: Mutex::new(std::collections::HashMap::new()),
+                personal_previews: Mutex::new(std::collections::HashMap::new()),
             }),
         })
     }
@@ -959,6 +961,81 @@ impl HermesAdapter {
                 .to_owned())
         }
     }
+
+    fn authorize_personal_google_actions(&self) -> Result<Value, String> {
+        let script = self
+            .inner
+            .project_root
+            .join("scripts/authorize_personal_google_actions.py");
+        if !script.is_file() {
+            return Err("reviewed personal Google authorization adapter is missing".into());
+        }
+        let mut child = Command::new(self.python()?)
+            .arg(&script)
+            .current_dir(&self.inner.project_root)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|error| format!("personal Google authorization did not start: {error}"))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or("authorization output unavailable")?;
+        let mut reader = BufReader::new(stdout);
+        let mut first = String::new();
+        reader
+            .read_line(&mut first)
+            .map_err(|error| format!("authorization setup failed: {error}"))?;
+        let setup: Value = serde_json::from_str(&first)
+            .map_err(|_| "authorization adapter returned no safe URL")?;
+        let url = setup
+            .get("authorizationUrl")
+            .and_then(Value::as_str)
+            .ok_or("authorization adapter returned no URL")?;
+        if !url.starts_with("https://accounts.google.com/o/oauth2/v2/auth?") {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("authorization URL is outside the reviewed Google endpoint".into());
+        }
+        let chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+        if !std::path::Path::new(chrome).is_file() {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("Google Chrome is unavailable at the reviewed path".into());
+        }
+        Command::new(chrome)
+            .arg("--profile-directory=Profile 1")
+            .arg("--new-tab")
+            .arg(url)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|error| format!("personal Google consent page did not open: {error}"))?;
+        let mut remainder = String::new();
+        reader
+            .read_to_string(&mut remainder)
+            .map_err(|error| format!("authorization result failed: {error}"))?;
+        let status = child
+            .wait()
+            .map_err(|error| format!("authorization wait failed: {error}"))?;
+        let final_line = remainder
+            .lines()
+            .rfind(|line| !line.trim().is_empty())
+            .ok_or("authorization returned no final result")?;
+        let value: Value = serde_json::from_str(final_line)
+            .map_err(|_| "authorization returned an invalid result")?;
+        if status.success() && value.get("ok").and_then(Value::as_bool) == Some(true) {
+            Ok(value)
+        } else {
+            Err(value
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("personal Google authorization failed")
+                .into())
+        }
+    }
 }
 
 #[tauri::command]
@@ -1188,6 +1265,180 @@ async fn local_control(
 }
 
 #[tauri::command]
+async fn personal_action_status(adapter: State<'_, HermesAdapter>) -> Result<Value, String> {
+    let owned = adapter.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        owned.run_python(
+            "jarvis_local_state.py",
+            &["personal-action-status"],
+            Some(b"{}"),
+        )
+    })
+    .await
+    .map_err(|error| format!("personal action status worker failed: {error}"))?
+}
+
+#[tauri::command]
+async fn set_personal_actions_enabled(
+    adapter: State<'_, HermesAdapter>,
+    enabled: bool,
+) -> Result<Value, String> {
+    let bytes = serde_json::to_vec(&json!({"enabled": enabled}))
+        .map_err(|error| format!("personal action setting encoding failed: {error}"))?;
+    let owned = adapter.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        owned.run_python(
+            "jarvis_local_state.py",
+            &["personal-action-setting"],
+            Some(&bytes),
+        )
+    })
+    .await
+    .map_err(|error| format!("personal action setting worker failed: {error}"))?
+}
+
+#[tauri::command]
+async fn authorize_personal_google_actions(
+    adapter: State<'_, HermesAdapter>,
+) -> Result<Value, String> {
+    let owned = adapter.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || owned.authorize_personal_google_actions())
+        .await
+        .map_err(|error| format!("personal Google authorization worker failed: {error}"))?
+}
+
+#[tauri::command]
+async fn personal_action_preview(
+    adapter: State<'_, HermesAdapter>,
+    request: Value,
+) -> Result<Value, String> {
+    let bytes = serde_json::to_vec(&request)
+        .map_err(|error| format!("personal preview encoding failed: {error}"))?;
+    if bytes.len() > 16_384 {
+        return Err("personal preview is too large".into());
+    }
+    let owned = adapter.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        owned.run_python(
+            "jarvis_local_state.py",
+            &["personal-action-preview"],
+            Some(&bytes),
+        )
+    })
+    .await
+    .map_err(|error| format!("personal preview worker failed: {error}"))??;
+    let proposal = result
+        .get("proposalId")
+        .and_then(Value::as_str)
+        .ok_or("preview has no proposal id")?;
+    let hash = result
+        .get("previewHash")
+        .and_then(Value::as_str)
+        .ok_or("preview has no hash")?;
+    if proposal.len() > 100 || hash.len() != 64 {
+        return Err("preview identity is invalid".into());
+    }
+    adapter
+        .inner
+        .personal_previews
+        .lock()
+        .map_err(|_| "preview lock poisoned")?
+        .insert(
+            proposal.into(),
+            (hash.into(), Instant::now() + Duration::from_secs(900)),
+        );
+    Ok(result)
+}
+
+fn open_personal_result_url(value: &Value) -> Result<(), String> {
+    let Some(url) = value.get("directUrl").and_then(Value::as_str) else {
+        return Ok(());
+    };
+    let allowed = url.starts_with("https://mail.google.com/mail/u/0/#drafts/")
+        || url.starts_with("https://www.google.com/calendar/event?");
+    if !allowed {
+        return Err("provider result URL is outside the personal allowlist".into());
+    }
+    let chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+    Command::new(chrome)
+        .arg("--profile-directory=Profile 1")
+        .arg("--new-tab")
+        .arg(url)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| format!("personal result did not open: {error}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn personal_action_execute(
+    adapter: State<'_, HermesAdapter>,
+    proposal_id: String,
+    preview_hash: String,
+) -> Result<Value, String> {
+    let entry = adapter
+        .inner
+        .personal_previews
+        .lock()
+        .map_err(|_| "preview lock poisoned")?
+        .remove(&proposal_id)
+        .ok_or("native owner preview is absent or already consumed")?;
+    if entry.0 != preview_hash || entry.1 <= Instant::now() {
+        return Err("native owner preview changed or expired".into());
+    }
+    let mut nonce_bytes = [0_u8; 32];
+    fill(&mut nonce_bytes).map_err(|error| format!("owner nonce failed: {error}"))?;
+    let native_nonce = nonce_bytes
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let bytes = serde_json::to_vec(
+        &json!({"proposalId": proposal_id, "previewHash": preview_hash,
+        "nativeNonce": native_nonce}),
+    )
+    .map_err(|error| format!("owner approval encoding failed: {error}"))?;
+    let owned = adapter.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        owned.run_python(
+            "jarvis_local_state.py",
+            &["personal-action-execute"],
+            Some(&bytes),
+        )
+    })
+    .await
+    .map_err(|error| format!("personal action worker failed: {error}"))??;
+    open_personal_result_url(&result)?;
+    Ok(result)
+}
+
+#[tauri::command]
+async fn personal_calendar_undo(
+    adapter: State<'_, HermesAdapter>,
+    provider_id: String,
+) -> Result<Value, String> {
+    if provider_id.is_empty()
+        || provider_id.len() > 300
+        || provider_id.chars().any(char::is_control)
+    {
+        return Err("invalid owned calendar event id".into());
+    }
+    let bytes = serde_json::to_vec(&json!({"providerId": provider_id}))
+        .map_err(|error| format!("calendar undo encoding failed: {error}"))?;
+    let owned = adapter.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        owned.run_python(
+            "jarvis_local_state.py",
+            &["personal-calendar-undo"],
+            Some(&bytes),
+        )
+    })
+    .await
+    .map_err(|error| format!("calendar undo worker failed: {error}"))?
+}
+
+#[tauri::command]
 async fn observe_frontmost(
     adapter: State<'_, HermesAdapter>,
     focus_id: String,
@@ -1264,6 +1515,29 @@ fn guided_navigation_open(
     #[cfg(not(target_os = "macos"))]
     return Err("guided navigation is available only in the packaged macOS app".into());
     Ok(plan)
+}
+
+#[tauri::command]
+async fn guided_navigation_read(
+    adapter: State<'_, HermesAdapter>,
+    request: GuidedNavigationRequest,
+) -> Result<Value, String> {
+    let (plan, _) = HermesAdapter::guided_navigation_plan(&request)?;
+    if plan.destination != "public-search" || plan.action != "search" || plan.mutation {
+        return Err("guided reading is limited to public-search evidence".into());
+    }
+    let bytes = serde_json::to_vec(&json!({"query": plan.query}))
+        .map_err(|error| format!("public read encoding failed: {error}"))?;
+    let owned = adapter.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        owned.run_python(
+            "jarvis_local_state.py",
+            &["guided-public-read"],
+            Some(&bytes),
+        )
+    })
+    .await
+    .map_err(|error| format!("public read worker failed: {error}"))?
 }
 
 #[tauri::command]
@@ -1363,9 +1637,16 @@ pub fn run() {
             jarvis_state,
             create_local_item,
             local_control,
+            personal_action_status,
+            set_personal_actions_enabled,
+            authorize_personal_google_actions,
+            personal_action_preview,
+            personal_action_execute,
+            personal_calendar_undo,
             observe_frontmost,
             guided_navigation_preview,
             guided_navigation_open,
+            guided_navigation_read,
             autostart_status,
             set_autostart
         ])
@@ -1415,9 +1696,16 @@ mod tests {
             "jarvis_state",
             "create_local_item",
             "local_control",
+            "personal_action_status",
+            "set_personal_actions_enabled",
+            "authorize_personal_google_actions",
+            "personal_action_preview",
+            "personal_action_execute",
+            "personal_calendar_undo",
             "observe_frontmost",
             "guided_navigation_preview",
             "guided_navigation_open",
+            "guided_navigation_read",
             "autostart_status",
             "set_autostart",
         ];

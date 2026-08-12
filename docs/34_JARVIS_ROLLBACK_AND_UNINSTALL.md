@@ -18,10 +18,11 @@ Choose **Quit Jarvis completely** from its menu-bar item. Confirm the Jarvis pro
 ## Installed-app rollback copies
 
 The immediately preceding signed application packages are preserved under the
-project-local ignored `backups/` directory. The exact pre-final package is
-`backups/Jarvis-pre-exact-stop-parser-20260813T011000Z.app`;
-the installed final binary has SHA-256
-`9e224eda108750e0d15713b2d2a6d5f75294d0cc82ef98eecb8d828ecf82b385`.
+project-local ignored `backups/` directory. The exact app before the final
+default-off personal-action build is
+`backups/Jarvis-pre-default-off-personal-actions-20260812T154336Z.app`;
+the installed final-candidate binary has SHA-256
+`be2a11627fb6659a9aa36f7afa944152f903d56dbba2d3e8f95a885b147b9f4b`.
 The final database backup and restore drill is preserved under
 `backups/prompt7-final-20260812T211500Z`; both copies passed SQLite
 `quick_check=ok`. Keep them project-local and inspect the exact path before any restore.
@@ -29,3 +30,15 @@ Restoring means quitting Jarvis, moving the current exact app to a new backup
 name, copying one reviewed rollback app to `/Applications/Jarvis.app`, verifying
 its deep signature, and reopening it. Never broadly delete or overwrite the
 only copy.
+
+## Personal-action rollback
+
+In Jarvis → Actions, select **Disable personal actions** first. This leaves any
+existing personal event or draft unchanged while disabling both registered
+execution capabilities. The separate owner-only token is
+`~/.hermes/mcp-tokens/google_personal_actions.json`; do not remove it through an
+automated cleanup. If revocation is desired, revoke the exact Jarvis personal
+Google grant from the Google Account UI, then preserve the local record in a
+new dated owner-only backup before any manual retirement. A Jarvis-created
+calendar event should be reversed only through its exact **Undo this event**
+control; Jarvis has no Gmail-send or draft-delete operation.

@@ -43,3 +43,5 @@ Say `Remember that I prefer ...` for an explicit low-risk preference. **Learning
 Company/client writes, Gmail sending, work Google writes, generic Slack sending, payments, unrestricted browser/computer control, continuous screen capture, and mobile messaging are unavailable. Personal Calendar and Gmail-draft wrappers remain disabled until separately accepted under the project rules. Launch at Login is a visible opt-in and is currently off.
 
 The installed application is `/Applications/Jarvis.app`. Terminal scripts and the stock Hermes UI are diagnostic fallbacks only.
+
+For the full daily-use guide—including the default-off personal Calendar/Gmail-draft controls and safe scrollable public reading—use `START_HERE_JARVIS.md`.

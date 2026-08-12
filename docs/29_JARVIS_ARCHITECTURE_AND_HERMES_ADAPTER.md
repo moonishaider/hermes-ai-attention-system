@@ -10,7 +10,9 @@ Jarvis is a Tauri 2 + React/TypeScript desktop shell over the accepted Hermes 0.
 2. Rust owns a random, process-memory-only bearer credential and the exact `hermes gateway run` child it starts.
 3. Jarvis asks macOS for one fresh loopback port per launch, then its owned Hermes gateway binds only `127.0.0.1:<private dynamic port>`. Rust calls the authenticated `/health/detailed`, `/v1/runs`, SSE events, and stop endpoints. Neither the port nor bearer credential reaches React, logs, Git, or command output. A full quit closes the gateway; a relaunch cannot inherit the prior aiohttp listener's macOS teardown state.
 4. React may call only typed Tauri commands. There is no shell, process, arbitrary URL, arbitrary filesystem, generic HTTP, updater, or browser-control command.
-5. Voice, one-shot screen understanding, and local-state operations use three exact Python adapters. Rust validates schemas and sizes before invoking them; the renderer cannot select an executable or path.
+5. Voice, one-shot screen understanding, local state, and personal-action OAuth use exact reviewed Python adapters. Rust validates schemas and sizes before invoking them; the renderer cannot select an executable or path. Personal Google consent opens only the official authorization endpoint in Chrome Profile 1, and provider result links are limited to exact personal Calendar-event or Gmail-draft URLs.
+6. Personal Calendar/Gmail execution is a separate trust island. Its token is separate from read-only Google tokens, capabilities start Off independently of token presence, and a native in-memory preview binding plus local signed owner-intent reference must match the exact payload/hash before the endpoint allowlist is reachable. The company/client global kill switch remains on.
+7. Guided public reading does not grant webview network authority. Rust calls the bounded local public-search adapter; React receives only redacted citation objects and renders result titles as inert text in a scrollable pane.
 
 ## Runtime lifecycle
 
