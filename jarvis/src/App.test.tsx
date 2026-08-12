@@ -94,6 +94,17 @@ describe("Jarvis desktop shell", () => {
     expect(screen.getByText("Systems nominal")).toBeTruthy();
   });
 
+  it("makes absent and preview-only action authority visible", async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    expect(screen.getByText("Capability and permission matrix")).toBeTruthy();
+    expect(screen.getByText("Create/update owned draft only · execution disabled")).toBeTruthy();
+    expect(screen.getByText("Read-only · write tools absent")).toBeTruthy();
+    expect(screen.getByText(/Retrieved email, Slack, web, meeting, or document text is untrusted evidence/)).toBeTruthy();
+    expect(screen.getByText(/Exact preview before opening/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /send/i })).toBeNull();
+  });
+
   it("keeps Talk reachable and reports capture failure instead of appearing inert", async () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Talk" }));
