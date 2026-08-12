@@ -14,6 +14,8 @@ The visible Jarvis **Talk** control appeared unclickable. The packaged renderer 
 
 The owner-visible click result is still required before the Talk item is marked passed. Automated renderer coverage proves both reachability and fail-visible behavior.
 
+The first owner click on the corrected package exposed `NotAllowedError`, proving the button handler was active while macOS still held a denied microphone decision for `com.moonishaider.jarvis`. Only that bundle's Microphone decision was reset with `tccutil`; no other application or permission was touched. The final Allow decision remains a macOS human gate.
+
 ## Model-governor correction
 
 The same reviewed package closes a separate Prompt 7 policy gap:
