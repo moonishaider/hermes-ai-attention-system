@@ -8,7 +8,7 @@ Jarvis is a Tauri 2 + React/TypeScript desktop shell over the accepted Hermes 0.
 
 1. The WebView renders local bundled assets only. Its CSP permits no remote scripts or arbitrary network access.
 2. Rust owns a random, process-memory-only bearer credential and the exact `hermes gateway run` child it starts.
-3. Hermes binds only `127.0.0.1:8642`. Rust calls the authenticated `/health/detailed`, `/v1/runs`, SSE events, and stop endpoints. The bearer credential never reaches React, logs, Git, or command output.
+3. Jarvis asks macOS for one fresh loopback port per launch, then its owned Hermes gateway binds only `127.0.0.1:<private dynamic port>`. Rust calls the authenticated `/health/detailed`, `/v1/runs`, SSE events, and stop endpoints. Neither the port nor bearer credential reaches React, logs, Git, or command output. A full quit closes the gateway; a relaunch cannot inherit the prior aiohttp listener's macOS teardown state.
 4. React may call only typed Tauri commands. There is no shell, process, arbitrary URL, arbitrary filesystem, generic HTTP, updater, or browser-control command.
 5. Voice, one-shot screen understanding, and local-state operations use three exact Python adapters. Rust validates schemas and sizes before invoking them; the renderer cannot select an executable or path.
 

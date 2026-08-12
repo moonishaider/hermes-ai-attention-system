@@ -16,10 +16,12 @@ vi.mock("@tauri-apps/api/core", () => ({
       projects: [], missions: [], radars: [], capabilities: [],
       budget: { level: "ok", spent_usd: 0, hard_usd: 50 },
       integrations: {}, codexSync: { mode: "readonly", scheduled: false }, killSwitch: true,
-      recentLedger: [], commitments: [], recentDecisions: [], actionPreviews: [], learningItems: [],
+      recentLedger: [{ entry_id: "ledger-1", kind: "work", occurred_at_utc: "2026-08-12T01:00:00Z", local_date: "2026-08-12", actor_state: "owner", summary: "Verified work", confidence_state: "confirmed", freshness_at: "2026-08-12T01:01:00Z", evidence_ids: ["evidence-1"] }],
+      commitments: [{ task_id: "commitment-1", title: "Finish verified work", status: "open", evidence_ids: ["evidence-1"], confidence: 1, updated_at: "2026-08-12T01:02:00Z" }], recentDecisions: [], actionPreviews: [], learningItems: [],
       focusSessions: [], automationProposals: [], backgroundMode: "running",
     };
     if (command === "autostart_status") return false;
+    if (command === "request_microphone_access") return "authorized";
     return {};
   }),
 }));
@@ -50,5 +52,13 @@ describe("Jarvis desktop shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Talk" }));
     await waitFor(() => expect(screen.getByText(/Talk could not start:/)).toBeTruthy());
     expect(screen.getByText(/Nothing was recorded or submitted/)).toBeTruthy();
+  });
+
+  it("shows evidence-bound commitment controls in the Work Ledger", async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Work Ledger" }));
+    await waitFor(() => expect(screen.getByText("Finish verified work")).toBeTruthy());
+    expect(screen.getByText("Evidence required")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open commitment from this evidence" })).toBeTruthy();
   });
 });

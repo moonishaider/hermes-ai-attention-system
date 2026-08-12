@@ -103,11 +103,18 @@ def state(service: AttentionService, context_id: str) -> dict[str, Any]:
            FROM ledger_entries WHERE context_id=?
            ORDER BY occurred_at_utc DESC LIMIT 25""", (context_id,),
     )]
+    for item in recent_ledger:
+        item["evidence_ids"] = [row["evidence_id"] for row in connection.execute(
+            "SELECT evidence_id FROM ledger_sources WHERE entry_id=? ORDER BY evidence_id",
+            (item["entry_id"],),
+        )]
     commitments = [dict(row) for row in connection.execute(
-        """SELECT entry_id,occurred_at_utc,summary,confidence_state,task_id
-           FROM ledger_entries WHERE context_id=? AND kind='commitment'
-           ORDER BY occurred_at_utc DESC LIMIT 12""", (context_id,),
+        """SELECT task_id,title,status,due_at,evidence_ids_json,confidence,updated_at
+           FROM tasks WHERE context_id=? AND task_type='commitment'
+           ORDER BY updated_at DESC LIMIT 12""", (context_id,),
     )]
+    for item in commitments:
+        item["evidence_ids"] = json.loads(item.pop("evidence_ids_json"))
     recent_decisions = [dict(row) for row in connection.execute(
         """SELECT decision_id,decision,reasoning,decided_at,review_at,actual_outcome
            FROM decisions WHERE context_id=? ORDER BY decided_at DESC LIMIT 12""", (context_id,),
@@ -348,11 +355,50 @@ def record_model_decision(service: AttentionService, value: dict[str, Any]) -> d
     return {"ok": True, "runId": run_id, "recorded": True}
 
 
+def commitment_open(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    context_id = str(value.get("context") or "")
+    if context_id not in {"inside-success", "mitchell", "personal"}:
+        raise ValueError("commitment requires one explicit context")
+    evidence_id = bounded(value.get("evidenceId"), maximum=160, name="source evidence")
+    linked = service.store.connection.execute(
+        """SELECT 1 FROM ledger_sources ls JOIN ledger_entries le ON le.entry_id=ls.entry_id
+           WHERE ls.evidence_id=? AND le.context_id=? LIMIT 1""",
+        (evidence_id, context_id),
+    ).fetchone()
+    if not linked:
+        raise ValueError("commitment source is not ledger evidence in this context")
+    task_id = service.ledger.open_commitment(
+        title=bounded(value.get("title"), maximum=500, name="commitment title"),
+        context_id=context_id, evidence_ids=(evidence_id,),
+    )
+    return {"ok": True, "taskId": task_id, "status": "open", "externalWrite": False}
+
+
+def commitment_complete(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    task_id = bounded(value.get("taskId"), maximum=100, name="commitment id")
+    evidence_id = bounded(value.get("evidenceId"), maximum=160, name="completion evidence")
+    task = service.store.connection.execute(
+        "SELECT context_id FROM tasks WHERE task_id=? AND task_type='commitment' AND status='open'",
+        (task_id,),
+    ).fetchone()
+    if not task:
+        raise ValueError("open commitment not found")
+    linked = service.store.connection.execute(
+        """SELECT 1 FROM ledger_sources ls JOIN ledger_entries le ON le.entry_id=ls.entry_id
+           WHERE ls.evidence_id=? AND le.context_id=? LIMIT 1""",
+        (evidence_id, task["context_id"]),
+    ).fetchone()
+    if not linked:
+        raise ValueError("completion proof is not ledger evidence in the commitment context")
+    service.ledger.verify_commitment_complete(task_id, evidence_id=evidence_id)
+    return {"ok": True, "taskId": task_id, "status": "completed", "externalWrite": False}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "operation",
-        choices=("state", "create", "focus", "stop-focus", "observe", "setting", "calendar-profile", "review-calendar-profile", "projection", "capability-control", "automation-outcome", "record-model-decision"),
+        choices=("state", "create", "focus", "stop-focus", "observe", "setting", "calendar-profile", "review-calendar-profile", "projection", "capability-control", "automation-outcome", "record-model-decision", "commitment-open", "commitment-complete"),
     )
     parser.add_argument("--context")
     arguments = parser.parse_args()
@@ -376,6 +422,8 @@ def main() -> int:
                     "capability-control": capability_control,
                     "automation-outcome": automation_outcome,
                     "record-model-decision": record_model_decision,
+                    "commitment-open": commitment_open,
+                    "commitment-complete": commitment_complete,
                 }[arguments.operation](service, value)
         finally:
             service.close()

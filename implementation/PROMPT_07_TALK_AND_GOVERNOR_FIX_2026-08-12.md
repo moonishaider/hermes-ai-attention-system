@@ -12,9 +12,22 @@ The visible Jarvis **Talk** control appeared unclickable. The packaged renderer 
 - A missing WebKit media API, rejected permission, or capture error now produces a visible `Talk could not start` explanation and explicitly confirms that nothing was recorded or submitted.
 - Audio remains in memory only for the bounded transcription/retry path. This change adds no wake listener, continuous microphone, file retention, browser control, or external write.
 
-The owner-visible click result is still required before the Talk item is marked passed. Automated renderer coverage proves both reachability and fail-visible behavior.
+The owner-visible click result passed in the installed application. Automated renderer coverage also proves both reachability and fail-visible behavior.
 
-The first owner click on the corrected package exposed `NotAllowedError`, proving the button handler was active while macOS still held a denied microphone decision for `com.moonishaider.jarvis`. Only that bundle's Microphone decision was reset with `tccutil`; no other application or permission was touched. The final Allow decision remains a macOS human gate.
+The first owner click on the corrected package exposed `NotAllowedError`, proving the button handler was active while the packaged WKWebView had no usable native microphone consent. A second package then exposed the native AVFoundation state as `Denied`, while Jarvis was absent from the visible Microphone list. The final correction now:
+
+- asks AVFoundation for the exact app's native microphone authorization before invoking `getUserMedia`;
+- waits visibly for the macOS decision and distinguishes authorized, denied, restricted, and incomplete states;
+- signs the bundle with the single Apple audio-input entitlement `com.apple.security.device.audio-input`;
+- retains `NSMicrophoneUsageDescription` in the installed Info.plist;
+- clears only the stale `com.moonishaider.jarvis` Microphone decision after installation; and
+- logs owned-gateway startup diagnostics to an owner-only runtime file outside Git instead of discarding failures.
+
+Apple's current media-capture documentation requires explicit owner authorization and identifies the audio-input entitlement for microphone capture. No camera, Accessibility, screen-control, filesystem, browser, or external-write entitlement was added. Syed completed that exact gate and visibly confirmed Talk, record, and Stop worked.
+
+The first captured request was substantially mistranscribed by the local Whisper `base` model. A bounded comparison used three existing synthetic Ryan voice fixtures only. On the fixture designed to say “Hermes Voice Synthetic Test,” local STT returned “Kurmi's voice synthetic test” in 2.28 s while `gpt-4o-mini-transcribe` returned the exact phrase in 2.40 s. On two warm fixtures the cloud route also corrected Hermes proper-name errors and completed in 2.06 s versus 2.22 s and 1.54 s versus 1.82 s. Syed's next real dictated sentence was nevertheless still materially wrong, so quality acceptance failed and Jarvis moved to the higher-accuracy official `gpt-4o-transcribe` route. A second three-fixture pass returned the exact expected text for all three files in 2.30–2.98 seconds. Jarvis retains local STT as a fail-safe fallback and supports the explicit `JARVIS_STT_PROVIDER=local` privacy override. Recordings are deleted immediately after transcription and no transcript fixture contains private source content. One real owner sentence remains necessary to measure the final room-accuracy result honestly.
+
+The gateway diagnostic also exposed a reproducible macOS/aiohttp fixed-port conflict during immediate quit/reopen. Jarvis now creates a private process group for the exact gateway it owns, terminates that group gracefully, serializes startup, and asks macOS for a fresh private loopback port on every launch. The selected port and bearer credential remain native-only and never reach React or logs. A new launch therefore cannot attach to or collide with the prior listener while macOS completes teardown. No development server is involved.
 
 ## Model-governor correction
 
@@ -32,13 +45,16 @@ The previously accepted direct Terra connectivity result remains valid provider 
 
 ## Verification and installation
 
-- 86 Python unit/security/contract tests passed.
-- 2 renderer tests passed.
+- 90 Python unit/security/contract tests passed.
+- 3 renderer tests passed.
 - 4 Rust policy/lifecycle tests passed.
 - TypeScript/Vite production build, Rust formatting, Clippy with warnings denied, release application build, ad-hoc code-signature verification, secret scan, configuration doctor, safety preflight, command-rule negatives, and production npm audit passed.
 - Production npm audit reported zero vulnerabilities.
-- Installed binary SHA-256: `f09cc66432d116154114e2e6b76c0352d54d1def8b4404d238412bad9e26b0c3`.
-- The installed app owns one Hermes gateway on authenticated loopback `127.0.0.1:8642`; no development server is involved.
+- Installed binary SHA-256: `a0fa0579231beaa1c8b3f0a88145162cc6b351804336272ae152b6ff16d5475f`.
+- The installed app owns one Hermes gateway on a fresh authenticated loopback-only port selected by macOS per launch; no development server is involved.
+- Normal application Quit terminated the exact gateway process group, and two clean reopens each received a different healthy loopback port with one app and one owned gateway.
 - The immediately preceding app is preserved at `backups/Jarvis-pre-talk-fix-20260812T000151Z.app`.
+- Additional pre-permission-bridge rollback bundles are preserved at `backups/Jarvis-pre-native-microphone-20260812T0527.app`, `backups/Jarvis-native-microphone-pre-gateway-log-20260812T0538.app`, and `backups/Jarvis-pre-audio-entitlement-20260812T0540.app`.
+- The immediately preceding fixed-port application is preserved at `backups/Jarvis-pre-dynamic-loopback-20260812T012901Z.app`.
 
 No Slack/email was sent, no calendar was changed, and no company/client write or unrestricted control was enabled.
