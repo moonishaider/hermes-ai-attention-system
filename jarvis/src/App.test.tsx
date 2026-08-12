@@ -149,6 +149,15 @@ describe("Jarvis desktop shell", () => {
     expect(screen.getByText(/"connector_fanout_performed": false/)).toBeTruthy();
   });
 
+  it("clears context-scoped projections and drafts when context changes", async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Pre-meeting" }));
+    await waitFor(() => expect(screen.getByText(/"mode": "pre-meeting"/)).toBeTruthy());
+    fireEvent.change(screen.getByRole("combobox", { name: "Current context" }), { target: { value: "mitchell" } });
+    await waitFor(() => expect(screen.queryByText(/"mode": "pre-meeting"/)).toBeNull());
+    expect((screen.getByRole("combobox", { name: "Current context" }) as HTMLSelectElement).value).toBe("mitchell");
+  });
+
   it("retains failed dictation and exposes retry edit and discard", async () => {
     mockState.failRunStart = true;
     const stopTrack = vi.fn();

@@ -139,6 +139,16 @@ function App() {
   }, []);
 
   useEffect(() => {
+    // A context switch is a hard visual boundary. Never leave an answer,
+    // projection, transcript, draft, or navigation preview from the previous
+    // context on screen while the newly scoped state loads.
+    setAnswer("");
+    setProgress([]);
+    setProjection(null);
+    setNavigationPlan(null);
+    setVoiceTranscript("");
+    setPrompt("");
+    setLocalNotice("");
     invoke<JarvisState>("jarvis_state", { context }).then((value) => {
       setLocalState(value); setBackground(value.backgroundMode || "running");
     }).catch(() => setLocalState(null));
