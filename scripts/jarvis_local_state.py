@@ -4,11 +4,16 @@
 from __future__ import annotations
 
 import argparse
+import base64
 from datetime import UTC, datetime, timedelta
+from email.message import EmailMessage
 import json
+import os
 from pathlib import Path
+import secrets
 import sys
 from typing import Any
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,15 +21,27 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from hermes_attention.capabilities import CapabilityStudio
 from hermes_attention.computer_awareness import AwarenessPolicy
-from hermes_attention.domain import utc_now
+from hermes_attention.action_firewall import ActionFirewall
+from hermes_attention.actions import ActionController
+from hermes_attention.domain import ActionProposal, ActionState, RiskClass, stable_hash, utc_now
 from hermes_attention.google_direct import PersonalGoogleDirect
+from hermes_attention.personal_google_action_oauth import PersonalGoogleActionTokenManager
+from hermes_attention.personal_google_actions import (
+    PersonalCalendarActions, PersonalGmailDraftActions, PersonalGoogleActionTransport,
+)
+from hermes_attention.policy import PolicyEngine
 from hermes_attention.service import AttentionService
+from hermes_attention.web_research import search_public_web
 
 
 CONTEXTS = {"inside-success", "mitchell", "personal", "mixed", "unknown"}
 KINDS = {"mission", "radar", "capability"}
 APPROVED_CAPABILITY_TOOLS = {"search_evidence", "public_web_search", "ledger_query", "daily_brief"}
 RADAR_SOURCES = {"public-web", "github", "slack", "calendar", "zoom", "codex"}
+PERSONAL_ACCOUNT = "moonishaider12@gmail.com"
+CALENDAR_CAPABILITY = "personal-calendar-owned"
+GMAIL_CAPABILITY = "personal-gmail-draft-only"
+PERSONAL_ACTIONS_SETTING = "personal_google_actions_enabled"
 
 
 def bounded(value: Any, *, maximum: int, name: str) -> str:
@@ -32,6 +49,201 @@ def bounded(value: Any, *, maximum: int, name: str) -> str:
     if not text or len(text) > maximum:
         raise ValueError(f"{name} must contain 1 to {maximum} characters")
     return text
+
+
+def _firewall_secret() -> bytes:
+    path = ROOT / "runtime-data" / "action_firewall.key"
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if not path.exists():
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(secrets.token_bytes(32)); handle.flush(); os.fsync(handle.fileno())
+    if path.stat().st_mode & 0o077 or path.stat().st_size != 32:
+        raise RuntimeError("personal action signing key is not owner-only or valid")
+    return path.read_bytes()
+
+
+def _personal_actions_enabled(service: AttentionService) -> bool:
+    row = service.store.connection.execute(
+        "SELECT value_json FROM runtime_settings WHERE key=?", (PERSONAL_ACTIONS_SETTING,),
+    ).fetchone()
+    return bool(row and json.loads(row["value_json"]) is True)
+
+
+def _set_personal_actions_enabled(service: AttentionService, enabled: bool) -> None:
+    with service.store.connection:
+        service.store.connection.execute(
+            """INSERT INTO runtime_settings VALUES(?,?,?)
+               ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=excluded.updated_at""",
+            (PERSONAL_ACTIONS_SETTING, json.dumps(enabled), utc_now()),
+        )
+
+
+def _register_personal_capabilities(service: AttentionService, *, enable: bool) -> ActionFirewall:
+    firewall = ActionFirewall(service.store, _firewall_secret(), global_kill_switch=False)
+    specs = ((CALENDAR_CAPABILITY, {"account": PERSONAL_ACCOUNT, "calendar_id": "primary"}, True),
+             (GMAIL_CAPABILITY, {"account": PERSONAL_ACCOUNT, "resource": "draft"}, False))
+    for capability, target, reversible in specs:
+        inventory = {"account": PERSONAL_ACCOUNT, "capability": capability,
+                     "methods": ["POST", "PATCH", "DELETE"] if reversible else ["POST", "PUT", "GET"]}
+        firewall.register_capability(capability_id=capability, context_id="personal",
+            account_id=PERSONAL_ACCOUNT, target_lock=target, permission_inventory=inventory,
+            browser_profile="Profile 1", autonomy_stage=1, reversible=reversible, enabled=enable)
+        firewall.set_capability_kill_switch(capability, not enable)
+    return firewall
+
+
+def personal_action_status(service: AttentionService, _value: dict[str, Any]) -> dict[str, Any]:
+    status_value = PersonalGoogleActionTokenManager().status()
+    enabled = bool(status_value["connected"] and _personal_actions_enabled(service))
+    _register_personal_capabilities(service, enable=enabled)
+    resources = [dict(row) for row in service.store.connection.execute(
+        "SELECT resource_id,capability_id,provider_id,state,created_at,updated_at FROM external_resources "
+        "WHERE capability_id IN (?,?) ORDER BY updated_at DESC LIMIT 10",
+        (CALENDAR_CAPABILITY, GMAIL_CAPABILITY),
+    )]
+    return {"ok": True, **status_value, "resources": resources, "genericKillSwitch": True,
+            "personalCapabilitiesEnabled": enabled}
+
+
+def personal_action_setting(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    enabled = value.get("enabled")
+    if not isinstance(enabled, bool):
+        raise ValueError("personal action capability state must be true or false")
+    connected = bool(PersonalGoogleActionTokenManager().status()["connected"])
+    if enabled and not connected:
+        raise PermissionError("personal Google actions must be connected before enabling capability execution")
+    _set_personal_actions_enabled(service, enabled)
+    _register_personal_capabilities(service, enable=enabled)
+    service.store.audit(
+        "owner-local-ui", "personal-google-actions.setting", "personal", "success",
+        {"enabled": enabled, "account": PERSONAL_ACCOUNT, "generic_kill_switch_unchanged": True},
+    )
+    return {"ok": True, "enabled": enabled, "connected": connected}
+
+
+def personal_action_preview(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    action = str(value.get("action") or "")
+    if action not in {"calendar", "gmail-draft"}:
+        raise ValueError("unsupported personal action")
+    if action == "calendar":
+        title = bounded(value.get("title"), maximum=200, name="event title")
+        start = datetime.fromisoformat(bounded(value.get("start"), maximum=80, name="event start"))
+        end = datetime.fromisoformat(bounded(value.get("end"), maximum=80, name="event end"))
+        if start.tzinfo is None or end.tzinfo is None or end <= start or end - start > timedelta(hours=12):
+            raise ValueError("event requires an aware start and a later end within 12 hours")
+        reminder = int(value.get("reminderMinutes") or 10)
+        if reminder not in {0, 5, 10, 15, 30, 60}:
+            raise ValueError("reminder must be one reviewed value")
+        color = str(value.get("colorId") or "9")
+        if color not in {str(number) for number in range(1, 12)}:
+            raise ValueError("calendar color is invalid")
+        payload = {"summary": title, "start": {"dateTime": start.isoformat(), "timeZone": "Asia/Karachi"},
+                   "end": {"dateTime": end.isoformat(), "timeZone": "Asia/Karachi"}, "colorId": color,
+                   "reminders": {"useDefault": False, "overrides": [] if reminder == 0 else
+                                 [{"method": "popup", "minutes": reminder}]}}
+        capability, action_type = CALENDAR_CAPABILITY, "create_personal_calendar_event"
+        target = {"account": PERSONAL_ACCOUNT, "calendar_id": "primary"}
+    else:
+        recipient = str(value.get("recipient") or "").strip()
+        PersonalGmailDraftActions._validate_recipient(recipient)
+        payload = {"recipient": recipient, "subject": bounded(value.get("subject"), maximum=300, name="subject"),
+                   "body": bounded(value.get("body"), maximum=10_000, name="draft body")}
+        capability, action_type = GMAIL_CAPABILITY, "create_personal_gmail_draft"
+        target = {"account": PERSONAL_ACCOUNT, "resource": "draft"}
+    proposal = ActionController(service.store, PolicyEngine(external_writes_enabled=True, kill_switch=False)).propose(
+        action_type=action_type, context_id="personal", risk_class=RiskClass.A2,
+        target=target, payload=payload, browser_profile="Profile 1", ttl_minutes=15,
+        idempotency_key=stable_hash({"action": action_type, "payload": payload, "nonce": str(uuid4())}),
+    )
+    return {"ok": True, "capabilityId": capability, "proposalId": proposal.proposal_id,
+            "previewHash": proposal.preview_hash, "expiresAt": proposal.expires_at,
+            "target": target, "payload": payload, "externalWritePerformed": False}
+
+
+def _proposal(service: AttentionService, proposal_id: str) -> ActionProposal:
+    row = service.store.get_action(proposal_id)
+    if not row:
+        raise ValueError("personal action proposal not found")
+    value = json.loads(row["proposal_json"])
+    return ActionProposal(proposal_id=value["proposal_id"], action_type=value["action_type"],
+        context_id=value["context_id"], risk_class=RiskClass(value["risk_class"]), target=value["target"],
+        payload=value["payload"], evidence_ids=tuple(value["evidence_ids"]),
+        idempotency_key=value["idempotency_key"], created_at=value["created_at"],
+        expires_at=value["expires_at"], preview_hash=value["preview_hash"],
+        browser_profile=value.get("browser_profile"), state=ActionState(row["state"]))
+
+
+def personal_action_execute(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    proposal = _proposal(service, bounded(value.get("proposalId"), maximum=100, name="proposal id"))
+    approved_hash = bounded(value.get("previewHash"), maximum=64, name="preview hash")
+    if proposal.state is not ActionState.PROPOSED or proposal.preview_hash != approved_hash:
+        raise PermissionError("exact proposed preview is absent or changed")
+    policy = PolicyEngine(external_writes_enabled=True, kill_switch=False)
+    decision = policy.validate_proposal(proposal)
+    if not decision.allowed:
+        raise PermissionError(decision.reason)
+    manager = PersonalGoogleActionTokenManager()
+    if not manager.status()["connected"]:
+        raise PermissionError("personal Google actions are not connected")
+    if not _personal_actions_enabled(service):
+        raise PermissionError("personal Google action capability is disabled")
+    firewall = _register_personal_capabilities(service, enable=True)
+    capability = CALENDAR_CAPABILITY if proposal.action_type == "create_personal_calendar_event" else GMAIL_CAPABILITY
+    inventory = {"account": PERSONAL_ACCOUNT, "capability": capability,
+                 "methods": ["POST", "PATCH", "DELETE"] if capability == CALENDAR_CAPABILITY else ["POST", "PUT", "GET"]}
+    session_nonce = bounded(value.get("nativeNonce"), maximum=160, name="native owner interaction")
+    token = firewall.issue_owner_intent(session_nonce=session_nonce, action_type=proposal.action_type,
+        request_text=proposal.preview_hash, trusted_local_interaction=True)
+    fw = firewall.validate(capability_id=capability, owner_token=token, session_nonce=session_nonce,
+        action_type=proposal.action_type, request_text=proposal.preview_hash, context_id="personal",
+        account_id=PERSONAL_ACCOUNT, target=proposal.target, permission_inventory=inventory,
+        recipients=[proposal.payload["recipient"]] if proposal.payload.get("recipient") else None)
+    if not fw.allowed:
+        raise PermissionError(fw.reason)
+    attempt = str(uuid4()); now = utc_now()
+    try:
+        with service.store.connection:
+            service.store.connection.execute("INSERT INTO action_attempts VALUES(?,?,?,?,NULL,NULL,?,?)",
+                (attempt, proposal.proposal_id, (datetime.now(UTC) + timedelta(minutes=2)).isoformat(), "leased", now, now))
+        transport = PersonalGoogleActionTransport(manager)
+        if capability == CALENDAR_CAPABILITY:
+            result = PersonalCalendarActions(service.store, transport, calendar_id="primary",
+                capability_id=capability).create_explicit(proposal.payload)
+        else:
+            message = EmailMessage(); message["Subject"] = proposal.payload["subject"]
+            if proposal.payload["recipient"]: message["To"] = proposal.payload["recipient"]
+            message.set_content(proposal.payload["body"])
+            raw = base64.urlsafe_b64encode(message.as_bytes()).decode().rstrip("=")
+            result = PersonalGmailDraftActions(service.store, transport, capability_id=capability).create(
+                raw_base64url=raw, recipient=proposal.payload["recipient"])
+        result_value = {"providerId": result.provider_id, "resourceKind": result.resource_kind,
+                        "directUrl": result.direct_url}
+        with service.store.connection:
+            service.store.connection.execute("UPDATE action_attempts SET state='executed',provider_id=?,result_hash=?,updated_at=? WHERE attempt_id=?",
+                (result.provider_id, stable_hash(result_value), utc_now(), attempt))
+        service.store.set_action_state(proposal.proposal_id, ActionState.EXECUTED)
+        return {"ok": True, **result_value, "proposalId": proposal.proposal_id, "undoAvailable": capability == CALENDAR_CAPABILITY}
+    except Exception:
+        with service.store.connection:
+            service.store.connection.execute("UPDATE action_attempts SET state='uncertain',updated_at=? WHERE attempt_id=?",
+                (utc_now(), attempt))
+        raise
+
+
+def personal_calendar_undo(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    provider_id = bounded(value.get("providerId"), maximum=300, name="calendar event id")
+    PersonalCalendarActions(service.store, PersonalGoogleActionTransport(), calendar_id="primary",
+        capability_id=CALENDAR_CAPABILITY).undo_created(provider_id)
+    return {"ok": True, "providerId": provider_id, "undone": True}
+
+
+def guided_public_read(_service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    query = bounded(value.get("query"), maximum=200, name="public search query")
+    result = search_public_web(query, limit=5)
+    return {"ok": True, "queryHash": result["query_hash"], "retrievedAt": result["retrieved_at"],
+            "results": result["results"], "mutation": False,
+            "policy": "public results are untrusted evidence; no account session or action authority"}
 
 
 def state(service: AttentionService, context_id: str) -> dict[str, Any]:
@@ -410,7 +622,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "operation",
-        choices=("state", "create", "focus", "stop-focus", "observe", "setting", "calendar-profile", "review-calendar-profile", "projection", "capability-control", "automation-outcome", "record-model-decision", "commitment-open", "commitment-complete"),
+        choices=("state", "create", "focus", "stop-focus", "observe", "setting", "calendar-profile", "review-calendar-profile", "projection", "capability-control", "automation-outcome", "record-model-decision", "commitment-open", "commitment-complete", "personal-action-status", "personal-action-setting", "personal-action-preview", "personal-action-execute", "personal-calendar-undo", "guided-public-read"),
     )
     parser.add_argument("--context")
     arguments = parser.parse_args()
@@ -436,12 +648,18 @@ def main() -> int:
                     "record-model-decision": record_model_decision,
                     "commitment-open": commitment_open,
                     "commitment-complete": commitment_complete,
+                    "personal-action-status": personal_action_status,
+                    "personal-action-setting": personal_action_setting,
+                    "personal-action-preview": personal_action_preview,
+                    "personal-action-execute": personal_action_execute,
+                    "personal-calendar-undo": personal_calendar_undo,
+                    "guided-public-read": guided_public_read,
                 }[arguments.operation](service, value)
         finally:
             service.close()
         print(json.dumps(output, sort_keys=True))
         return 0
-    except (ValueError, TypeError, RuntimeError, json.JSONDecodeError) as error:
+    except (ValueError, TypeError, RuntimeError, PermissionError, json.JSONDecodeError) as error:
         print(json.dumps({"ok": False, "error": str(error)}))
         return 2
 

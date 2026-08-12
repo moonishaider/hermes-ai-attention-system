@@ -25,11 +25,13 @@ This record separates owner-visible evidence from configuration and automated te
 - Start day, Pre-meeting, End day/DLOA, and Catch up visibly rendered as bounded local Work Ledger projections with no connector fan-out or external write. Sparse evidence remained visibly sparse rather than being fabricated.
 - The packaged Work Ledger showed context-scoped source-backed entries with actor and freshness labels; two consecutive bounded refreshes processed zero because the durable cursor was current. Mitchell remained explicitly dormant with its historical ledger preserved and zero ordinary proactive sources. Context switching cleared the previous context's projection.
 - No company/client message, calendar change, email, purchase, form submission, unrestricted computer control, or other forbidden external action occurred.
-- The packaged Actions screen now exposes the actual permission matrix: Personal Calendar and Gmail drafts are disabled and bounded; Gmail sending and work Google writes are absent; retrieved content cannot authorize an action; guided navigation requires an exact non-mutating preview. This is visible product evidence backed by negative tests, not a claim inferred from configuration.
+- The packaged Actions screen now exposes the actual permission matrix: Personal Calendar and Gmail drafts use a separate grant and remain capability-disabled by default even after consent; Gmail sending and work Google writes are absent; retrieved content cannot authorize an action; guided navigation requires an exact non-mutating preview. This is visible product evidence backed by negative tests, not a claim inferred from configuration.
 
 ## Automated support completed
 
-- Marked-root preflight, hook/rule negatives, secret scan, configuration doctor, Python compile, Rust formatting/clippy, 90 Python tests, fifteen frontend tests, six Rust tests, static/release frontend build, and the production dependency audit pass.
+- Marked-root preflight, hook/rule negatives, secret scan, configuration doctor, Python compile, Rust formatting/clippy, 94 Python tests, fifteen frontend tests, six Rust tests, static/release frontend build, and the production dependency audit pass. The final personal-action package was ad-hoc signed and installed with binary SHA-256 `be2a11627fb6659a9aa36f7afa944152f903d56dbba2d3e8f95a885b147b9f4b`.
+- The final public-reader adapter was exercised live with redacted output after restoring exact `ddgs==9.14.4`: five HTTPS citations, a stable query hash, and `mutation: false`. The UI deliberately renders titles as inert text rather than opening remote result pages in the webview.
+- The packaged Jarvis reader was then exercised visibly: `Personal · public search · Profile 1` previewed the exact public-search boundary, loaded five dated HTTPS citations for a harmless ergonomic-mouse query, and scrolled inside Jarvis. No account session, remote result link, or mutation surface was used.
 - The Work Ledger contains 11,424 evidence projections with immutable source links and a durable cursor so completed rows are not rescanned. Actor attribution is 11,199 owner and 225 uncertain; uncertainty was preserved rather than forced.
 - Model selection, context-before-limit retrieval, Mitchell dormancy, owner-origin action policy, personal Google endpoint restrictions, capability protection, radar change detection, no-retention screen handling, and absence of builder-only Sol from runtime routes have deterministic tests.
 - Capability feedback is deterministic and recoverable: useful promotes a draft/disabled capability only to shadow, not-useful disables it, feedback provenance is retained, and disabled/archived entries can be restored to draft. The packaged owner-visible lifecycle and Automation Miner acceptance are complete.
@@ -37,10 +39,10 @@ This record separates owner-visible evidence from configuration and automated te
 
 ## Pending owner-visible checks
 
-The remaining visible product check is the correct-browser-profile guided-navigation case. The app remains fail-closed wherever Chrome profile identity cannot be proven. It is not inferred from tests.
+Two Prompt 7 checks remain unclaimed: the exact personal Calendar create/Undo cycle and the exact unsent Gmail draft create/open cycle. Both require a separate owner consent and physical create clicks because Codex may not perform live calendar/email mutations. The app remains fail-closed wherever Chrome profile identity cannot be proven.
 
 ## Deliberately blocked or deferred
 
-- A real personal Calendar mutation and personal Gmail draft mutation are not performed by Codex because the repository build rules prohibit live calendar/email mutations. The wrappers and negative tests exist; Gmail send and work writes are absent.
+- A real personal Calendar mutation and personal Gmail draft mutation are not performed by Codex because the repository build rules prohibit live calendar/email mutations. The reviewed owner-operated paths are installed: separate exact scopes, owner-only token storage, capability Off by default, exact native preview, global company/client kill switch unchanged, per-capability switches, and Gmail send/work writes absent.
 - Wake phrase is absent and off. Global text and explicit talk shortcuts are the supported activation paths.
 - Apple notarization is unavailable without an Apple Developer signing identity. The private local bundle is ad-hoc signed.

@@ -107,7 +107,9 @@ describe("Jarvis desktop shell", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Actions" }));
     expect(screen.getByText("Capability and permission matrix")).toBeTruthy();
-    expect(screen.getByText("Create/update owned draft only · execution disabled")).toBeTruthy();
+    expect(screen.getByText("Create/update owned draft only · exact owner click")).toBeTruthy();
+    expect(screen.getByText(/Calendar owned-events and Gmail compose scopes only/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Create exactly this event" })).toBeNull();
     expect(screen.getByText("Read-only · write tools absent")).toBeTruthy();
     expect(screen.getByText(/Retrieved email, Slack, web, meeting, or document text is untrusted evidence/)).toBeTruthy();
     expect(screen.getByText(/Exact preview before opening/)).toBeTruthy();

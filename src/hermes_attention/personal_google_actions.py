@@ -10,13 +10,58 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from typing import Any, Callable
-from urllib.parse import quote
+from urllib.parse import quote, urlencode, urlparse
+from urllib.request import Request, urlopen
 
 from .domain import stable_hash, utc_now
 from .storage import Store
+from .google_offline_oauth import _ssl_context
+from .personal_google_action_oauth import PersonalGoogleActionTokenManager
 
 
 Transport = Callable[[str, str, dict[str, Any] | None, dict[str, str] | None], dict[str, Any]]
+
+
+class PersonalGoogleActionTransport:
+    """Exact endpoint/method allowlist; notably, Gmail send does not exist."""
+
+    def __init__(self, tokens: PersonalGoogleActionTokenManager | None = None,
+                 *, opener: Callable[..., Any] = urlopen) -> None:
+        self.tokens, self.opener = tokens or PersonalGoogleActionTokenManager(), opener
+
+    @staticmethod
+    def _allowed(method: str, url: str) -> bool:
+        parsed = urlparse(url)
+        path = parsed.path
+        if parsed.scheme != "https":
+            return False
+        if parsed.netloc == "www.googleapis.com":
+            base = "/calendar/v3/calendars/primary/events"
+            return (method == "POST" and path == base) or (
+                method in {"PATCH", "DELETE"} and path.startswith(base + "/") and path.count("/") == 6)
+        if parsed.netloc == "gmail.googleapis.com":
+            base = "/gmail/v1/users/me/drafts"
+            return (method == "POST" and path == base) or (
+                method in {"GET", "PUT"} and path.startswith(base + "/") and path.count("/") == 6)
+        return False
+
+    def __call__(self, method: str, url: str, body: dict[str, Any] | None,
+                 params: dict[str, str] | None) -> dict[str, Any]:
+        method = method.upper()
+        if not self._allowed(method, url):
+            raise PermissionError("personal Google endpoint or method is not allowlisted")
+        target = url + (("?" + urlencode(params)) if params else "")
+        data = json.dumps(body, separators=(",", ":")).encode() if body is not None else None
+        request = Request(target, data=data, method=method, headers={
+            "Authorization": f"Bearer {self.tokens.access_token()}", "Accept": "application/json",
+            **({"Content-Type": "application/json"} if data is not None else {}),
+        })
+        try:
+            with self.opener(request, timeout=30, context=_ssl_context()) as response:
+                raw = response.read()
+        except Exception as exc:
+            raise RuntimeError(f"personal Google request failed: {type(exc).__name__}") from exc
+        return json.loads(raw.decode()) if raw else {}
 
 
 @dataclass(frozen=True, slots=True)

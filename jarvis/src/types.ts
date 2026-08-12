@@ -44,6 +44,37 @@ export interface GuidedNavigationPlan {
   mutation: false;
 }
 
+export interface PersonalActionStatus {
+  ok: boolean;
+  connected: boolean;
+  account: string;
+  refreshable: boolean;
+  exact_scopes: boolean;
+  genericKillSwitch: true;
+  personalCapabilitiesEnabled: boolean;
+  resources: Array<{ resource_id: string; capability_id: string; provider_id: string; state: string; updated_at: string }>;
+}
+
+export interface PersonalActionPreview {
+  ok: boolean;
+  capabilityId: string;
+  proposalId: string;
+  previewHash: string;
+  expiresAt: string;
+  target: Record<string, string>;
+  payload: Record<string, unknown>;
+  externalWritePerformed: false;
+}
+
+export interface GuidedReadResult {
+  ok: boolean;
+  queryHash: string;
+  retrievedAt: string;
+  mutation: false;
+  policy: string;
+  results: Array<{ title: string; url: string; excerpt: string; retrieved_at: string; injection_flags: string[]; content_hash: string }>;
+}
+
 export interface JarvisState {
   ok: boolean;
   context: ContextId;
