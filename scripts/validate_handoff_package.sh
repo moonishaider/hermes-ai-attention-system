@@ -25,9 +25,12 @@ done
   echo "Expected at least 29 numbered documentation files." >&2; exit 1;
 }
 
-if grep -RIl $'\r' --include='*.md' --include='*.toml' --include='*.rules' . >/dev/null 2>&1; then
-  echo "CRLF line endings detected." >&2; exit 1
-fi
+while IFS= read -r tracked_text; do
+  if LC_ALL=C grep -Il $'\r' -- "$tracked_text" >/dev/null 2>&1; then
+    echo "CRLF line endings detected in tracked text: $tracked_text" >&2
+    exit 1
+  fi
+done < <(git ls-files '*.md' '*.toml' '*.rules')
 
 for f in scripts/*.sh; do bash -n "$f"; done
 python3 - <<'PY_VALIDATE'
