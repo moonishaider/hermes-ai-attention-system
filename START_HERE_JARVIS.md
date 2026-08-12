@@ -5,7 +5,7 @@ Open **Jarvis** from Applications, Finder, Spotlight, or the Dock. It opens its 
 ## Everyday use
 
 - Press **Command–Shift–Space** anywhere for Quick Entry, type naturally, and press Return.
-- Press **Control–Option–Space** for Talk to Jarvis. Speak the complete request, then press **Stop listening**. Jarvis does not submit a pause as a finished turn.
+- Press **Control–Option–Space** or click the always-visible **Talk** button. Talk cancels any current answer, then changes to **Stop listening** while recording. If capture cannot start, Jarvis shows the exact failure and submits nothing.
 - In the main window, choose the correct context before work: Inside Success, Personal, Mixed, Unknown, or the preserved dormant Mitchell context.
 - Use **Attention → Select area** for one explicit screen selection. Only that selection is interpreted; the screenshot is discarded.
 - Use **Stop speaking** to silence audio immediately, **Cancel** to stop a running request, and **Quit Jarvis completely** from the menu-bar icon to stop Jarvis and its owned backend.

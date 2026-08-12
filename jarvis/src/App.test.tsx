@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ label: "main" }) }));
@@ -26,7 +26,10 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import App from "./App";
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 describe("Jarvis desktop shell", () => {
   it("shows protected daily-use surfaces and refreshed local state", async () => {
@@ -36,8 +39,16 @@ describe("Jarvis desktop shell", () => {
     expect(screen.getByRole("button", { name: "Work Ledger" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Actions" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Learning" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Talk" })).toBeTruthy();
     await waitFor(() => expect(screen.getByText("12")).toBeTruthy());
     expect(screen.getByText("ledger entries in Personal")).toBeTruthy();
     expect(screen.getByText("Systems nominal")).toBeTruthy();
+  });
+
+  it("keeps Talk reachable and reports capture failure instead of appearing inert", async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Talk" }));
+    await waitFor(() => expect(screen.getByText(/Talk could not start:/)).toBeTruthy());
+    expect(screen.getByText(/Nothing was recorded or submitted/)).toBeTruthy();
   });
 });

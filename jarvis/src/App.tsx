@@ -39,6 +39,7 @@ function App() {
   const [localNotice, setLocalNotice] = useState("");
   const [voiceTranscript, setVoiceTranscript] = useState("");
   const [voiceRetryAvailable, setVoiceRetryAvailable] = useState(false);
+  const [modelOverride, setModelOverride] = useState<"auto" | "routine" | "difficult" | "review">("auto");
   const [projection, setProjection] = useState<Record<string, unknown> | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -47,6 +48,8 @@ function App() {
   const recognitionRef = useRef<{ start: () => void; stop: () => void } | null>(null);
   const runStartedRef = useRef(0);
   const routeRef = useRef("routine");
+  const stageCostRef = useRef(0);
+  const stageTokensRef = useRef(0);
   const voiceToggleRef = useRef<() => Promise<void>>(async () => undefined);
   const speakResponseRef = useRef(false);
 
@@ -70,14 +73,24 @@ function App() {
     invoke<boolean>("autostart_status").then(setAutostart).catch(() => undefined);
     const unlisten = listen<RunEvent>("jarvis-run-event", ({ payload }) => {
       if (payload.event === "message.delta" && payload.delta) setAnswer((old) => old + payload.delta);
+      if (["governor.review_started", "governor.escalation_started"].includes(payload.event)) {
+        setRunId(payload.run_id ?? null);
+        routeRef.current = payload.route ?? "difficult";
+        stageCostRef.current += payload.stage_cost_usd ?? 0;
+        stageTokensRef.current += payload.stage_tokens ?? 0;
+        setAnswer("");
+        const label = payload.event === "governor.review_started" ? "Terra independent review" : "Pro escalation";
+        setProgress((old) => [...old, `${label} · ${payload.reason ?? "governed second pass"}`]);
+      }
       if (payload.event === "run.completed" && payload.output) {
         setAnswer(payload.output);
         const latency = runStartedRef.current ? Date.now() - runStartedRef.current : 0;
         const input = payload.usage?.input_tokens ?? 0;
         const output = payload.usage?.output_tokens ?? 0;
         const rates = routeRef.current === "review" ? [2, 12] : routeRef.current === "difficult" ? [0.435, 0.87] : [0.14, 0.28];
-        const cost = (input * rates[0] + output * rates[1]) / 1_000_000;
-        setProgress((old) => [...old, `Completed · ${(latency / 1000).toFixed(1)}s · ${input + output} tokens · ~$${cost.toFixed(4)}`]);
+        const cost = stageCostRef.current + (input * rates[0] + output * rates[1]) / 1_000_000;
+        const tokens = stageTokensRef.current + input + output;
+        setProgress((old) => [...old, `Completed · ${(latency / 1000).toFixed(1)}s · ${tokens} tokens · ~$${cost.toFixed(4)}`]);
         if (speakResponseRef.current && "speechSynthesis" in window) {
           window.speechSynthesis.cancel();
           const spoken = spokenProjection(payload.output);
@@ -127,6 +140,7 @@ function App() {
     if (!text.trim() || busy) return;
     setBusy(true); setAnswer("");
     setProgress([`Acknowledged · ${contextLabel}`, "Preparing the smallest relevant source plan…"]);
+    stageCostRef.current = 0; stageTokensRef.current = 0;
     speakResponseRef.current = speakResponse;
     if (speakResponse && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
@@ -135,7 +149,9 @@ function App() {
       window.speechSynthesis.speak(acknowledgement);
     }
     try {
-      const started = await invoke<RunStart>("start_run", { request: { prompt: text.trim(), context } });
+      const started = await invoke<RunStart>("start_run", {
+        request: { prompt: text.trim(), context, overrideRoute: modelOverride },
+      });
       setRunId(started.runId);
       runStartedRef.current = Date.now();
       routeRef.current = started.route;
@@ -188,39 +204,51 @@ function App() {
       return;
     }
     stopSpeaking();
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
-    const recorder = new MediaRecorder(stream);
-    streamRef.current = stream;
-    recorderRef.current = recorder;
-    chunksRef.current = [];
-    setVoiceTranscript("");
-    const Recognition = (window as unknown as { webkitSpeechRecognition?: new () => {
-      continuous: boolean; interimResults: boolean; lang: string;
-      onresult: ((event: { results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean }> }) => void) | null;
-      start: () => void; stop: () => void;
-    } }).webkitSpeechRecognition;
-    if (Recognition) {
-      const recognition = new Recognition();
-      recognition.continuous = true; recognition.interimResults = true; recognition.lang = "en-US";
-      recognition.onresult = (event) => {
-        const text = Array.from(event.results).map((result) => result[0]?.transcript ?? "").join(" ").trim();
-        if (text) setVoiceTranscript(text);
+    if (busy) await cancel();
+    setActive("Chat");
+    try {
+      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+        throw new Error("this packaged WebView does not expose microphone capture");
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      const recorder = new MediaRecorder(stream);
+      streamRef.current = stream;
+      recorderRef.current = recorder;
+      chunksRef.current = [];
+      setVoiceTranscript("");
+      const Recognition = (window as unknown as { webkitSpeechRecognition?: new () => {
+        continuous: boolean; interimResults: boolean; lang: string;
+        onresult: ((event: { results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean }> }) => void) | null;
+        start: () => void; stop: () => void;
+      } }).webkitSpeechRecognition;
+      if (Recognition) {
+        const recognition = new Recognition();
+        recognition.continuous = true; recognition.interimResults = true; recognition.lang = "en-US";
+        recognition.onresult = (event) => {
+          const text = Array.from(event.results).map((result) => result[0]?.transcript ?? "").join(" ").trim();
+          if (text) setVoiceTranscript(text);
+        };
+        recognitionRef.current = recognition;
+        try { recognition.start(); } catch { recognitionRef.current = null; }
+      }
+      recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data); };
+      recorder.onstop = async () => {
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        lastRecordingRef.current = blob;
+        streamRef.current?.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+        recognitionRef.current = null;
+        await transcribeBlob(blob);
       };
-      recognitionRef.current = recognition;
-      try { recognition.start(); } catch { recognitionRef.current = null; }
-    }
-    recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data); };
-    recorder.onstop = async () => {
-      const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
-      lastRecordingRef.current = blob;
+      recorder.start();
+      setRecording(true);
+      setProgress(["Listening until you press Stop…"]);
+    } catch (error) {
+      setRecording(false);
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
-      recognitionRef.current = null;
-      await transcribeBlob(blob);
-    };
-    recorder.start();
-    setRecording(true);
-    setProgress(["Listening until you press Stop…"]);
+      setProgress([`Talk could not start: ${String(error)}. Nothing was recorded or submitted.`]);
+    }
   }
 
   voiceToggleRef.current = toggleVoice;
@@ -339,7 +367,7 @@ function App() {
     <div className="hud-title"><span className="orb"/><span>Ask Jarvis</span><small>{contextLabel}</small></div>
     <form className="hud-composer" onSubmit={submit}>
       <input autoFocus value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="What needs your attention?"/>
-      <button type="button" className={recording ? "danger" : "quiet"} onClick={toggleVoice}>{recording ? "Stop" : "Talk"}</button>
+      <button type="button" className={recording ? "danger" : "quiet"} onClick={() => void toggleVoice()}>{recording ? "Stop" : "Talk"}</button>
       <button type="submit">Ask</button>
     </form>
     {voiceTranscript && <div className="live-transcript">{voiceTranscript}</div>}
@@ -357,9 +385,9 @@ function App() {
     <main>
       <header>
         <div><p className="eyebrow">{active}</p><h1>{active === "Now" ? "Good evening, Syed." : active}</h1></div>
-        <select aria-label="Current context" value={context} onChange={(event) => setContext(event.target.value as ContextId)}>
+        <div className="header-actions"><button type="button" className={recording ? "danger" : "quiet"} onClick={() => void toggleVoice()}>{recording ? "Stop listening" : "Talk"}</button><select aria-label="Current context" value={context} onChange={(event) => setContext(event.target.value as ContextId)}>
           {CONTEXTS.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}
-        </select>
+        </select></div>
       </header>
 
       {active === "Now" && <>
@@ -419,7 +447,7 @@ function App() {
         </div>
         <form className="composer" onSubmit={submit}>
           <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="What needs your attention?" rows={2}/>
-          <div><button type="button" className={recording ? "danger" : "quiet"} onClick={toggleVoice}>{recording ? "Stop listening" : "Talk"}</button>{voiceRetryAvailable && lastRecordingRef.current && <button type="button" className="quiet" onClick={() => void transcribeBlob(lastRecordingRef.current!)}>Retry transcript</button>}<button type="button" className="quiet" onClick={stopSpeaking}>Stop speaking</button>{busy ? <button type="button" className="danger" onClick={cancel}>Cancel</button> : <button type="submit">Ask Jarvis</button>}</div>
+          <div><select aria-label="Model routing" value={modelOverride} onChange={(event) => setModelOverride(event.target.value as typeof modelOverride)}><option value="auto">Model · Auto</option><option value="routine">Flash</option><option value="difficult">Pro</option><option value="review">Pro + Terra review</option></select><button type="button" className={recording ? "danger" : "quiet"} onClick={() => void toggleVoice()}>{recording ? "Stop listening" : "Talk"}</button>{voiceRetryAvailable && lastRecordingRef.current && <button type="button" className="quiet" onClick={() => void transcribeBlob(lastRecordingRef.current!)}>Retry transcript</button>}<button type="button" className="quiet" onClick={stopSpeaking}>Stop speaking</button>{busy ? <button type="button" className="danger" onClick={cancel}>Cancel</button> : <button type="submit">Ask Jarvis</button>}</div>
         </form>
       </section>}
 

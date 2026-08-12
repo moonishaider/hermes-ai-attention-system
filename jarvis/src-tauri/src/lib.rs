@@ -50,6 +50,8 @@ struct HealthStatus {
 struct RunRequest {
     prompt: String,
     context: String,
+    #[serde(default)]
+    override_route: Option<String>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -81,6 +83,12 @@ struct GovernedRoute {
     provider: &'static str,
     model: &'static str,
     reason: &'static str,
+}
+
+#[derive(Clone)]
+struct GovernedPlan {
+    primary: GovernedRoute,
+    reviewer: Option<GovernedRoute>,
 }
 
 impl HermesAdapter {
@@ -210,7 +218,60 @@ impl HermesAdapter {
             .map_err(|error| format!("health probe failed: {error}"))
     }
 
-    fn governed_route(prompt: &str, context: &str) -> GovernedRoute {
+    fn governed_plan(
+        prompt: &str,
+        context: &str,
+        override_route: Option<&str>,
+    ) -> Result<GovernedPlan, String> {
+        let routine = || GovernedRoute {
+            route: "routine",
+            provider: "deepseek",
+            model: "deepseek-v4-flash",
+            reason: "routine low-risk request",
+        };
+        let difficult_route = || GovernedRoute {
+            route: "difficult",
+            provider: "deepseek",
+            model: "deepseek-v4-pro",
+            reason: "complex, cross-source, or attribution-sensitive work",
+        };
+        let review = || GovernedRoute {
+            route: "review",
+            provider: "openai-api",
+            model: "gpt-5.6-terra",
+            reason: "rare high-stakes independent review",
+        };
+        match override_route {
+            Some("routine") => {
+                return Ok(GovernedPlan {
+                    primary: GovernedRoute {
+                        reason: "explicit owner override to Flash",
+                        ..routine()
+                    },
+                    reviewer: None,
+                });
+            }
+            Some("difficult") => {
+                return Ok(GovernedPlan {
+                    primary: GovernedRoute {
+                        reason: "explicit owner override to Pro",
+                        ..difficult_route()
+                    },
+                    reviewer: None,
+                });
+            }
+            Some("review") => {
+                return Ok(GovernedPlan {
+                    primary: GovernedRoute {
+                        reason: "explicit owner override: Pro synthesis before Terra review",
+                        ..difficult_route()
+                    },
+                    reviewer: Some(review()),
+                });
+            }
+            Some(value) if value != "auto" => return Err("unsupported model override".into()),
+            _ => {}
+        }
         let normalized = prompt.to_lowercase();
         let high_stakes = [
             "security",
@@ -226,14 +287,15 @@ impl HermesAdapter {
         .iter()
         .any(|term| normalized.contains(term));
         if high_stakes {
-            return GovernedRoute {
-                route: "review",
-                provider: "openai-api",
-                model: "gpt-5.6-terra",
-                reason: "rare high-stakes independent review",
-            };
+            return Ok(GovernedPlan {
+                primary: GovernedRoute {
+                    reason: "high-stakes Pro synthesis followed by independent Terra review",
+                    ..difficult_route()
+                },
+                reviewer: Some(review()),
+            });
         }
-        let difficult = context == "mixed"
+        let is_difficult = context == "mixed"
             || [
                 "source-backed",
                 "attention brief",
@@ -247,20 +309,16 @@ impl HermesAdapter {
             ]
             .iter()
             .any(|term| normalized.contains(term));
-        if difficult {
-            return GovernedRoute {
-                route: "difficult",
-                provider: "deepseek",
-                model: "deepseek-v4-pro",
-                reason: "complex, cross-source, or attribution-sensitive work",
-            };
+        if is_difficult {
+            return Ok(GovernedPlan {
+                primary: difficult_route(),
+                reviewer: None,
+            });
         }
-        GovernedRoute {
-            route: "routine",
-            provider: "deepseek",
-            model: "deepseek-v4-flash",
-            reason: "routine low-risk request",
-        }
+        Ok(GovernedPlan {
+            primary: routine(),
+            reviewer: None,
+        })
     }
 
     fn submit_run(
@@ -308,8 +366,13 @@ impl HermesAdapter {
         context: &str,
         latency_ms: u128,
         event: &Value,
-        outcome: &str,
+        reviewer_route: Option<&str>,
     ) {
+        let outcome = match event.get("event").and_then(Value::as_str) {
+            Some("run.completed") => "success",
+            Some("run.cancelled") => "cancelled",
+            _ => "failed",
+        };
         let input_tokens = event
             .pointer("/usage/input_tokens")
             .and_then(Value::as_u64)
@@ -318,12 +381,7 @@ impl HermesAdapter {
             .pointer("/usage/output_tokens")
             .and_then(Value::as_u64)
             .unwrap_or(0);
-        let rates = match route.route {
-            "review" => (2.0, 12.0),
-            "difficult" => (0.435, 0.87),
-            _ => (0.14, 0.28),
-        };
-        let cost = (input_tokens as f64 * rates.0 + output_tokens as f64 * rates.1) / 1_000_000.0;
+        let cost = Self::route_cost(route.route, input_tokens, output_tokens);
         let payload = json!({
             "runId": run_id,
             "route": route.route,
@@ -334,7 +392,7 @@ impl HermesAdapter {
             "latencyMs": u64::try_from(latency_ms).unwrap_or(u64::MAX),
             "costUsd": cost,
             "outcome": outcome,
-            "reviewerRoute": if route.route == "review" { Some("review") } else { None },
+            "reviewerRoute": reviewer_route,
         });
         if let Ok(bytes) = serde_json::to_vec(&payload) {
             let _ = self.run_python(
@@ -345,59 +403,206 @@ impl HermesAdapter {
         }
     }
 
-    fn stream_run(&self, app: AppHandle, run_id: String, route: GovernedRoute, context: String) {
+    fn route_cost(route: &str, input_tokens: u64, output_tokens: u64) -> f64 {
+        let rates = match route {
+            "review" => (2.0, 12.0),
+            "difficult" => (0.435, 0.87),
+            _ => (0.14, 0.28),
+        };
+        (input_tokens as f64 * rates.0 + output_tokens as f64 * rates.1) / 1_000_000.0
+    }
+
+    fn consume_run(
+        &self,
+        app: &AppHandle,
+        run_id: &str,
+        route: &GovernedRoute,
+        context: &str,
+        emit_terminal: bool,
+        reviewer_route: Option<&str>,
+    ) -> Result<Value, String> {
+        let started = Instant::now();
+        let response = self
+            .authenticated(
+                self.inner
+                    .client
+                    .get(self.api(&format!("/v1/runs/{run_id}/events"))),
+            )
+            .send()
+            .and_then(Response::error_for_status)
+            .map_err(|error| format!("progress stream unavailable: {error}"))?;
+        let reader = BufReader::new(response);
+        for line in reader.lines().map_while(Result::ok) {
+            if let Some(data) = line.strip_prefix("data: ")
+                && let Ok(value) = serde_json::from_str::<Value>(data)
+            {
+                let terminal = value
+                    .get("event")
+                    .and_then(Value::as_str)
+                    .is_some_and(|event| {
+                        matches!(event, "run.completed" | "run.failed" | "run.cancelled")
+                    });
+                if terminal {
+                    self.record_model_decision(
+                        run_id,
+                        route,
+                        context,
+                        started.elapsed().as_millis(),
+                        &value,
+                        reviewer_route,
+                    );
+                    if emit_terminal {
+                        let _ = app.emit("jarvis-run-event", value.clone());
+                    }
+                    return Ok(value);
+                }
+                let _ = app.emit("jarvis-run-event", value);
+            }
+        }
+        Err("Hermes progress stream ended without a terminal event".into())
+    }
+
+    fn result_needs_escalation(prompt: &str, event: &Value) -> bool {
+        if event.get("event").and_then(Value::as_str) != Some("run.completed") {
+            return false;
+        }
+        let output = event
+            .get("output")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim();
+        let truncated = event
+            .pointer("/runtime/finish_reason")
+            .and_then(Value::as_str)
+            == Some("length")
+            || event.get("finish_reason").and_then(Value::as_str) == Some("length");
+        (output.is_empty() && !prompt.trim().is_empty()) || truncated
+    }
+
+    fn bounded_review_prompt(original: &str, draft: &str) -> String {
+        let original = original.chars().take(18_000).collect::<String>();
+        let draft = draft.chars().take(18_000).collect::<String>();
+        format!(
+            concat!(
+                "Independently review and correct the Pro synthesis below for the owner's original request. ",
+                "Return the final answer only; preserve citations and uncertainty, do not expose chain-of-thought, ",
+                "and do not invent facts.\n\nORIGINAL REQUEST:\n{}\n\nPRO SYNTHESIS:\n{}"
+            ),
+            original, draft
+        )
+    }
+
+    fn stream_plan(
+        &self,
+        app: AppHandle,
+        run_id: String,
+        plan: GovernedPlan,
+        context: String,
+        prompt: String,
+    ) {
         let adapter = self.clone();
         thread::spawn(move || {
-            let started = Instant::now();
-            let result = adapter
-                .authenticated(
-                    adapter
-                        .inner
-                        .client
-                        .get(adapter.api(&format!("/v1/runs/{run_id}/events"))),
-                )
-                .send()
-                .and_then(Response::error_for_status);
-            match result {
-                Ok(response) => {
-                    let reader = BufReader::new(response);
-                    for line in reader.lines().map_while(Result::ok) {
-                        if let Some(data) = line.strip_prefix("data: ")
-                            && let Ok(value) = serde_json::from_str::<Value>(data)
-                        {
-                            if let Some(event_name) = value.get("event").and_then(Value::as_str)
-                                && matches!(
-                                    event_name,
-                                    "run.completed" | "run.failed" | "run.cancelled"
-                                )
-                            {
-                                let outcome = match event_name {
-                                    "run.completed" => "success",
-                                    "run.cancelled" => "cancelled",
-                                    _ => "failed",
-                                };
-                                adapter.record_model_decision(
-                                    &run_id,
-                                    &route,
-                                    &context,
-                                    started.elapsed().as_millis(),
-                                    &value,
-                                    outcome,
-                                );
-                            }
-                            let _ = app.emit("jarvis-run-event", value);
-                        }
-                    }
+            let reviewer_name = plan.reviewer.as_ref().map(|route| route.route);
+            let primary = match adapter.consume_run(
+                &app,
+                &run_id,
+                &plan.primary,
+                &context,
+                false,
+                reviewer_name,
+            ) {
+                Ok(value) => value,
+                Err(error) => {
+                    let _ = app.emit(
+                        "jarvis-run-event",
+                        json!({
+                            "event": "run.failed", "run_id": run_id, "error": error
+                        }),
+                    );
+                    return;
                 }
+            };
+            if primary.get("event").and_then(Value::as_str) != Some("run.completed") {
+                let _ = app.emit("jarvis-run-event", primary);
+                return;
+            }
+
+            let weak_flash =
+                plan.primary.route == "routine" && Self::result_needs_escalation(&prompt, &primary);
+            let secondary = if let Some(reviewer) = plan.reviewer {
+                Some((reviewer, "review"))
+            } else if weak_flash {
+                Some((
+                    GovernedRoute {
+                        route: "difficult",
+                        provider: "deepseek",
+                        model: "deepseek-v4-pro",
+                        reason: "Flash result was incomplete or truncated; escalated to Pro",
+                    },
+                    "escalation",
+                ))
+            } else {
+                None
+            };
+            let Some((secondary, stage)) = secondary else {
+                let _ = app.emit("jarvis-run-event", primary);
+                return;
+            };
+
+            let input_tokens = primary
+                .pointer("/usage/input_tokens")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            let output_tokens = primary
+                .pointer("/usage/output_tokens")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            let stage_cost = Self::route_cost(plan.primary.route, input_tokens, output_tokens);
+            let draft = primary.get("output").and_then(Value::as_str).unwrap_or("");
+            let secondary_prompt = if stage == "review" {
+                Self::bounded_review_prompt(&prompt, draft)
+            } else {
+                format!(
+                    concat!(
+                        "Complete the owner's request because the Flash result was incomplete. Return the final answer only; ",
+                        "preserve citations and uncertainty and do not invent facts.\n\n{}"
+                    ),
+                    prompt.chars().take(36_000).collect::<String>()
+                )
+            };
+            let secondary_id = match adapter.submit_run(&secondary_prompt, &context, &secondary) {
+                Ok(value) => value,
                 Err(error) => {
                     let _ = app.emit(
                         "jarvis-run-event",
                         json!({
                             "event": "run.failed", "run_id": run_id,
-                            "error": format!("progress stream unavailable: {error}")
+                            "error": format!("{stage} submission failed: {error}")
                         }),
                     );
+                    return;
                 }
+            };
+            let _ = app.emit(
+                "jarvis-run-event",
+                json!({
+                    "event": format!("governor.{stage}_started"),
+                    "run_id": secondary_id,
+                    "route": secondary.route,
+                    "reason": secondary.reason,
+                    "stage_cost_usd": stage_cost,
+                    "stage_tokens": input_tokens + output_tokens,
+                }),
+            );
+            if let Err(error) =
+                adapter.consume_run(&app, &secondary_id, &secondary, &context, true, None)
+            {
+                let _ = app.emit(
+                    "jarvis-run-event",
+                    json!({
+                        "event": "run.failed", "run_id": secondary_id, "error": error
+                    }),
+                );
             }
         });
     }
@@ -534,13 +739,23 @@ fn start_run(
     request: RunRequest,
 ) -> Result<RunStart, String> {
     adapter.ensure_started()?;
-    let route = HermesAdapter::governed_route(&request.prompt, &request.context);
-    let run_id = adapter.submit_run(&request.prompt, &request.context, &route)?;
-    adapter.stream_run(app, run_id.clone(), route.clone(), request.context);
+    let plan = HermesAdapter::governed_plan(
+        &request.prompt,
+        &request.context,
+        request.override_route.as_deref(),
+    )?;
+    let run_id = adapter.submit_run(&request.prompt, &request.context, &plan.primary)?;
+    adapter.stream_plan(
+        app,
+        run_id.clone(),
+        plan.clone(),
+        request.context,
+        request.prompt,
+    );
     Ok(RunStart {
         run_id,
-        route: route.route.into(),
-        reason: route.reason.into(),
+        route: plan.primary.route.into(),
+        reason: plan.primary.reason.into(),
     })
 }
 
@@ -887,21 +1102,47 @@ mod tests {
 
     #[test]
     fn model_governor_never_selects_builder_model() {
-        let routine = HermesAdapter::governed_route("Summarize this note", "personal");
-        let difficult = HermesAdapter::governed_route(
+        let routine =
+            HermesAdapter::governed_plan("Summarize this note", "personal", None).expect("routine");
+        let difficult = HermesAdapter::governed_plan(
             "Give me a source-backed attention brief",
             "inside-success",
-        );
-        let review =
-            HermesAdapter::governed_route("Review this security permission change", "personal");
-        assert_eq!(routine.model, "deepseek-v4-flash");
-        assert_eq!(difficult.model, "deepseek-v4-pro");
-        assert_eq!(review.model, "gpt-5.6-terra");
-        assert_eq!(review.provider, "openai-api");
+            None,
+        )
+        .expect("difficult");
+        let review = HermesAdapter::governed_plan(
+            "Review this security permission change",
+            "personal",
+            None,
+        )
+        .expect("review");
+        assert_eq!(routine.primary.model, "deepseek-v4-flash");
+        assert_eq!(difficult.primary.model, "deepseek-v4-pro");
+        assert_eq!(review.primary.model, "deepseek-v4-pro");
+        let terra = review.reviewer.expect("Terra reviewer");
+        assert_eq!(terra.model, "gpt-5.6-terra");
+        assert_eq!(terra.provider, "openai-api");
         assert!(
-            [routine.model, difficult.model, review.model]
-                .iter()
-                .all(|model| !model.contains("sol"))
+            [
+                routine.primary.model,
+                difficult.primary.model,
+                review.primary.model,
+                terra.model
+            ]
+            .iter()
+            .all(|model| !model.contains("sol"))
         );
+    }
+
+    #[test]
+    fn model_override_is_bounded_and_review_is_two_stage() {
+        let override_plan = HermesAdapter::governed_plan("Review this", "personal", Some("review"))
+            .expect("override");
+        assert_eq!(override_plan.primary.model, "deepseek-v4-pro");
+        assert_eq!(
+            override_plan.reviewer.expect("reviewer").model,
+            "gpt-5.6-terra"
+        );
+        assert!(HermesAdapter::governed_plan("test", "personal", Some("sol")).is_err());
     }
 }

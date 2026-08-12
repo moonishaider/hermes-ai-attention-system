@@ -22,6 +22,10 @@ export interface RunEvent {
   name?: string;
   status?: string;
   error?: string;
+  route?: string;
+  reason?: string;
+  stage_cost_usd?: number;
+  stage_tokens?: number;
   usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number };
   runtime?: { model?: string; provider?: string };
 }
