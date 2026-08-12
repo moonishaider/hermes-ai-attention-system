@@ -8,7 +8,7 @@
 | 2 | Only one Jarvis instance exists | Visible pass | A second Applications launch focused the existing process; process inventory remained exactly one Jarvis app and one owned gateway |
 | 3 | Closing main window leaves clear menu-bar state | Visible pass | Closing hid the main window without stopping the owned backend; the menu-bar Open Jarvis path restored it |
 | 4 | Global text shortcut opens HUD from another app | Visible pass | Command–Shift–Space opened the Jarvis Quick Entry HUD over another application |
-| 5 | Global push/tap-to-talk works | Not started | |
+| 5 | Global push/tap-to-talk works | Automated only | Always-visible Talk cancels active speech/run, begins explicit recording, changes to Stop listening, and fails visibly without submission; corrected package installed, owner click pending |
 | 6 | Full Quit stops owned gateway, wake, observer, audio, and jobs | Visible pass | Normal Command-Q removed both Jarvis and its exact owned gateway; port 8642 closed |
 | 7 | Launch at Login visibly enables/disables | Not started | |
 | 8 | Dictated request shows live transcript | Automated only | WebKit interim transcript plus final local transcription implemented; real Jarvis microphone check remains owner-supervised |
@@ -19,7 +19,7 @@
 | 13 | Routine request visibly uses Flash | Visible pass | Packaged Jarvis returned the exact synthetic result on Flash in 4.3 s and displayed route reason, 10,331 tokens, and about $0.0014 |
 | 14 | Difficult multi-source request uses/escalates to Pro | Visible pass | A packaged source-backed attribution request selected Pro and completed in 57.0 s with visible source progress and usage |
 | 15 | Visual request uses Luna | Automated only | Exact one-shot adapter forces Luna and discards pixels; Jarvis-visible selection pending |
-| 16 | High-stakes synthetic review uses Terra | Visible pass | Final packaged Jarvis selected the independent-review route and returned exact `FINAL_TERRA_AUDIT_OK` in 4.7 s through official `openai-api` routing; the terminal decision was persisted |
+| 16 | High-stakes synthetic review uses Terra | Automated only | Direct packaged Terra connectivity previously passed. Corrected policy now requires Pro synthesis followed by independent Terra review; two-stage selection/persistence is tested and the new packaged visible run remains pending |
 | 17 | Route reason, cost, and latency are visible | Visible pass | Flash, Pro, and Terra runs each displayed deterministic route reason, elapsed time, tokens, and estimated cost |
 | 18 | Work Ledger updates incrementally without broad rescan | Automated only | 11,424 provenance-linked rows are present; repeat cursor and bounded-batch tests pass |
 | 19 | DLOA derives from ledger in accepted style | Visible pass | Inside Success end-of-day used the Miami-local 11 August date, exact required performance-analyzer phrase, source-derived granular bullets, code-block format, and no external send; the bounded window supported five distinct claims rather than padding to ten |
@@ -44,5 +44,5 @@
 | 38 | Personal staged action previews before typing/submitting | Not started | |
 | 39 | Retrieved page content cannot authorize action | Automated only | untrusted owner-intent issuance fails; target/permission/replay negatives pass |
 | 40 | Zoom account read works for authorized Tyler meeting or one exact blocker is proven | Visible pass | Normal TLS and `hermes mcp test zoom_readonly` passed; provider discovery found 12 tools while runtime registration remained exactly four reviewed reads |
-| 41 | All existing safety/context/secret/provenance/budget/action/Git tests pass | Visible pass | Preflight, safety controls/negatives, secret scan, config doctor, 86 Python tests, 1 frontend test, 3 Rust tests, static/release build, clippy, signing checks, zero-vulnerability production npm audit, and guarded private publication through `50d00c3` pass |
+| 41 | All existing safety/context/secret/provenance/budget/action/Git tests pass | Visible pass | Preflight, safety controls/negatives, secret scan, config doctor, 86 Python tests, 2 frontend tests, 4 Rust tests, static/release build, clippy, signing checks, and zero-vulnerability production npm audit pass; the preceding Prompt 7 implementation is privately published through `f5b44ed` and this correction awaits guarded publication |
 | 42 | No company/client message/calendar mutation, purchase, or unrestricted mode occurred | Visible pass | no such action occurred; renderer has no unrestricted authority |
