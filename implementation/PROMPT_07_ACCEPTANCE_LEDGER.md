@@ -28,9 +28,9 @@
 | 22 | Dormant Mitchell is absent from ordinary proactive output | Automated only | lifecycle test and ledger query suppression pass; Mitchell record remains preserved |
 | 23 | Sourced commitment opens and closes with verification | Visible pass | The runtime opened `Complete and verify the Prompt 7 Jarvis milestone` from one Personal-context Codex ledger source, displayed it as an open local task, and closed it only after a second same-context Codex evidence link verified completion; no external write occurred |
 | 24 | One Mission and one Radar can be created and used | Visible pass | Native Missions showed the Prompt 7 completion contract; Radars showed the weekly official-Hermes material-change watch and digest policy |
-| 25 | Natural-language low-risk capability dry-runs and can be undone | Automated only | source-backed end-of-day capability is draft + dry-run only; disable/archive UI not yet accepted |
+| 25 | Natural-language low-risk capability dry-runs and can be undone | Automated only | source-backed end-of-day capability is draft + dry-run only; disable/archive and recoverable restore-to-draft controls are implemented and tested, but the complete owner-visible cycle is pending |
 | 26 | Code-requiring request produces spec without self-modification | Automated only | Capability Studio returns `codex-spec-only`; protected-field tests pass |
-| 27 | Useful/not-useful feedback changes behavior with provenance | Not started | |
+| 27 | Useful/not-useful feedback changes behavior with provenance | Automated only | local owner feedback stores provenance; useful promotes only to shadow, not-useful disables, archive remains recoverable, and deterministic tests pass; owner-visible acceptance is pending |
 | 28 | Automation Miner proposes repeated workflow and records outcome | Automated only | Three independent immutable DLOA occurrences produced one low-risk local-draft proposal; accepting or rejecting it remains an owner decision |
 | 29 | Existing Calendar style profile is generated and owner-reviewed | Not started | |
 | 30 | Explicit simple personal event is created correctly and Undo works | Blocked | `AGENTS.md` forbids real calendar mutation during build; narrow wrapper is synthetic-tested only |

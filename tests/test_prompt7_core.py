@@ -356,6 +356,16 @@ def test_feedback_demotes_capability_and_is_inspectable() -> None:
             "SELECT status FROM capabilities WHERE capability_id=?", (created["capability_id"],),
         ).fetchone()[0] == "disabled"
 
+        studio.set_status(created["capability_id"], "draft")
+        studio.record_feedback(
+            capability_id=created["capability_id"], useful=True,
+            correction=None, evidence_ids=(),
+            provenance={"source": "trusted-local-owner-interaction"},
+        )
+        assert store.connection.execute(
+            "SELECT status FROM capabilities WHERE capability_id=?", (created["capability_id"],),
+        ).fetchone()[0] == "shadow"
+
 
 def test_calendar_style_profile_is_bounded_and_owner_reviewable() -> None:
     events = [{

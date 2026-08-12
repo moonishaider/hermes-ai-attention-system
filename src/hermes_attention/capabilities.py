@@ -129,7 +129,12 @@ class CapabilityStudio:
                 (feedback_id, "capability", capability_id, int(useful), correction,
                  json.dumps(sorted(evidence_ids)), json.dumps(provenance, sort_keys=True), utc_now()),
             )
-            if not useful and row["status"] in {"active", "shadow"}:
+            if useful and row["status"] in {"draft", "disabled"}:
+                self.store.connection.execute(
+                    "UPDATE capabilities SET status='shadow',updated_at=? WHERE capability_id=?",
+                    (utc_now(), capability_id),
+                )
+            elif not useful and row["status"] != "archived":
                 self.store.connection.execute(
                     "UPDATE capabilities SET status='disabled',updated_at=? WHERE capability_id=?",
                     (utc_now(), capability_id),

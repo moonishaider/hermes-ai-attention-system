@@ -299,16 +299,22 @@ def capability_control(service: AttentionService, value: dict[str, Any]) -> dict
     capability_id = bounded(value.get("capabilityId"), maximum=100, name="capability id")
     action = str(value.get("action") or "")
     studio = CapabilityStudio(service.store, APPROVED_CAPABILITY_TOOLS)
-    if action in {"disabled", "archived"}:
+    if action in {"draft", "disabled", "archived"}:
         studio.set_status(capability_id, action)
-        return {"ok": True, "capabilityId": capability_id, "status": action}
+        return {"ok": True, "capabilityId": capability_id, "status": action, "reversible": True}
     if action in {"useful", "not-useful"}:
         feedback_id = studio.record_feedback(
             capability_id=capability_id, useful=action == "useful",
             correction=None, evidence_ids=(),
             provenance={"source": "jarvis-owner-local-ui", "reversible": True},
         )
-        return {"ok": True, "capabilityId": capability_id, "feedbackId": feedback_id}
+        status = service.store.connection.execute(
+            "SELECT status FROM capabilities WHERE capability_id=?", (capability_id,),
+        ).fetchone()[0]
+        return {
+            "ok": True, "capabilityId": capability_id,
+            "feedbackId": feedback_id, "status": status, "reversible": True,
+        }
     raise ValueError("unsupported capability action")
 
 
