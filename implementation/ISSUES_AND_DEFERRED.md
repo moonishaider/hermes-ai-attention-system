@@ -1,10 +1,14 @@
 # Issues and deferred work
 
+## Jarvis dictated-speech accuracy
+
+The first owner-visible Talk capture succeeded, but local Whisper `base` substantially misheard the request. Jarvis now has a measured low-cost cloud-first STT path with local fallback and a local-only override. The final packaged build still needs one short owner-spoken sentence to verify real-room accuracy; typed use is unaffected and no recording is retained.
+
 Current evidence levels are authoritative in `implementation/CURRENT_OPERATIONAL_STATE.md`.
 
 ## Prompt 7 Jarvis visible acceptance — in progress
 
-The separate production-only Tauri application is packaged and installed at `/Applications/Jarvis.app`. The Work Ledger, model governor, projects, Missions, Radars, Capability Studio, generalized Action Firewall, personal Calendar/Gmail-draft wrappers, typed Hermes adapter, explicit screen adapter, voice controls, single-instance/tray lifecycle, and default-off launch-at-login control are implemented. Safety/config/secret checks, 86 Python tests, two frontend tests, four Rust tests, Rust clippy, the static/release build, and the production dependency audit pass.
+The separate production-only Tauri application is packaged and installed at `/Applications/Jarvis.app`. The Work Ledger, model governor, projects, Missions, Radars, Capability Studio, generalized Action Firewall, personal Calendar/Gmail-draft wrappers, typed Hermes adapter, explicit screen adapter, voice controls, single-instance/tray lifecycle, and default-off launch-at-login control are implemented. Safety/config/secret checks, 90 Python tests, three frontend tests, four Rust tests, Rust clippy, the static/release build, and the production dependency audit pass.
 
 The first real local DLOA showed generic Codex role labels. The projection now derives bounded action statements from the same immutable local evidence, deduplicates them, preserves the required “worked on the reps' performance analyzer system” wording, and never copies raw evidence or sends externally. The accepted 11 August window supported five distinct granular claims. It was not padded with fabricated work to reach an arbitrary ten. Other proactive groups remain sparse until more evidence receives deterministic semantic kinds beyond generic work/activity.
 

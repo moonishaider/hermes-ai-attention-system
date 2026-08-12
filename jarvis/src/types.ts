@@ -72,8 +72,8 @@ export interface JarvisState {
       timezone_behavior: string;
     };
   } | null;
-  recentLedger: Array<{ entry_id: string; kind: string; occurred_at_utc: string; local_date: string; actor_state: string; summary: string; confidence_state: string; freshness_at: string }>;
-  commitments: Array<{ entry_id: string; occurred_at_utc: string; summary: string; confidence_state: string; task_id?: string | null }>;
+  recentLedger: Array<{ entry_id: string; kind: string; occurred_at_utc: string; local_date: string; actor_state: string; summary: string; confidence_state: string; freshness_at: string; evidence_ids: string[] }>;
+  commitments: Array<{ task_id: string; title: string; status: string; due_at?: string | null; evidence_ids: string[]; confidence: number; updated_at: string }>;
   recentDecisions: Array<{ decision_id: string; decision: string; reasoning: string; decided_at: string; review_at?: string | null; actual_outcome?: string | null }>;
   actionPreviews: Array<{ proposal_id: string; preview_hash: string; state: string; updated_at: string }>;
   learningItems: Array<{ memory_id: string; statement: string; namespace: string; confidence: number; status: string; created_at: string }>;

@@ -2,7 +2,13 @@ use getrandom::fill;
 use reqwest::blocking::{Client, Response};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader, Write};
+use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -14,7 +20,9 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt as AutostartManagerExt};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
-const API_PORT: u16 = 8642;
+#[cfg(target_os = "macos")]
+use objc2_av_foundation::{AVAuthorizationStatus, AVCaptureDevice, AVMediaTypeAudio};
+
 const HERMES_VERSION: &str = "0.20.0 (v2026.8.3)";
 
 #[derive(Clone)]
@@ -25,7 +33,9 @@ struct HermesAdapter {
 struct HermesInner {
     client: Client,
     api_key: String,
+    api_port: u16,
     child: Mutex<Option<Child>>,
+    starting: Mutex<()>,
     project_root: PathBuf,
     state: Mutex<String>,
 }
@@ -77,6 +87,36 @@ struct RunStart {
     reason: String,
 }
 
+/// Ask macOS for microphone access through AVFoundation before the WKWebView
+/// requests a stream. WebKit grants the page-level request, but it cannot be
+/// relied upon to create the native TCC consent record for a packaged app.
+/// This command is called only from an explicit Talk button/shortcut action.
+#[tauri::command]
+fn request_microphone_access() -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    unsafe {
+        let media_type = AVMediaTypeAudio.ok_or("macOS audio media type is unavailable")?;
+        let status = AVCaptureDevice::authorizationStatusForMediaType(media_type);
+        match status {
+            AVAuthorizationStatus::Authorized => Ok("authorized".into()),
+            AVAuthorizationStatus::Denied => Ok("denied".into()),
+            AVAuthorizationStatus::Restricted => Ok("restricted".into()),
+            AVAuthorizationStatus::NotDetermined => {
+                let completion = block2::RcBlock::new(|_granted| {});
+                AVCaptureDevice::requestAccessForMediaType_completionHandler(
+                    media_type,
+                    &completion,
+                );
+                Ok("prompted".into())
+            }
+            _ => Err("unknown macOS microphone authorization state".into()),
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    Err("microphone permission is supported only by the packaged macOS app".into())
+}
+
 #[derive(Clone)]
 struct GovernedRoute {
     route: &'static str,
@@ -115,6 +155,7 @@ impl HermesAdapter {
             .iter()
             .map(|byte| format!("{byte:02x}"))
             .collect::<String>();
+        let api_port = Self::reserve_loopback_port()?;
         let client = Client::builder()
             .connect_timeout(Duration::from_secs(3))
             .timeout(Duration::from_secs(120))
@@ -125,7 +166,9 @@ impl HermesAdapter {
             inner: Arc::new(HermesInner {
                 client,
                 api_key,
+                api_port,
                 child: Mutex::new(None),
+                starting: Mutex::new(()),
                 project_root: Self::discover_project_root()?,
                 state: Mutex::new("starting".into()),
             }),
@@ -133,7 +176,20 @@ impl HermesAdapter {
     }
 
     fn api(&self, path: &str) -> String {
-        format!("http://127.0.0.1:{API_PORT}{path}")
+        format!("http://127.0.0.1:{}{path}", self.inner.api_port)
+    }
+
+    fn reserve_loopback_port() -> Result<u16, String> {
+        // Binding port zero delegates collision-free selection to macOS. The
+        // listener is dropped before Hermes starts and the chosen value stays
+        // private inside this one native process. A fresh launch therefore
+        // never inherits aiohttp TIME_WAIT from the previous fully-quit app.
+        let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+            .map_err(|error| format!("secure loopback reservation failed: {error}"))?;
+        listener
+            .local_addr()
+            .map(|address| address.port())
+            .map_err(|error| format!("secure loopback address failed: {error}"))
     }
 
     fn authenticated(
@@ -144,6 +200,14 @@ impl HermesAdapter {
     }
 
     fn ensure_started(&self) -> Result<(), String> {
+        // Health refreshes and owner actions may arrive together. Only one
+        // caller may start/retry the single owned gateway, preventing two
+        // startup attempts from racing for the loopback port.
+        let _starting = self
+            .inner
+            .starting
+            .lock()
+            .map_err(|_| "gateway startup lock poisoned")?;
         if self.probe().is_ok() {
             *self.inner.state.lock().map_err(|_| "state lock poisoned")? = "ready".into();
             return Ok(());
@@ -166,16 +230,44 @@ impl HermesAdapter {
                 *guard = None;
             }
             if guard.is_none() {
-                let child = Command::new(&hermes)
+                let log_path = self
+                    .inner
+                    .project_root
+                    .join("runtime-data/jarvis-gateway.log");
+                let log = OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .mode(0o600)
+                    .open(&log_path)
+                    .map_err(|error| format!("Jarvis gateway log could not open: {error}"))?;
+                let error_log = log
+                    .try_clone()
+                    .map_err(|error| format!("Jarvis gateway log could not clone: {error}"))?;
+                let mut command = Command::new(&hermes);
+                command
                     .args(["gateway", "run"])
                     .current_dir(&self.inner.project_root)
                     .env("API_SERVER_ENABLED", "true")
                     .env("API_SERVER_KEY", &self.inner.api_key)
                     .env("API_SERVER_HOST", "127.0.0.1")
-                    .env("API_SERVER_PORT", API_PORT.to_string())
+                    .env("API_SERVER_PORT", self.inner.api_port.to_string())
                     .stdin(Stdio::null())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
+                    .stdout(Stdio::from(log))
+                    .stderr(Stdio::from(error_log));
+                #[cfg(unix)]
+                unsafe {
+                    // A private process group lets Quit stop the exact gateway
+                    // and every child it created before a replacement launch.
+                    // No pre-existing or unrelated process can join this group.
+                    command.pre_exec(|| {
+                        if libc::setpgid(0, 0) == 0 {
+                            Ok(())
+                        } else {
+                            Err(std::io::Error::last_os_error())
+                        }
+                    });
+                }
+                let child = command
                     .spawn()
                     .map_err(|error| format!("Hermes gateway did not start: {error}"))?;
                 *guard = Some(child);
@@ -203,7 +295,10 @@ impl HermesAdapter {
                 thread::sleep(Duration::from_millis(250));
             }
             if attempt == 0 {
-                thread::sleep(Duration::from_millis(750));
+                // A failed/previous Python gateway can finish its async
+                // listener teardown after the direct child exits. Give that
+                // bounded teardown time before the single retry.
+                thread::sleep(Duration::from_secs(5));
             }
         }
         *self.inner.state.lock().map_err(|_| "state lock poisoned")? = "degraded".into();
@@ -626,7 +721,22 @@ impl HermesAdapter {
     fn shutdown_owned(&self) {
         if let Ok(mut guard) = self.inner.child.lock() {
             if let Some(child) = guard.as_mut() {
-                let _ = child.kill();
+                #[cfg(unix)]
+                unsafe {
+                    // The negative PID targets only the private process group
+                    // established immediately before this exact Child spawn.
+                    // This closes API-server descendants before a relaunch.
+                    libc::kill(-(child.id() as i32), libc::SIGTERM);
+                }
+                for _ in 0..20 {
+                    if child.try_wait().ok().flatten().is_some() {
+                        break;
+                    }
+                    thread::sleep(Duration::from_millis(100));
+                }
+                if child.try_wait().ok().flatten().is_none() {
+                    let _ = child.kill();
+                }
                 let _ = child.wait();
             }
             *guard = None;
@@ -882,6 +992,8 @@ async fn local_control(
             | "projection"
             | "capability-control"
             | "automation-outcome"
+            | "commitment-open"
+            | "commitment-complete"
     ) {
         return Err("unsupported local control".into());
     }
@@ -1033,6 +1145,7 @@ pub fn run() {
         .manage(adapter)
         .invoke_handler(tauri::generate_handler![
             system_status,
+            request_microphone_access,
             start_run,
             stop_run,
             transcribe_audio,
@@ -1082,6 +1195,7 @@ mod tests {
     fn renderer_has_no_generic_shell_or_url_command() {
         let exposed = [
             "system_status",
+            "request_microphone_access",
             "start_run",
             "stop_run",
             "transcribe_audio",

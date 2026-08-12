@@ -37,6 +37,8 @@ function App() {
   const [localTitle, setLocalTitle] = useState("");
   const [localDetails, setLocalDetails] = useState("");
   const [localNotice, setLocalNotice] = useState("");
+  const [commitmentTitle, setCommitmentTitle] = useState("");
+  const [selectedCommitment, setSelectedCommitment] = useState<string | null>(null);
   const [voiceTranscript, setVoiceTranscript] = useState("");
   const [voiceRetryAvailable, setVoiceRetryAvailable] = useState(false);
   const [modelOverride, setModelOverride] = useState<"auto" | "routine" | "difficult" | "review">("auto");
@@ -207,6 +209,23 @@ function App() {
     if (busy) await cancel();
     setActive("Chat");
     try {
+      let permission = await invoke<string>("request_microphone_access");
+      if (permission === "prompted") {
+        setProgress(["Waiting for macOS microphone permission…"]);
+        const deadline = Date.now() + 60_000;
+        while (permission === "prompted" && Date.now() < deadline) {
+          await new Promise((resolve) => window.setTimeout(resolve, 250));
+          permission = await invoke<string>("request_microphone_access");
+        }
+      }
+      if (permission !== "authorized") {
+        const detail = permission === "denied"
+          ? "Microphone access is off for Jarvis in System Settings"
+          : permission === "restricted"
+            ? "Microphone access is restricted by macOS"
+            : "Microphone permission was not completed";
+        throw new Error(detail);
+      }
       if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
         throw new Error("this packaged WebView does not expose microphone capture");
       }
@@ -363,6 +382,24 @@ function App() {
     }
   }
 
+  async function openCommitment(evidenceId: string) {
+    if (!commitmentTitle.trim()) { setLocalNotice("Enter the commitment exactly as you mean it first."); return; }
+    try {
+      await invoke("local_control", { operation: "commitment-open", request: { context, title: commitmentTitle.trim(), evidenceId } });
+      setCommitmentTitle(""); setLocalNotice("Commitment opened locally with source evidence.");
+      setLocalState(await invoke<JarvisState>("jarvis_state", { context }));
+    } catch (error) { setLocalNotice(`Commitment not opened: ${String(error)}`); }
+  }
+
+  async function completeCommitment(evidenceId: string) {
+    if (!selectedCommitment) return;
+    try {
+      await invoke("local_control", { operation: "commitment-complete", request: { taskId: selectedCommitment, evidenceId } });
+      setSelectedCommitment(null); setLocalNotice("Commitment completion verified from same-context evidence.");
+      setLocalState(await invoke<JarvisState>("jarvis_state", { context }));
+    } catch (error) { setLocalNotice(`Completion not accepted: ${String(error)}`); }
+  }
+
   if (isHud) return <div className="hud-shell">
     <div className="hud-title"><span className="orb"/><span>Ask Jarvis</span><small>{contextLabel}</small></div>
     <form className="hud-composer" onSubmit={submit}>
@@ -416,10 +453,19 @@ function App() {
       {active === "Work Ledger" && <section className="card surface">
         <p className="eyebrow">Verified timeline</p><h2>{localState?.ledgerCount ?? 0} source-backed entries</h2>
         <p>One incremental ledger powers briefs, DLOA, commitments, projects, and catch-up. Context and actor labels stay visible.</p>
+        <div className="setting"><input value={commitmentTitle} onChange={(event) => setCommitmentTitle(event.target.value)} placeholder="Exact commitment to track"/><span className="pill">Evidence required</span></div>
+        {localState?.commitments?.map((item) => <article key={item.task_id}>
+          <strong>{item.title}</strong><span>{item.status} · {item.evidence_ids.length} evidence link(s)</span>
+          {item.status === "open" && <button className={selectedCommitment === item.task_id ? "danger" : "quiet"} onClick={() => setSelectedCommitment(selectedCommitment === item.task_id ? null : item.task_id)}>{selectedCommitment === item.task_id ? "Cancel completion" : "Select for completion proof"}</button>}
+        </article>)}
         <div className="item-list">{localState?.recentLedger?.map((item) => <article key={item.entry_id}>
           <strong>{item.summary}</strong><span>{item.local_date} · {item.confidence_state}</span>
           <p>{item.kind} · actor {item.actor_state} · fresh {item.freshness_at.slice(0, 10)}</p>
+          {item.evidence_ids[0] && (selectedCommitment
+            ? <button className="quiet" onClick={() => void completeCommitment(item.evidence_ids[0])}>Use as completion proof</button>
+            : <button className="quiet" onClick={() => void openCommitment(item.evidence_ids[0])}>Open commitment from this evidence</button>)}
         </article>)}</div>
+        {localNotice && <small>{localNotice}</small>}
       </section>}
 
       {active === "Actions" && <section className="card surface">

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from contextlib import contextmanager
 import json
+from types import SimpleNamespace
 import unittest
 
 from hermes_attention.action_firewall import ActionFirewall
@@ -18,6 +19,7 @@ from hermes_attention.projects import Portfolio, RadarRegistry
 from hermes_attention.proactive import ProactiveChiefOfStaff
 from hermes_attention.storage import Store
 from hermes_attention.work_ledger import LedgerEntryInput, WorkLedger
+from scripts.jarvis_local_state import commitment_complete, commitment_open
 
 
 @contextmanager
@@ -264,6 +266,25 @@ def test_proactive_modes_and_verified_commitment_use_one_ledger() -> None:
         assert chief.start_of_day(context_id="mitchell", local_date="2026-08-12")["source_count"] == 0
 
 
+def test_jarvis_commitment_controls_require_same_context_ledger_evidence() -> None:
+    with Store(":memory:") as store:
+        for identifier, context_id in (("source", "inside-success"), ("done", "inside-success"), ("wrong", "personal")):
+            store.add_evidence(evidence(identifier, context_id, identifier))
+        ledger = WorkLedger(store)
+        ledger.record(LedgerEntryInput("work", "2026-08-12T14:00:00+00:00", "inside-success", "Source", ("source",)))
+        ledger.record(LedgerEntryInput("work", "2026-08-12T15:00:00+00:00", "inside-success", "Done", ("done",)))
+        ledger.record(LedgerEntryInput("work", "2026-08-12T16:00:00+00:00", "personal", "Wrong", ("wrong",)))
+        service = SimpleNamespace(store=store, ledger=ledger)
+        opened = commitment_open(service, {
+            "context": "inside-success", "title": "Finish the verified item", "evidenceId": "source",
+        })
+        with raises(ValueError):
+            commitment_complete(service, {"taskId": opened["taskId"], "evidenceId": "wrong"})
+        completed = commitment_complete(service, {"taskId": opened["taskId"], "evidenceId": "done"})
+        assert completed["status"] == "completed"
+        assert completed["externalWrite"] is False
+
+
 def test_dloa_replaces_codex_role_labels_with_bounded_activity() -> None:
     with Store(":memory:") as store:
         item = evidence(
@@ -408,6 +429,7 @@ class Prompt7CoreTests(unittest.TestCase):
 
     def test_proactive_and_commitments(self) -> None:
         test_proactive_modes_and_verified_commitment_use_one_ledger()
+        test_jarvis_commitment_controls_require_same_context_ledger_evidence()
 
     def test_dloa_activity_summary(self) -> None:
         test_dloa_replaces_codex_role_labels_with_bounded_activity()

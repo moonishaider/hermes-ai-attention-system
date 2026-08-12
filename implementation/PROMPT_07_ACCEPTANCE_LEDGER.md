@@ -8,10 +8,10 @@
 | 2 | Only one Jarvis instance exists | Visible pass | A second Applications launch focused the existing process; process inventory remained exactly one Jarvis app and one owned gateway |
 | 3 | Closing main window leaves clear menu-bar state | Visible pass | Closing hid the main window without stopping the owned backend; the menu-bar Open Jarvis path restored it |
 | 4 | Global text shortcut opens HUD from another app | Visible pass | Command–Shift–Space opened the Jarvis Quick Entry HUD over another application |
-| 5 | Global push/tap-to-talk works | Automated only | Always-visible Talk cancels active speech/run, begins explicit recording, changes to Stop listening, and fails visibly without submission; corrected package installed, owner click pending |
-| 6 | Full Quit stops owned gateway, wake, observer, audio, and jobs | Visible pass | Normal Command-Q removed both Jarvis and its exact owned gateway; port 8642 closed |
+| 5 | Global push/tap-to-talk works | Visible pass | Syed clicked Talk in the signed Applications build, accepted the exact Jarvis microphone gate, spoke, and stopped the recording. Capture and submission completed; denied/restricted/incomplete states still fail visibly without submission |
+| 6 | Full Quit stops owned gateway, wake, observer, audio, and jobs | Visible pass | Normal Command-Q removed both Jarvis and its exact process-group-owned gateway. A fresh launch receives a private dynamic loopback port from macOS, so it cannot collide with or attach to the previous aiohttp listener during teardown |
 | 7 | Launch at Login visibly enables/disables | Not started | |
-| 8 | Dictated request shows live transcript | Automated only | WebKit interim transcript plus final local transcription implemented; real Jarvis microphone check remains owner-supervised |
+| 8 | Dictated request shows live transcript | Visible pass | The signed app displayed and submitted a real dictated transcript. Because Syed's next real result remained materially inaccurate, Jarvis now uses official `gpt-4o-transcribe` as the high-accuracy final route, with an explicit local-only override and local fallback; final room-accuracy scoring remains a separate one-sentence owner retest rather than a false completion claim |
 | 9 | Failed submission retains transcript and Retry works | Automated only | In-memory bounded Blob is retained only on failure and Retry transcript is visible; real failure check pending |
 | 10 | Spoken answer is natural/short; full cited detail remains visible | Not started | |
 | 11 | Stop and barge-in interrupt without replay | Automated only | Talk cancels speech before capture; Stop listening and Stop speaking are distinct; visible retest pending |
@@ -26,7 +26,7 @@
 | 20 | Four proactive brief/review modes use bounded real evidence | Automated only | Start day, end day, pre-meeting, and absence-return completed locally with external writes false; end day had 16 sources/five supported bullets, while sparse semantic kinds limited usefulness in the other three |
 | 21 | One active project has useful living state | Visible pass | Personal Projects visibly showed `Jarvis Prompt 7`, acceptance phase, active lifecycle, and its secure-native-layer objective |
 | 22 | Dormant Mitchell is absent from ordinary proactive output | Automated only | lifecycle test and ledger query suppression pass; Mitchell record remains preserved |
-| 23 | Sourced commitment opens and closes with verification | Not started | |
+| 23 | Sourced commitment opens and closes with verification | Visible pass | The runtime opened `Complete and verify the Prompt 7 Jarvis milestone` from one Personal-context Codex ledger source, displayed it as an open local task, and closed it only after a second same-context Codex evidence link verified completion; no external write occurred |
 | 24 | One Mission and one Radar can be created and used | Visible pass | Native Missions showed the Prompt 7 completion contract; Radars showed the weekly official-Hermes material-change watch and digest policy |
 | 25 | Natural-language low-risk capability dry-runs and can be undone | Automated only | source-backed end-of-day capability is draft + dry-run only; disable/archive UI not yet accepted |
 | 26 | Code-requiring request produces spec without self-modification | Automated only | Capability Studio returns `codex-spec-only`; protected-field tests pass |
@@ -44,5 +44,5 @@
 | 38 | Personal staged action previews before typing/submitting | Not started | |
 | 39 | Retrieved page content cannot authorize action | Automated only | untrusted owner-intent issuance fails; target/permission/replay negatives pass |
 | 40 | Zoom account read works for authorized Tyler meeting or one exact blocker is proven | Visible pass | Normal TLS and `hermes mcp test zoom_readonly` passed; provider discovery found 12 tools while runtime registration remained exactly four reviewed reads |
-| 41 | All existing safety/context/secret/provenance/budget/action/Git tests pass | Visible pass | Preflight, safety controls/negatives, secret scan, config doctor, 86 Python tests, 2 frontend tests, 4 Rust tests, static/release build, clippy, signing checks, and zero-vulnerability production npm audit pass; the Talk/governor correction is guarded-published through `1237912` |
+| 41 | All existing safety/context/secret/provenance/budget/action/Git tests pass | Visible pass | Preflight, safety controls/negatives, secret scan, config doctor, 90 Python tests, 3 frontend tests, 4 Rust tests, static/release build, clippy, signing checks, and zero-vulnerability production npm audit pass; final guarded publication is recorded by the commit containing this ledger |
 | 42 | No company/client message/calendar mutation, purchase, or unrestricted mode occurred | Visible pass | no such action occurred; renderer has no unrestricted authority |
