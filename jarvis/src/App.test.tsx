@@ -51,7 +51,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   }),
 }));
 
-import App, { spokenProjection, transcriptsMateriallyDisagree } from "./App";
+import App, { isSpokenStopCommand, spokenProjection, transcriptsMateriallyDisagree } from "./App";
 
 afterEach(() => {
   cleanup();
@@ -79,6 +79,15 @@ describe("Jarvis desktop shell", () => {
     expect(spoken).not.toContain("https://");
     expect(spoken).not.toContain("technical block");
     expect(displayed).toContain("Full evidence follows");
+  });
+
+  it("recognizes only narrow spoken interruption commands", () => {
+    for (const phrase of ["stop", "stop speaking", "Jarvis stop", "hey Jarvis be quiet now", "cancel now"]) {
+      expect(isSpokenStopCommand(phrase)).toBe(true);
+    }
+    for (const phrase of ["do not stop", "do not stop the analysis", "the bus stopped nearby", "cancel culture", "quiet room"]) {
+      expect(isSpokenStopCommand(phrase)).toBe(false);
+    }
   });
 
   it("shows protected daily-use surfaces and refreshed local state", async () => {
@@ -213,5 +222,14 @@ describe("Jarvis desktop shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry delivery" }));
     await waitFor(() => expect(screen.getByText(/Route: routine/)).toBeTruthy());
     expect(screen.queryByRole("button", { name: "Retry delivery" })).toBeNull();
+  });
+
+  it("exposes a local spoken-stop diagnostic without submitting a request", async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByText(/No dictation or model request is submitted/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Test spoken Stop" }));
+    await waitFor(() => expect(screen.getByText(/Local spoken-interruption diagnostic/)).toBeTruthy());
+    expect(screen.getByText(/no request or recording will be submitted/i)).toBeTruthy();
   });
 });

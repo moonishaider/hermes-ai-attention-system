@@ -11,6 +11,7 @@ This record separates owner-visible evidence from configuration and automated te
 - The installed microphone-entitled build passed real tap-to-start/tap-to-stop capture. Immediate normal Quit and reopen now select a fresh private loopback port, eliminating the prior fixed-port restart conflict.
 - The final Talk build uses official `gpt-4o-transcribe` with English and owner-vocabulary hints, 500 ms memory-only chunks for long dictation, and explicit Retry/Edit/Discard recovery. A strong disagreement between the live and final transcripts now stops before submission and stages the final transcript for review. Raw audio is released as soon as Hermes returns a run receipt.
 - The signed packaged app passed its visible voice-delivery recovery diagnostic: a deterministic backend rejection retained the exact transcript and showed Retry delivery, Edit transcript, and Discard while explicitly confirming that nothing was submitted. Retry delivered the retained transcript once and returned the exact expected answer; the recovery controls then cleared.
+- A real owner-spoken request transcribed correctly and produced a direct natural short answer. The first spoken-interruption retest exposed that only the button stopped audio; Jarvis was corrected rather than accepting it. In the corrected build, a local listener runs only while Jarvis is speaking, recognizes only narrow explicit stop commands, and Syed confirmed that saying `Stop` interrupted the speech. The listener ends with speech and no replay is scheduled.
 - A routine packaged run used Flash and returned the exact requested result. A source-backed attribution run used Pro. The final packaged synthetic high-stakes review used Pro synthesis followed by independent Terra review, completed in 23.3 seconds with 20,813 accumulated tokens and about $0.0295, and persisted its terminal decision.
 - All three visible model runs showed the deterministic route reason, elapsed time, token count, and estimated cost. Typed chat remained quiet.
 - Syed completed a physical one-shot selected-area drag in packaged Jarvis. The result visibly named GPT-5.6 Luna, accurately described the selected area, and stated that pixels were discarded; post-run process and temporary-path inspection found no capture process, screenshot, or `hermes-screen-*` directory. Zoom passed normal-TLS MCP connection and retained only its four reviewed read tools.
@@ -28,7 +29,7 @@ This record separates owner-visible evidence from configuration and automated te
 
 ## Automated support completed
 
-- Marked-root preflight, hook/rule negatives, secret scan, configuration doctor, Python compile, Rust formatting/clippy, 90 Python tests, thirteen frontend tests, six Rust tests, static/release frontend build, and the production dependency audit pass.
+- Marked-root preflight, hook/rule negatives, secret scan, configuration doctor, Python compile, Rust formatting/clippy, 90 Python tests, fifteen frontend tests, six Rust tests, static/release frontend build, and the production dependency audit pass.
 - The Work Ledger contains 11,424 evidence projections with immutable source links and a durable cursor so completed rows are not rescanned. Actor attribution is 11,199 owner and 225 uncertain; uncertainty was preserved rather than forced.
 - Model selection, context-before-limit retrieval, Mitchell dormancy, owner-origin action policy, personal Google endpoint restrictions, capability protection, radar change detection, no-retention screen handling, and absence of builder-only Sol from runtime routes have deterministic tests.
 - Capability feedback is deterministic and recoverable: useful promotes a draft/disabled capability only to shadow, not-useful disables it, feedback provenance is retained, and disabled/archived entries can be restored to draft. The packaged owner-visible lifecycle and Automation Miner acceptance are complete.
@@ -36,7 +37,7 @@ This record separates owner-visible evidence from configuration and automated te
 
 ## Pending owner-visible checks
 
-The remaining visible product checks are deliberately narrow: one real sentence to score final transcription quality and spoken interruption, plus a correct-browser-profile navigation case. The app remains fail-closed wherever Chrome profile identity cannot be proven. These items are not inferred from tests.
+The remaining visible product check is the correct-browser-profile guided-navigation case. The app remains fail-closed wherever Chrome profile identity cannot be proven. It is not inferred from tests.
 
 ## Deliberately blocked or deferred
 

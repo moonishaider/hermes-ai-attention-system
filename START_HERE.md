@@ -10,7 +10,7 @@ From any Mac app, press **Command+Shift+Space** to open Quick Entry. Type a requ
 
 Click **Talk** or press **Control+Option+Space**, then speak. Click **Stop listening** when finished. Jarvis shows the transcript, acknowledges immediately, and speaks a short natural projection while the complete cited result remains on screen.
 
-- **Stop speaking** interrupts current audio immediately.
+- Say **Stop**, or click **Stop speaking**, to interrupt current audio immediately. The narrow spoken-command listener runs only while Jarvis is speaking and stops with the audio.
 - Starting Talk while Jarvis is speaking stops that audio before recording.
 - If final transcription disagrees materially with the live transcript, Jarvis submits nothing and lets you edit, retry, or discard it.
 - If delivery fails, Jarvis retains the transcript in memory and shows **Retry delivery**, **Edit transcript**, and **Discard**.
