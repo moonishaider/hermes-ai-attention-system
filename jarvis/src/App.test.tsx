@@ -26,7 +26,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   }),
 }));
 
-import App from "./App";
+import App, { transcriptsMateriallyDisagree } from "./App";
 
 afterEach(() => {
   cleanup();
@@ -34,6 +34,17 @@ afterEach(() => {
 });
 
 describe("Jarvis desktop shell", () => {
+  it("stages materially conflicting transcripts for review", () => {
+    expect(transcriptsMateriallyDisagree(
+      "show my meetings for tomorrow morning",
+      "send the report to everyone immediately",
+    )).toBe(true);
+    expect(transcriptsMateriallyDisagree(
+      "show my meetings for tomorrow morning",
+      "please show my meetings tomorrow morning",
+    )).toBe(false);
+  });
+
   it("shows protected daily-use surfaces and refreshed local state", async () => {
     render(<App />);
     expect(screen.getByText("JARVIS")).toBeTruthy();

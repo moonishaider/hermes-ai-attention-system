@@ -13,6 +13,18 @@ const CONTEXTS: { id: ContextId; label: string }[] = [
   { id: "unknown", label: "Unknown" },
 ];
 
+export function transcriptsMateriallyDisagree(live: string, final: string) {
+  const words = (value: string) => value.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+  const liveWords = words(live);
+  const finalWords = words(final);
+  if (liveWords.length < 4 || finalWords.length < 4) return false;
+  const left = new Set(liveWords);
+  const right = new Set(finalWords);
+  const shared = [...left].filter((word) => right.has(word)).length;
+  const union = new Set([...left, ...right]).size;
+  return union > 0 && shared / union < 0.45;
+}
+
 const fallbackHealth: HealthStatus = {
   state: "starting", hermesVersion: "0.20.0", backend: "Checking",
   context: "personal", modelRoute: "DeepSeek V4 Flash", budget: "Checking",
@@ -48,6 +60,7 @@ function App() {
   const chunksRef = useRef<Blob[]>([]);
   const lastRecordingRef = useRef<Blob | null>(null);
   const recognitionRef = useRef<{ start: () => void; stop: () => void } | null>(null);
+  const liveTranscriptRef = useRef("");
   const runStartedRef = useRef(0);
   const routeRef = useRef("routine");
   const stageCostRef = useRef(0);
@@ -191,6 +204,16 @@ function App() {
       if (result.transcript?.trim()) {
         const transcript = result.transcript.trim();
         setVoiceTranscript(transcript);
+        const liveTranscript = liveTranscriptRef.current.trim();
+        if (transcriptsMateriallyDisagree(liveTranscript, transcript)) {
+          setPrompt(transcript);
+          setProgress([
+            "The live and final transcripts disagree, so Jarvis did not submit anything.",
+            "Review the transcript in the composer, then choose Ask Jarvis, Retry transcription, or Discard.",
+          ]);
+          setVoiceRetryAvailable(true);
+          return;
+        }
         if (!voiceDeliveryIdRef.current) voiceDeliveryIdRef.current = crypto.randomUUID();
         const delivered = await startPrompt(transcript, true, voiceDeliveryIdRef.current);
         if (delivered) {
@@ -250,6 +273,7 @@ function App() {
       recorderRef.current = recorder;
       chunksRef.current = [];
       voiceDeliveryIdRef.current = crypto.randomUUID();
+      liveTranscriptRef.current = "";
       setVoiceTranscript("");
       const Recognition = (window as unknown as { webkitSpeechRecognition?: new () => {
         continuous: boolean; interimResults: boolean; lang: string;
@@ -261,7 +285,10 @@ function App() {
         recognition.continuous = true; recognition.interimResults = true; recognition.lang = "en-US";
         recognition.onresult = (event) => {
           const text = Array.from(event.results).map((result) => result[0]?.transcript ?? "").join(" ").trim();
-          if (text) setVoiceTranscript(text);
+          if (text) {
+            liveTranscriptRef.current = text;
+            setVoiceTranscript(text);
+          }
         };
         recognitionRef.current = recognition;
         try { recognition.start(); } catch { recognitionRef.current = null; }
@@ -300,6 +327,7 @@ function App() {
     lastRecordingRef.current = null;
     voiceDeliveryIdRef.current = null;
     chunksRef.current = [];
+    liveTranscriptRef.current = "";
     setVoiceTranscript("");
     setVoiceRetryAvailable(false);
     setProgress(["Recording and transcript discarded. Nothing else was submitted."]);
@@ -526,7 +554,7 @@ function App() {
         </div>
         <form className="composer" onSubmit={submit}>
           <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="What needs your attention?" rows={2}/>
-          <div><select aria-label="Model routing" value={modelOverride} onChange={(event) => setModelOverride(event.target.value as typeof modelOverride)}><option value="auto">Model · Auto</option><option value="routine">Flash</option><option value="difficult">Pro</option><option value="review">Pro + Terra review</option></select><button type="button" className={recording ? "danger" : "quiet"} onClick={() => void toggleVoice()}>{recording ? "Stop listening" : "Talk"}</button>{voiceRetryAvailable && lastRecordingRef.current && <button type="button" className="quiet" onClick={() => void transcribeBlob(lastRecordingRef.current!)}>Retry delivery</button>}{voiceRetryAvailable && voiceTranscript && <button type="button" className="quiet" onClick={editVoiceTranscript}>Edit transcript</button>}{voiceRetryAvailable && (voiceTranscript || lastRecordingRef.current) && <button type="button" className="quiet" onClick={discardVoiceRecording}>Discard</button>}<button type="button" className="quiet" onClick={stopSpeaking}>Stop speaking</button>{busy ? <button type="button" className="danger" onClick={cancel}>Cancel</button> : <button type="submit">Ask Jarvis</button>}</div>
+          <div><select aria-label="Model routing" value={modelOverride} onChange={(event) => setModelOverride(event.target.value as typeof modelOverride)}><option value="auto">Model · Auto</option><option value="routine">Flash</option><option value="difficult">Pro</option><option value="review">Pro + Terra review</option></select><button type="button" className={recording ? "danger" : "quiet"} onClick={() => void toggleVoice()}>{recording ? "Stop listening" : "Talk"}</button>{voiceRetryAvailable && lastRecordingRef.current && <button type="button" className="quiet" onClick={() => void transcribeBlob(lastRecordingRef.current!)}>Retry transcription</button>}{voiceRetryAvailable && voiceTranscript && <button type="button" className="quiet" onClick={editVoiceTranscript}>Edit transcript</button>}{voiceRetryAvailable && (voiceTranscript || lastRecordingRef.current) && <button type="button" className="quiet" onClick={discardVoiceRecording}>Discard</button>}<button type="button" className="quiet" onClick={stopSpeaking}>Stop speaking</button>{busy ? <button type="button" className="danger" onClick={cancel}>Cancel</button> : <button type="submit">Ask Jarvis</button>}</div>
         </form>
       </section>}
 
