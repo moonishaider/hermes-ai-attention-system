@@ -347,7 +347,12 @@ function App() {
       setAnswer(result.answer);
       setProgress(["Selected area understood with GPT-5.6 Luna · pixels discarded"]);
     } catch (error) {
-      setProgress([`Screen understanding stopped safely: ${String(error)}`]);
+      const message = String(error);
+      setProgress([
+        message.includes("adapter returned no valid result") || message.includes("capture cancelled")
+          ? "Screen selection was cancelled or no region was chosen. Nothing was captured or retained."
+          : `Screen understanding stopped safely: ${message}`,
+      ]);
     }
   }
 

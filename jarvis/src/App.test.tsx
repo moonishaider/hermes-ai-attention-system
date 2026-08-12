@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const mockState = vi.hoisted(() => ({ failRunStart: false }));
+const mockState = vi.hoisted(() => ({ failRunStart: false, cancelScreen: false }));
 
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ label: "main" }) }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => undefined) }));
@@ -25,6 +25,10 @@ vi.mock("@tauri-apps/api/core", () => ({
     if (command === "autostart_status") return false;
     if (command === "request_microphone_access") return "authorized";
     if (command === "transcribe_audio") return { transcript: "review my personal tasks", provider: "openai" };
+    if (command === "look_at_selected_area") {
+      if (mockState.cancelScreen) throw new Error("adapter returned no valid result");
+      return { answer: "Harmless selected area" };
+    }
     if (command === "start_run") {
       if (mockState.failRunStart) throw new Error("synthetic backend unavailable");
       return { runId: "run-1", route: "routine", reason: "routine request" };
@@ -44,6 +48,7 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   mockState.failRunStart = false;
+  mockState.cancelScreen = false;
 });
 
 describe("Jarvis desktop shell", () => {
@@ -103,6 +108,14 @@ describe("Jarvis desktop shell", () => {
     expect(screen.getByText("upwork.com · personal")).toBeTruthy();
     expect(screen.getByText("No mutation")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Open this exact page" })).toBeTruthy();
+  });
+
+  it("explains a cancelled screen selection without adapter jargon", async () => {
+    mockState.cancelScreen = true;
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Select area" }));
+    await waitFor(() => expect(screen.getByText("Screen selection was cancelled or no region was chosen. Nothing was captured or retained.")).toBeTruthy());
+    expect(screen.queryByText(/adapter returned/i)).toBeNull();
   });
 
   it("retains failed dictation and exposes retry edit and discard", async () => {
