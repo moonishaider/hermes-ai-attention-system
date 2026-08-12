@@ -24,6 +24,7 @@ This record separates owner-visible evidence from configuration and automated te
 - The Work Ledger contains 11,424 evidence projections with immutable source links and a durable cursor so completed rows are not rescanned. Actor attribution is 11,199 owner and 225 uncertain; uncertainty was preserved rather than forced.
 - Model selection, context-before-limit retrieval, Mitchell dormancy, owner-origin action policy, personal Google endpoint restrictions, capability protection, radar change detection, no-retention screen handling, and absence of builder-only Sol from runtime routes have deterministic tests.
 - Three independent source-backed DLOA occurrences produced one proposed local-draft automation. It cannot send and awaits an explicit useful/not-useful owner outcome.
+- Capability feedback is deterministic and recoverable: useful promotes a draft/disabled capability only to shadow, not-useful disables it, feedback provenance is retained, and disabled/archived entries can be restored to draft. The full owner-visible cycle remains pending.
 - Four proactive projections ran against the runtime ledger with external writes false. End-of-day was useful; the start-day, pre-meeting, and absence-return groups were sparse because historical ledger kinds remain mostly generic work/activity. That quality gap is recorded rather than hidden.
 
 ## Pending owner-visible checks
