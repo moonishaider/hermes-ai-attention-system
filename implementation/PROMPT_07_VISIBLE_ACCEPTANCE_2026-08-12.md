@@ -7,7 +7,9 @@ This record separates owner-visible evidence from configuration and automated te
 - `/Applications/Jarvis.app` opened as a separate native application without Terminal or the stock Hermes interface.
 - A second launch retained one app and one exact owned gateway. Closing hid the main window, the menu-bar path reopened it, and Command–Shift–Space opened Quick Entry over another app.
 - A normal full Quit removed Jarvis, its exact owned Hermes gateway child, and the loopback listener. No unrelated Hermes process was terminated.
+- The visible Launch at Login control was switched on and off in Settings and deliberately left off. No custom daemon or hidden login item was created.
 - The installed microphone-entitled build passed real tap-to-start/tap-to-stop capture. Immediate normal Quit and reopen now select a fresh private loopback port, eliminating the prior fixed-port restart conflict.
+- The final Talk build uses official `gpt-4o-transcribe` with English and owner-vocabulary hints, 500 ms memory-only chunks for long dictation, and explicit Retry/Edit/Discard recovery. Raw audio is released as soon as Hermes returns a run receipt.
 - A routine packaged run used Flash and returned the exact requested result. A source-backed attribution run used Pro. The final packaged synthetic high-stakes review used Terra through the official `openai-api` provider and returned exact `FINAL_TERRA_AUDIT_OK` in 4.7 seconds, with its terminal decision persisted.
 - All three visible model runs showed the deterministic route reason, elapsed time, token count, and estimated cost. Typed chat remained quiet.
 - The explicit one-shot screen path retained no capture file. Zoom passed normal-TLS MCP connection and retained only its four reviewed read tools.
@@ -26,7 +28,7 @@ This record separates owner-visible evidence from configuration and automated te
 
 ## Pending owner-visible checks
 
-The remaining visible product checks are deliberately narrow: one real sentence to score the new higher-accuracy transcription route, failed-submission Retry, natural spoken projection/barge-in, a Jarvis-originated Luna selected-area run, explicit Launch-at-Login opt-in/opt-out if the owner wants it, owner review of the inferred personal Calendar style, feedback/automation outcomes, and a correct-browser-profile navigation case. The app remains fail-closed wherever Chrome profile identity cannot be proven. These items are not inferred from tests.
+The remaining visible product checks are deliberately narrow: one real sentence to score the new higher-accuracy transcription route, failed-submission Retry/Edit/Discard, natural spoken projection/barge-in, a Jarvis-originated Luna selected-area run, owner review of the inferred personal Calendar style, feedback/automation outcomes, and a correct-browser-profile navigation case. The app remains fail-closed wherever Chrome profile identity cannot be proven. These items are not inferred from tests.
 
 ## Deliberately blocked or deferred
 
