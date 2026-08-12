@@ -47,7 +47,7 @@ The previously accepted direct Terra connectivity result remains valid provider 
 
 - 90 Python unit/security/contract tests passed.
 - 4 renderer tests passed.
-- 5 Rust policy/lifecycle tests passed.
+- 6 Rust policy/lifecycle tests passed in the current fixed-navigation build.
 - TypeScript/Vite production build, Rust formatting, Clippy with warnings denied, release application build, ad-hoc code-signature verification, secret scan, configuration doctor, safety preflight, command-rule negatives, and production npm audit passed.
 - Production npm audit reported zero vulnerabilities.
 - Current installed binary SHA-256: `f61b90d240ced22184cb9920251de762781fe879d7148826ac6f79a6e1498b26` (the later production-only build adds fixed-destination navigation, transcript-disagreement review, and recoverable Capability Studio feedback; the governor implementation remains unchanged).
