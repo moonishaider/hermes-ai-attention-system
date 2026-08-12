@@ -24,16 +24,21 @@ For public research, choose **Personal · public search · Profile 1**, preview 
 
 ## Personal Calendar and Gmail drafts
 
-Open **Actions**. The personal action grant is separate from the existing read-only Google connection and starts disconnected; even after consent, both capabilities remain visibly **Off** until you select **Enable personal actions**. Every event or draft shows its exact personal account, Profile 1, payload, hash, and expiry before the create control appears.
+Ask in **Chat** as naturally as:
+
+- `Create a personal calendar event called Focus block tomorrow at 3 PM for 30 minutes.`
+- `Create an unsent personal Gmail draft with subject Follow up and body Thanks for your time today.`
+
+Direct, unambiguous Personal requests run through **Auto Explicit Request**. Jarvis shows confirmation and keeps Undo for events. Ambiguity, attendees, recurrence, work/company calendars, unusual commitments, or an email-send request stop for review. **Actions** shows the separate personal account grant, owned resources, capability off switch, and optional Advanced/Safety details.
 
 - Calendar: only the existing personal primary calendar; simple event only; 10-minute reminder; no attendee, recurrence, conference, invitation, or work calendar. **Undo this exact event** works only for an event Jarvis created.
 - Gmail: creates or opens one unsent personal draft. A recipient may be one explicit address or empty. Sending, bulk recipients, deletion, labels, mailbox changes, and work Gmail writes do not exist.
-- **Disable personal actions** immediately turns off both execution capabilities without changing an existing event or draft. The generic company/client action kill switch remains on throughout.
+- **Turn personal actions off** immediately disables both execution capabilities without changing an existing event or draft. The generic company/client action kill switch remains on throughout.
 
 ## Normal limitations
 
 - Wake phrase is off and not implemented in this Jarvis build; the two global shortcuts are the supported activation paths.
-- Personal Calendar creation and personal Gmail draft creation require the separate owner grant plus the visible capability toggle and exact preview. They never grant company/client writes or Gmail sending.
+- Personal Calendar creation and personal Gmail draft creation require the separate owner grant and active bounded capabilities. They never grant company/client writes or Gmail sending.
 - Company/client writes, generic Slack sending, payments, checkout, unrestricted browser/computer control, and Gmail sending are unavailable.
 - Guided navigation opens reviewed pages or searches public evidence; public results can be read and scrolled inside Jarvis. Logged-in page scraping, arbitrary URLs, typing, submission, download, settings changes, and form interaction are not enabled.
 - Closing the window keeps Jarvis available in the menu bar. Launch at Login is an explicit, default-off setting.

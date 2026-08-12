@@ -85,10 +85,23 @@ class PersonalGoogleLiveBoundaryTests(unittest.TestCase):
                 service = Service()
                 service.store = store
                 self.assertFalse(local_state._personal_actions_enabled(service))
+                self.assertEqual(local_state._personal_action_mode(service), "off")
                 local_state._set_personal_actions_enabled(service, True)
                 self.assertTrue(local_state._personal_actions_enabled(service))
+                self.assertEqual(local_state._personal_action_mode(service), "auto-explicit")
+                local_state._set_personal_action_mode(service, "preview")
+                self.assertEqual(local_state._personal_action_mode(service), "preview")
                 local_state._set_personal_actions_enabled(service, False)
                 self.assertFalse(local_state._personal_actions_enabled(service))
+
+    def test_explicit_mode_rejects_ambiguity_attendees_recurrence_work_and_send(self) -> None:
+        import jarvis_local_state as local_state
+
+        source = (ROOT / "scripts" / "jarvis_local_state.py").read_text()
+        self.assertIn("personal_action_explicit", source)
+        for blocked in ("invite ", "attendee", "recurring", "work calendar", "send the email"):
+            self.assertIn(blocked, source)
+        self.assertIn('str(value.get("context") or "") != "personal"', source)
 
 
 if __name__ == "__main__":

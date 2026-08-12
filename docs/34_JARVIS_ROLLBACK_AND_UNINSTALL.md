@@ -18,14 +18,22 @@ Choose **Quit Jarvis completely** from its menu-bar item. Confirm the Jarvis pro
 ## Installed-app rollback copies
 
 The immediately preceding signed application packages are preserved under the
-project-local ignored `backups/` directory. The exact app before the final
-default-off personal-action build is
-`backups/Jarvis-pre-default-off-personal-actions-20260812T154336Z.app`;
-the installed final-candidate binary has SHA-256
-`be2a11627fb6659a9aa36f7afa944152f903d56dbba2d3e8f95a885b147b9f4b`.
-The final database backup and restore drill is preserved under
-`backups/prompt7-final-20260812T211500Z`; both copies passed SQLite
-`quick_check=ok`. Keep them project-local and inspect the exact path before any restore.
+project-local ignored `backups/` directory. The exact app immediately before
+the final cosmetic simplification is
+`backups/Jarvis-pre-ui-simplification-20260812T171700Z.app`; the installed final
+Auto Explicit Request binary has SHA-256
+`b8449a4ef1b4e7d9759c369483cb6030079662d12fdbe23c90f7197bd48c0a10`.
+The immediately preceding installed package is preserved as
+`backups/Jarvis-pre-final-audited-20260812T174840Z.app`.
+The online database backup immediately before Auto Explicit acceptance is
+`backups/prompt7-pre-auto-explicit-20260812T170515Z.sqlite3` and passed
+`PRAGMA quick_check=ok`.
+The final accepted database backup and restore drill are
+`backups/prompt7-complete-20260812T173008Z.sqlite3` and
+`backups/prompt7-complete-20260812T173008Z-restore-check.sqlite3`; both passed
+SQLite `quick_check=ok` and share SHA-256
+`25baa42b880ca721aa401ee92ed0f678823e05ca5c083fb642b4b2c208c11d1c`.
+Keep them project-local and inspect the exact path before any restore.
 Restoring means quitting Jarvis, moving the current exact app to a new backup
 name, copying one reviewed rollback app to `/Applications/Jarvis.app`, verifying
 its deep signature, and reopening it. Never broadly delete or overwrite the
@@ -33,7 +41,7 @@ only copy.
 
 ## Personal-action rollback
 
-In Jarvis → Actions, select **Disable personal actions** first. This leaves any
+In Jarvis → Actions, select **Turn personal actions off** first. This leaves any
 existing personal event or draft unchanged while disabling both registered
 execution capabilities. The separate owner-only token is
 `~/.hermes/mcp-tokens/google_personal_actions.json`; do not remove it through an

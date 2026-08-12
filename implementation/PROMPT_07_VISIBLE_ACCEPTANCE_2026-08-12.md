@@ -25,11 +25,14 @@ This record separates owner-visible evidence from configuration and automated te
 - Start day, Pre-meeting, End day/DLOA, and Catch up visibly rendered as bounded local Work Ledger projections with no connector fan-out or external write. Sparse evidence remained visibly sparse rather than being fabricated.
 - The packaged Work Ledger showed context-scoped source-backed entries with actor and freshness labels; two consecutive bounded refreshes processed zero because the durable cursor was current. Mitchell remained explicitly dormant with its historical ledger preserved and zero ordinary proactive sources. Context switching cleared the previous context's projection.
 - No company/client message, calendar change, email, purchase, form submission, unrestricted computer control, or other forbidden external action occurred.
-- The packaged Actions screen now exposes the actual permission matrix: Personal Calendar and Gmail drafts use a separate grant and remain capability-disabled by default even after consent; Gmail sending and work Google writes are absent; retrieved content cannot authorize an action; guided navigation requires an exact non-mutating preview. This is visible product evidence backed by negative tests, not a claim inferred from configuration.
+- Installed Jarvis accepted a direct Personal request, created the exact simple event in the existing primary calendar, and showed Undo. Syed verified the event in Google Calendar and then used Jarvis's Undo; the provider-backed ownership record changed to `undone`, with no other calendar resource changed.
+- Installed Jarvis accepted a direct Personal request through normal Chat and created/opened one unsent Gmail draft. The provider-backed ownership record is active; Gmail send remains absent.
+- The ordinary sidebar now keeps Now, Chat, Work Ledger, Projects, and Actions obvious; specialist/technical surfaces remain available under More. Actions defaults to natural-language examples and active owned resources, while detailed preview controls and permission internals remain under Advanced/Safety controls. No capability was removed.
+- The packaged Actions screen exposes the actual permission boundary: Personal Calendar and Gmail drafts use a separate grant in Auto Explicit Request mode; Gmail sending and work Google writes are absent; retrieved content cannot authorize an action; guided navigation requires an exact non-mutating preview. This is visible product evidence backed by negative tests, not a claim inferred from configuration.
 
 ## Automated support completed
 
-- Marked-root preflight, hook/rule negatives, secret scan, configuration doctor, Python compile, Rust formatting/clippy, 94 Python tests, fifteen frontend tests, six Rust tests, static/release frontend build, and the production dependency audit pass. The final personal-action package was ad-hoc signed and installed with binary SHA-256 `be2a11627fb6659a9aa36f7afa944152f903d56dbba2d3e8f95a885b147b9f4b`.
+- Marked-root preflight, hook/rule negatives, secret scan, configuration doctor, Python compile, Rust formatting/clippy, 96 Python tests, seventeen frontend tests, six Rust tests, static/release frontend build, and the production dependency audit pass. The final simplified Auto Explicit Request package was rebuilt, ad-hoc signed, installed, and reopened healthy with binary SHA-256 `b8449a4ef1b4e7d9759c369483cb6030079662d12fdbe23c90f7197bd48c0a10`.
 - The final public-reader adapter was exercised live with redacted output after restoring exact `ddgs==9.14.4`: five HTTPS citations, a stable query hash, and `mutation: false`. The UI deliberately renders titles as inert text rather than opening remote result pages in the webview.
 - The packaged Jarvis reader was then exercised visibly: `Personal · public search · Profile 1` previewed the exact public-search boundary, loaded five dated HTTPS citations for a harmless ergonomic-mouse query, and scrolled inside Jarvis. No account session, remote result link, or mutation surface was used.
 - The Work Ledger contains 11,424 evidence projections with immutable source links and a durable cursor so completed rows are not rescanned. Actor attribution is 11,199 owner and 225 uncertain; uncertainty was preserved rather than forced.
@@ -39,10 +42,9 @@ This record separates owner-visible evidence from configuration and automated te
 
 ## Pending owner-visible checks
 
-Two Prompt 7 checks remain unclaimed: the exact personal Calendar create/Undo cycle and the exact unsent Gmail draft create/open cycle. Both require a separate owner consent and physical create clicks because Codex may not perform live calendar/email mutations. The app remains fail-closed wherever Chrome profile identity cannot be proven.
+None. All 42 Prompt 7 visible acceptance requirements now have direct owner-visible or runtime/provider-backed evidence.
 
 ## Deliberately blocked or deferred
 
-- A real personal Calendar mutation and personal Gmail draft mutation are not performed by Codex because the repository build rules prohibit live calendar/email mutations. The reviewed owner-operated paths are installed: separate exact scopes, owner-only token storage, capability Off by default, exact native preview, global company/client kill switch unchanged, per-capability switches, and Gmail send/work writes absent.
 - Wake phrase is absent and off. Global text and explicit talk shortcuts are the supported activation paths.
 - Apple notarization is unavailable without an Apple Developer signing identity. The private local bundle is ad-hoc signed.

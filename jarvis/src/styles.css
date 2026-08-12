@@ -12,6 +12,9 @@ aside { border-right: 1px solid #ffffff12; padding: 27px 18px 20px; background: 
 nav { display: grid; gap: 5px; }
 nav button { background: transparent; text-align: left; color: #8097a9; padding: 11px 13px; font-weight: 560; }
 nav button:hover, nav button.active { color: white; background: #4badff16; box-shadow: inset 2px 0 #4ebfff; }
+.nav-more { margin-top: 8px; border-top: 1px solid #ffffff12; border-radius: 0 0 10px 10px; }
+.advanced-nav { display: grid; gap: 4px; padding-left: 9px; border-left: 1px solid #ffffff12; }
+.advanced-nav button { font-size: 13px; padding: 9px 11px; }
 .sidebar-foot { margin-top: auto; padding: 15px 10px; border-top: 1px solid #ffffff0d; color: #7890a2; font-size: 12px; display: flex; gap: 8px; align-items: center; }
 .health-dot { width: 7px; height: 7px; border-radius: 50%; background: #f4b044; box-shadow: 0 0 12px currentColor; }.health-dot.ready { background: #4cf5b3; }.health-dot.degraded { background: #ff6b6b; }
 main { padding: 36px 42px 42px; overflow: auto; }
