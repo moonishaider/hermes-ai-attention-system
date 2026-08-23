@@ -33,3 +33,14 @@ No Prompt 8 cleanup has occurred. Measurements below are the exact current pre-c
 Cleanup may begin only after the installed Prompt 8 app passes acceptance and a current rollback is retained. Candidates must be individually measured and proven redundant/reproducible. Current app/runtime/database/secrets/history/memory and unrelated computer files are prohibited targets.
 
 The Prompt 8 text asks for an executing cleanup script, but `AGENTS.md` line 63 and `docs/15_CODEX_EXECUTION_SAFETY.md` lines 37 and 61 explicitly forbid deletion through Python, Node, shell, Git, package managers, or indirect helpers and require project-local quarantine plus a committed deletion plan. Those higher-priority project boundaries remain mandatory. Therefore this milestone may produce an exact generated manifest and reversible quarantine operation only; it will not claim quarantined bytes as freed disk space. Any later physical deletion requires a separately authorized workflow that changes neither these safety controls nor the current product state.
+
+## Policy-compliant quarantine tool
+
+`scripts/safe_quarantine_jarvis_artifacts.py` implements the permitted operation without a deletion mode. It accepts only these exact project-owned, reproducible candidates:
+
+- `jarvis/src-tauri/target`
+- `jarvis/dist`
+- `jarvis/node_modules`
+- `.tooling/npm-cache`
+
+The tool creates an owner-only manifest under ignored `runtime-data/storage-manifests/`, records byte/object counts plus a deterministic metadata SHA-256, revalidates every entry immediately before action, rejects symlinks/path escapes/protected paths/tampering, and moves exact candidates only to a recoverable `.workspace-quarantine/prompt8-storage-<manifest-id>` destination. Dry-run and quarantine behavior are covered by `tests/test_prompt8_storage.py`. It reports `freed_bytes=0` because project-local quarantine does not release filesystem space. No real candidate has been quarantined yet; execution remains gated on final installed acceptance.
