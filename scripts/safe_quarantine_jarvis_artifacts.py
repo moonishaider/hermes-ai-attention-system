@@ -71,12 +71,27 @@ def _tree_fingerprint(root: Path, path: Path) -> tuple[int, int, str]:
     """Return byte count, object count, and a metadata-only tree hash."""
     if path.is_symlink():
         raise PermissionError(f"symlink candidate is forbidden: {path.name}")
+    candidate_root = path.resolve(strict=True)
     total = 0
     objects = 0
     digest = sha256()
     for item in _tree_entries(path):
         if item.is_symlink():
-            raise PermissionError(f"symlink within candidate is forbidden: {item.relative_to(root)}")
+            link_target = os.readlink(item)
+            try:
+                resolved_target = item.resolve(strict=True)
+            except OSError as error:
+                raise PermissionError(
+                    f"broken symlink within candidate is forbidden: {item.relative_to(root)}"
+                ) from error
+            if resolved_target != candidate_root and candidate_root not in resolved_target.parents:
+                raise PermissionError(
+                    f"symlink escapes candidate tree: {item.relative_to(root)}"
+                )
+            relative = item.relative_to(path.parent).as_posix()
+            objects += 1
+            digest.update(f"{relative}\0symlink\0{link_target}\n".encode())
+            continue
         relative = item.relative_to(path.parent).as_posix()
         stat = item.stat(follow_symlinks=False)
         kind = "directory" if item.is_dir() else "file"

@@ -36,6 +36,15 @@ class Prompt8StorageTests(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 build_manifest(root, ["frontend-dist"])
 
+    def test_internal_symlink_is_hashed_without_following_it(self) -> None:
+        temporary, root = self.project()
+        with temporary:
+            target = root / "jarvis" / "dist"
+            (target / "entry").symlink_to("index.html")
+            manifest = build_manifest(root, ["frontend-dist"])
+            self.assertEqual(manifest["entries"][0]["object_count"], 3)
+            self.assertEqual(len(manifest["entries"][0]["metadata_sha256"]), 64)
+
     def test_changed_candidate_cannot_be_quarantined(self) -> None:
         temporary, root = self.project()
         with temporary:
