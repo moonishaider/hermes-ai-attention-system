@@ -131,8 +131,12 @@ class PersonalGoogleActionTokenManager:
         try:
             value = self._load(self.path)
             exact = _scope_set(value.get("scope")) == set(PERSONAL_ACTION_SCOPES)
+            seconds_remaining = max(0, int(float(value.get("expires_at") or 0) - self.now()))
             return {"connected": exact, "account": "moonishaider12@gmail.com",
-                    "refreshable": bool(value.get("refresh_token")), "exact_scopes": exact}
+                    "refreshable": bool(value.get("refresh_token")), "exact_scopes": exact,
+                    "seconds_remaining": seconds_remaining,
+                    "freshness": "ready-refreshable" if value.get("refresh_token") else "reauthorization-required"}
         except GoogleOfflineOAuthError:
             return {"connected": False, "account": "moonishaider12@gmail.com",
-                    "refreshable": False, "exact_scopes": False}
+                    "refreshable": False, "exact_scopes": False, "seconds_remaining": 0,
+                    "freshness": "reauthorization-required"}

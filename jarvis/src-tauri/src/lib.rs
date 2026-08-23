@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
+use std::net::{IpAddr, Ipv4Addr, SocketAddrV4, TcpListener};
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
@@ -55,6 +55,8 @@ struct HealthStatus {
     wake_listening: bool,
     background_mode: String,
     message: String,
+    build_commit: String,
+    runtime_marker: bool,
 }
 
 #[derive(Deserialize)]
@@ -62,6 +64,8 @@ struct HealthStatus {
 struct RunRequest {
     prompt: String,
     context: String,
+    #[serde(default)]
+    session_id: Option<String>,
     #[serde(default)]
     override_route: Option<String>,
     #[serde(default)]
@@ -112,6 +116,15 @@ struct RunStart {
     run_id: String,
     route: String,
     reason: String,
+}
+
+struct GovernedRun {
+    run_id: String,
+    plan: GovernedPlan,
+    context: String,
+    prompt: String,
+    session_id: Option<String>,
+    turn_id: String,
 }
 
 /// Ask macOS for microphone access through AVFoundation before the WKWebView
@@ -574,6 +587,7 @@ impl HermesAdapter {
         prompt: &str,
         context: &str,
         route: &GovernedRoute,
+        session_id: Option<&str>,
     ) -> Result<String, String> {
         if prompt.trim().is_empty() || prompt.chars().count() > 50_000 {
             return Err("request must contain 1 to 50,000 characters".into());
@@ -586,13 +600,16 @@ impl HermesAdapter {
             "difficult" => 1_800,
             _ => 1_500,
         };
-        let payload = json!({
+        let mut payload = json!({
             "input": prompt,
             "instructions": instructions,
             "model": route.model,
             "provider": route.provider,
             "model_options": {"max_tokens": max_tokens},
         });
+        if let Some(session_id) = session_id {
+            payload["session_id"] = Value::String(session_id.to_owned());
+        }
         let response = self
             .authenticated(self.inner.client.post(self.api("/v1/runs")))
             .json(&payload)
@@ -740,16 +757,17 @@ impl HermesAdapter {
         )
     }
 
-    fn stream_plan(
-        &self,
-        app: AppHandle,
-        run_id: String,
-        plan: GovernedPlan,
-        context: String,
-        prompt: String,
-    ) {
+    fn stream_plan(&self, app: AppHandle, governed: GovernedRun) {
         let adapter = self.clone();
         thread::spawn(move || {
+            let GovernedRun {
+                run_id,
+                plan,
+                context,
+                prompt,
+                session_id,
+                turn_id,
+            } = governed;
             let reviewer_name = plan.reviewer.as_ref().map(|route| route.route);
             let primary = match adapter.consume_run(
                 &app,
@@ -818,19 +836,20 @@ impl HermesAdapter {
                     prompt.chars().take(36_000).collect::<String>()
                 )
             };
-            let secondary_id = match adapter.submit_run(&secondary_prompt, &context, &secondary) {
-                Ok(value) => value,
-                Err(error) => {
-                    let _ = app.emit(
-                        "jarvis-run-event",
-                        json!({
-                            "event": "run.failed", "run_id": run_id,
-                            "error": format!("{stage} submission failed: {error}")
-                        }),
-                    );
-                    return;
-                }
-            };
+            let secondary_id =
+                match adapter.submit_run(&secondary_prompt, &context, &secondary, None) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        let _ = app.emit(
+                            "jarvis-run-event",
+                            json!({
+                                "event": "run.failed", "run_id": run_id,
+                                "error": format!("{stage} submission failed: {error}")
+                            }),
+                        );
+                        return;
+                    }
+                };
             let _ = app.emit(
                 "jarvis-run-event",
                 json!({
@@ -842,17 +861,178 @@ impl HermesAdapter {
                     "stage_tokens": input_tokens + output_tokens,
                 }),
             );
-            if let Err(error) =
-                adapter.consume_run(&app, &secondary_id, &secondary, &context, true, None)
-            {
-                let _ = app.emit(
-                    "jarvis-run-event",
-                    json!({
-                        "event": "run.failed", "run_id": secondary_id, "error": error
-                    }),
-                );
+            match adapter.consume_run(&app, &secondary_id, &secondary, &context, false, None) {
+                Ok(terminal) => {
+                    if terminal.get("event").and_then(Value::as_str) == Some("run.completed") {
+                        let final_answer =
+                            terminal.get("output").and_then(Value::as_str).unwrap_or("");
+                        if let Some(owner_session) = session_id.as_deref() {
+                            let persisted_progress = vec![
+                                format!("{} completed", plan.primary.reason),
+                                format!(
+                                    "{} completed in an isolated review session",
+                                    secondary.reason
+                                ),
+                            ];
+                            if let Err(error) = adapter.conversation_turn_finish(
+                                owner_session,
+                                &turn_id,
+                                &context,
+                                secondary.route,
+                                final_answer,
+                                &persisted_progress,
+                            ) {
+                                let _ = app.emit(
+                                    "jarvis-run-event",
+                                    json!({
+                                        "event": "run.failed", "run_id": secondary_id,
+                                        "error": format!("final answer was not persisted: {error}")
+                                    }),
+                                );
+                                return;
+                            }
+                        }
+                    }
+                    let _ = app.emit("jarvis-run-event", terminal);
+                }
+                Err(error) => {
+                    let _ = app.emit(
+                        "jarvis-run-event",
+                        json!({
+                            "event": "run.failed", "run_id": secondary_id, "error": error
+                        }),
+                    );
+                }
             }
         });
+    }
+
+    fn validate_jarvis_session_id(session_id: &str) -> Result<(), String> {
+        if !session_id.starts_with("jarvis_")
+            || session_id.len() > 96
+            || !session_id
+                .chars()
+                .all(|value| value.is_ascii_alphanumeric() || matches!(value, '-' | '_'))
+        {
+            return Err("invalid Jarvis conversation id".into());
+        }
+        Ok(())
+    }
+
+    fn list_conversations(&self) -> Result<Value, String> {
+        self.run_python(
+            "jarvis_local_state.py",
+            &["conversation-list"],
+            Some(br#"{"includeArchived":true}"#),
+        )
+    }
+
+    fn create_conversation(&self, title: &str, context: &str) -> Result<Value, String> {
+        self.ensure_started()?;
+        let title = title.trim();
+        if title.is_empty() || title.chars().count() > 120 {
+            return Err("conversation title must contain 1 to 120 characters".into());
+        }
+        if !matches!(
+            context,
+            "inside-success" | "mitchell" | "personal" | "mixed" | "unknown"
+        ) {
+            return Err("invalid conversation context".into());
+        }
+        let mut random = [0_u8; 8];
+        fill(&mut random).map_err(|error| format!("secure conversation id failed: {error}"))?;
+        let suffix = random
+            .iter()
+            .map(|value| format!("{value:02x}"))
+            .collect::<String>();
+        let session_id = format!("jarvis_{context}_{suffix}");
+        let payload = json!({
+            "id": session_id,
+            "source": "jarvis_desktop",
+            "title": title,
+            "model": "deepseek-v4-flash",
+        });
+        self.authenticated(self.inner.client.post(self.api("/api/sessions")))
+            .json(&payload)
+            .send()
+            .and_then(Response::error_for_status)
+            .and_then(|response| response.json::<Value>())
+            .map_err(|error| format!("conversation creation failed: {error}"))
+    }
+
+    fn conversation_messages(&self, session_id: &str) -> Result<Value, String> {
+        Self::validate_jarvis_session_id(session_id)?;
+        self.ensure_started()?;
+        self.authenticated(
+            self.inner
+                .client
+                .get(self.api(&format!("/api/sessions/{session_id}/messages"))),
+        )
+        .send()
+        .and_then(Response::error_for_status)
+        .and_then(|response| response.json::<Value>())
+        .map_err(|error| format!("conversation history unavailable: {error}"))
+    }
+
+    fn conversation_control(&self, request: &Value) -> Result<Value, String> {
+        let bytes = serde_json::to_vec(request)
+            .map_err(|error| format!("conversation control serialization failed: {error}"))?;
+        if bytes.len() > 4_096 {
+            return Err("conversation control request is too large".into());
+        }
+        self.run_python(
+            "jarvis_local_state.py",
+            &["conversation-control"],
+            Some(&bytes),
+        )
+    }
+
+    fn conversation_turn_begin(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        context: &str,
+        owner_request: &str,
+    ) -> Result<Value, String> {
+        let payload = json!({
+            "sessionId": session_id,
+            "turnId": turn_id,
+            "context": context,
+            "ownerRequest": owner_request,
+        });
+        let bytes = serde_json::to_vec(&payload)
+            .map_err(|error| format!("conversation turn serialization failed: {error}"))?;
+        self.run_python(
+            "jarvis_local_state.py",
+            &["conversation-turn-begin"],
+            Some(&bytes),
+        )
+    }
+
+    fn conversation_turn_finish(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        context: &str,
+        route: &str,
+        assistant_message: &str,
+        progress: &[String],
+    ) -> Result<Value, String> {
+        let payload = json!({
+            "sessionId": session_id,
+            "turnId": turn_id,
+            "context": context,
+            "route": route,
+            "assistantMessage": assistant_message,
+            "progress": progress,
+        });
+        let bytes = serde_json::to_vec(&payload)
+            .map_err(|error| format!("conversation result serialization failed: {error}"))?;
+        self.run_python(
+            "jarvis_local_state.py",
+            &["conversation-turn-finish"],
+            Some(&bytes),
+        )
     }
 
     fn stop_run(&self, run_id: &str) -> Result<(), String> {
@@ -1067,6 +1247,45 @@ fn system_status(adapter: State<'_, HermesAdapter>) -> HealthStatus {
         } else {
             "Hermes is still starting or needs attention. No external action was attempted.".into()
         },
+        build_commit: option_env!("JARVIS_BUILD_COMMIT")
+            .unwrap_or("development")
+            .into(),
+        runtime_marker: adapter
+            .inner
+            .project_root
+            .join(".hermes-ai-attention-project")
+            .is_file(),
+    }
+}
+
+#[tauri::command]
+fn safe_repair(adapter: State<'_, HermesAdapter>, capability: String) -> Result<Value, String> {
+    validate_repair_capability(&capability)?;
+    match capability.as_str() {
+        "backend" => {
+            adapter.shutdown_owned();
+            adapter.ensure_started()?;
+            Ok(json!({"ok": true, "capability": "backend", "authorityChanged": false}))
+        }
+        "personal-google" => adapter.run_python(
+            "jarvis_local_state.py",
+            &["personal-action-status"],
+            Some(b"{}"),
+        ),
+        "local-state" => adapter.run_python(
+            "jarvis_local_state.py",
+            &["state", "--context", "personal"],
+            None,
+        ),
+        _ => Err("unapproved repair capability".into()),
+    }
+}
+
+fn validate_repair_capability(capability: &str) -> Result<(), String> {
+    if matches!(capability, "backend" | "personal-google" | "local-state") {
+        Ok(())
+    } else {
+        Err("unapproved repair capability".into())
     }
 }
 
@@ -1077,6 +1296,9 @@ fn start_run(
     request: RunRequest,
 ) -> Result<RunStart, String> {
     adapter.ensure_started()?;
+    if let Some(session_id) = request.session_id.as_deref() {
+        HermesAdapter::validate_jarvis_session_id(session_id)?;
+    }
     if let Some(delivery_id) = request.delivery_id.as_deref() {
         if delivery_id.len() > 80
             || !delivery_id
@@ -1096,13 +1318,50 @@ fn start_run(
         &request.context,
         request.override_route.as_deref(),
     )?;
-    let run_id = adapter.submit_run(&request.prompt, &request.context, &plan.primary)?;
+    let mut random = [0_u8; 8];
+    fill(&mut random).map_err(|error| format!("secure turn id failed: {error}"))?;
+    let generated_turn = random
+        .iter()
+        .map(|value| format!("{value:02x}"))
+        .collect::<String>();
+    let turn_id = request
+        .delivery_id
+        .as_deref()
+        .map(|value| format!("voice-{value}"))
+        .unwrap_or_else(|| format!("turn-{generated_turn}"));
+    let isolated_primary = plan.reviewer.is_some();
+    if isolated_primary {
+        let owner_session = request
+            .session_id
+            .as_deref()
+            .ok_or("reviewed turns require a canonical Jarvis conversation")?;
+        adapter.conversation_turn_begin(
+            owner_session,
+            &turn_id,
+            &request.context,
+            &request.prompt,
+        )?;
+    }
+    let run_id = adapter.submit_run(
+        &request.prompt,
+        &request.context,
+        &plan.primary,
+        if isolated_primary {
+            None
+        } else {
+            request.session_id.as_deref()
+        },
+    )?;
     adapter.stream_plan(
         app,
-        run_id.clone(),
-        plan.clone(),
-        request.context,
-        request.prompt,
+        GovernedRun {
+            run_id: run_id.clone(),
+            plan: plan.clone(),
+            context: request.context,
+            prompt: request.prompt,
+            session_id: request.session_id,
+            turn_id,
+        },
     );
     let started = RunStart {
         run_id,
@@ -1121,6 +1380,36 @@ fn start_run(
         deliveries.insert(delivery_id, started.clone());
     }
     Ok(started)
+}
+
+#[tauri::command]
+fn list_conversations(adapter: State<'_, HermesAdapter>) -> Result<Value, String> {
+    adapter.list_conversations()
+}
+
+#[tauri::command]
+fn create_conversation(
+    adapter: State<'_, HermesAdapter>,
+    title: String,
+    context: String,
+) -> Result<Value, String> {
+    adapter.create_conversation(&title, &context)
+}
+
+#[tauri::command]
+fn conversation_messages(
+    adapter: State<'_, HermesAdapter>,
+    session_id: String,
+) -> Result<Value, String> {
+    adapter.conversation_messages(&session_id)
+}
+
+#[tauri::command]
+fn conversation_control(
+    adapter: State<'_, HermesAdapter>,
+    request: Value,
+) -> Result<Value, String> {
+    adapter.conversation_control(&request)
 }
 
 #[tauri::command]
@@ -1240,6 +1529,7 @@ async fn local_control(
         operation.as_str(),
         "focus"
             | "stop-focus"
+            | "focus-control"
             | "setting"
             | "calendar-profile"
             | "review-calendar-profile"
@@ -1248,6 +1538,14 @@ async fn local_control(
             | "automation-outcome"
             | "commitment-open"
             | "commitment-complete"
+            | "task-create"
+            | "task-control"
+            | "meeting-followup"
+            | "project-checkpoint"
+            | "decision-create"
+            | "decision-outcome"
+            | "radar-evaluate"
+            | "memory-control"
     ) {
         return Err("unsupported local control".into());
     }
@@ -1262,6 +1560,70 @@ async fn local_control(
     })
     .await
     .map_err(|error| format!("local control worker failed: {error}"))?
+}
+
+fn evidence_source_plan(url: &str, context: &str) -> Result<(String, &'static str), String> {
+    if !matches!(context, "inside-success" | "mitchell" | "personal") {
+        return Err("one explicit context is required to open evidence".into());
+    }
+    if url.len() > 2_048 || url.chars().any(char::is_control) {
+        return Err("evidence source is invalid".into());
+    }
+    let parsed = reqwest::Url::parse(url).map_err(|_| "evidence source is not a valid URL")?;
+    if parsed.scheme() != "https"
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.port().is_some()
+    {
+        return Err("evidence source must be credential-free standard HTTPS".into());
+    }
+    let host = parsed
+        .host_str()
+        .ok_or("evidence source has no host")?
+        .to_ascii_lowercase();
+    if host.parse::<IpAddr>().is_ok() || host == "localhost" || host.ends_with(".local") {
+        return Err("local or numeric evidence hosts are unavailable".into());
+    }
+    const ALLOWED: &[&str] = &[
+        "github.com",
+        "slack.com",
+        "zoom.us",
+        "calendar.google.com",
+        "mail.google.com",
+        "docs.google.com",
+        "drive.google.com",
+        "chatgpt.com",
+        "gemini.google.com",
+        "upwork.com",
+        "openai.com",
+    ];
+    if !ALLOWED
+        .iter()
+        .any(|allowed| host == *allowed || host.ends_with(&format!(".{allowed}")))
+    {
+        return Err("source host is outside Jarvis's reviewed evidence allowlist".into());
+    }
+    let profile = if context == "inside-success" {
+        "Profile 2"
+    } else {
+        "Profile 1"
+    };
+    Ok((parsed.to_string(), profile))
+}
+
+#[tauri::command]
+fn open_evidence_source(url: String, context: String) -> Result<(), String> {
+    let (url, profile) = evidence_source_plan(&url, &context)?;
+    Command::new("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+        .arg(format!("--profile-directory={profile}"))
+        .arg("--new-tab")
+        .arg(url)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| format!("evidence source did not open: {error}"))?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -1667,7 +2029,12 @@ pub fn run() {
         .manage(adapter)
         .invoke_handler(tauri::generate_handler![
             system_status,
+            safe_repair,
             request_microphone_access,
+            list_conversations,
+            create_conversation,
+            conversation_messages,
+            conversation_control,
             start_run,
             stop_run,
             transcribe_audio,
@@ -1675,6 +2042,7 @@ pub fn run() {
             jarvis_state,
             create_local_item,
             local_control,
+            open_evidence_source,
             personal_action_status,
             set_personal_actions_enabled,
             authorize_personal_google_actions,
@@ -1727,7 +2095,12 @@ mod tests {
     fn renderer_has_no_generic_shell_or_url_command() {
         let exposed = [
             "system_status",
+            "safe_repair",
             "request_microphone_access",
+            "list_conversations",
+            "create_conversation",
+            "conversation_messages",
+            "conversation_control",
             "start_run",
             "stop_run",
             "transcribe_audio",
@@ -1735,6 +2108,7 @@ mod tests {
             "jarvis_state",
             "create_local_item",
             "local_control",
+            "open_evidence_source",
             "personal_action_status",
             "set_personal_actions_enabled",
             "authorize_personal_google_actions",
@@ -1754,6 +2128,44 @@ mod tests {
                 || name.contains("url")
                 || name.contains("delete"))
         );
+    }
+
+    #[test]
+    fn evidence_opening_is_https_host_and_context_locked() {
+        let (url, profile) = evidence_source_plan(
+            "https://github.com/moonishaider/hermes-ai-attention-system/commit/abc",
+            "personal",
+        )
+        .expect("reviewed evidence source");
+        assert_eq!(profile, "Profile 1");
+        assert!(url.starts_with("https://github.com/"));
+        assert!(
+            evidence_source_plan(
+                "https://istvoffical.slack.com/archives/C123",
+                "inside-success"
+            )
+            .is_ok()
+        );
+        assert!(evidence_source_plan("http://github.com/example", "personal").is_err());
+        assert!(evidence_source_plan("https://127.0.0.1/private", "personal").is_err());
+        assert!(evidence_source_plan("https://example.com/source", "personal").is_err());
+        assert!(evidence_source_plan("https://github.com/example", "mixed").is_err());
+    }
+
+    #[test]
+    fn repair_cannot_widen_scopes_tools_accounts_or_writes() {
+        for capability in ["backend", "personal-google", "local-state"] {
+            assert!(validate_repair_capability(capability).is_ok());
+        }
+        for capability in [
+            "oauth-scope",
+            "add-tool",
+            "switch-account",
+            "enable-writes",
+            "shell",
+        ] {
+            assert!(validate_repair_capability(capability).is_err());
+        }
     }
 
     #[test]
