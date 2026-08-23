@@ -26,4 +26,8 @@ This is the live implementation plan for `PROMPT_08_JARVIS_PRODUCT_HARDENING_GOA
 
 ## Current milestone
 
-Milestone 1 is active. Safety checks passed. The personal Google grant was confirmed connected, exact-scope, and refreshable. The regression cause was a runtime setting of `off`; it has been restored to `auto-explicit` while the generic kill switch and prohibited write surfaces remain unchanged.
+Milestones 1–6 are implemented in source and have reached the pre-package source gate. The personal Google grant is connected, exact-scope, and refreshable; the regression cause was a runtime setting of `off`, and only the two allowlisted Personal capabilities were restored to `auto-explicit`. The generic company/client kill switch and prohibited write surfaces remain unchanged.
+
+The verified source gate currently includes 101 Python tests, 20 frontend tests, the production TypeScript/Vite build, eight Rust tests, warnings-denied Clippy, Rust formatting, the marked-root preflight, safety-control negatives, configuration doctor, secret scan, and a zero-vulnerability production npm audit. This is evidence for source readiness only. It does not promote the existing `/Applications/Jarvis.app` or any item requiring owner-visible behavior to an installed pass.
+
+The next coherent milestone is to commit the reviewed source so the native package can embed its exact commit, then build, sign, back up, install, and exercise the 48-item contract against that exact application. Storage cleanup and guarded publication remain gated on installed acceptance.

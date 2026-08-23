@@ -1,7 +1,11 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const mockState = vi.hoisted(() => ({ failRunStart: false, cancelScreen: false }));
+const mockState = vi.hoisted(() => ({
+  failRunStart: false, cancelScreen: false,
+  conversations: [] as Array<Record<string, unknown>>,
+  conversationMessages: [] as Array<Record<string, unknown>>,
+}));
 
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ label: "main" }) }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => undefined) }));
@@ -20,6 +24,7 @@ vi.mock("@tauri-apps/api/core", () => ({
       integrations: {}, codexSync: { mode: "readonly", scheduled: false }, killSwitch: true,
       recentLedger: [{ entry_id: "ledger-1", kind: "work", occurred_at_utc: "2026-08-12T01:00:00Z", local_date: "2026-08-12", actor_state: "owner", summary: "Verified work", confidence_state: "confirmed", freshness_at: "2026-08-12T01:01:00Z", evidence_ids: ["evidence-1"] }],
       commitments: [{ task_id: "commitment-1", title: "Finish verified work", status: "open", evidence_ids: ["evidence-1"], confidence: 1, updated_at: "2026-08-12T01:02:00Z" }], recentDecisions: [], actionPreviews: [], learningItems: [],
+      inboxItems: [], meetingEvidence: [], backfillStats: {},
       focusSessions: [], automationProposals: [], backgroundMode: "running",
     };
     if (command === "autostart_status") return false;
@@ -31,6 +36,11 @@ vi.mock("@tauri-apps/api/core", () => ({
     if (command === "personal_action_explicit") return {
       providerId: "owned-resource-1", resourceKind: "calendar-event", undoAvailable: true,
     };
+    if (command === "list_conversations") return { data: mockState.conversations };
+    if (command === "create_conversation") return {
+      session: { id: "jarvis_personal_synthetic", source: "jarvis_desktop", title: "Synthetic", message_count: 0 },
+    };
+    if (command === "conversation_messages") return { data: mockState.conversationMessages };
     if (command === "request_microphone_access") return "authorized";
     if (command === "transcribe_audio") return { transcript: "review my personal tasks", provider: "openai" };
     if (command === "look_at_selected_area") {
@@ -59,13 +69,16 @@ vi.mock("@tauri-apps/api/core", () => ({
   }),
 }));
 
-import App, { isSpokenStopCommand, parseExplicitPersonalAction, spokenProjection, transcriptsMateriallyDisagree } from "./App";
+import App, { inferContext, isSpokenStopCommand, parseExplicitPersonalAction, sourceCards, spokenProjection, transcriptsMateriallyDisagree, withoutRawSourceUrls } from "./App";
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   mockState.failRunStart = false;
   mockState.cancelScreen = false;
+  mockState.conversations = [];
+  mockState.conversationMessages = [];
+  window.localStorage.clear();
 });
 
 describe("Jarvis desktop shell", () => {
@@ -89,6 +102,32 @@ describe("Jarvis desktop shell", () => {
     expect(displayed).toContain("Full evidence follows");
   });
 
+  it("turns reviewed citations into compact cards without dumping raw URLs", () => {
+    const value = "See [accepted commit](https://github.com/moonishaider/hermes-ai-attention-system/commit/abc) and https://example.com/long/path.";
+    expect(sourceCards(value)).toEqual([
+      expect.objectContaining({ label: "accepted commit", host: "github.com", openable: true }),
+      expect.objectContaining({ host: "example.com", openable: false }),
+    ]);
+    expect(withoutRawSourceUrls(value)).toBe("See accepted commit and [source].");
+  });
+
+  it("keeps a 100-message thread usable with a 5,000-character prompt", async () => {
+    const id = "jarvis_personal_longthread";
+    mockState.conversations = [{ id, source: "jarvis_desktop", title: "Long thread", message_count: 100 }];
+    mockState.conversationMessages = Array.from({ length: 100 }, (_, index) => ({
+      id: `message-${index}`, role: index % 2 ? "assistant" : "user",
+      content: `Message ${index} ${"detail ".repeat(20)}`,
+    }));
+    window.localStorage.setItem("jarvis.activeConversation", id);
+    render(<App />);
+    await waitFor(() => expect(screen.getByText(/Message 99/)).toBeTruthy());
+    const composer = screen.getByPlaceholderText("What needs your attention?") as HTMLTextAreaElement;
+    const longPrompt = "x".repeat(5_000);
+    fireEvent.change(composer, { target: { value: longPrompt } });
+    expect(composer.value).toHaveLength(5_000);
+    expect(screen.getByRole("button", { name: "Jump to latest" })).toBeTruthy();
+  });
+
   it("recognizes only narrow spoken interruption commands", () => {
     for (const phrase of ["stop", "stop speaking", "Jarvis stop", "hey Jarvis be quiet now", "cancel now"]) {
       expect(isSpokenStopCommand(phrase)).toBe(true);
@@ -107,6 +146,14 @@ describe("Jarvis desktop shell", () => {
     expect(parseExplicitPersonalAction("Send the email now", now)).toBeNull();
   });
 
+  it("infers named contexts and fails mixed requests closed", () => {
+    expect(inferContext("Prepare my Inside Success DLOA", "personal").context).toBe("inside-success");
+    expect(inferContext("Review Mitchell open loops", "personal").context).toBe("mitchell");
+    expect(inferContext("Check my private calendar", "inside-success").context).toBe("personal");
+    expect(inferContext("Compare Inside Success and personal obligations", "personal").context).toBe("mixed");
+    expect(inferContext("Explain the sky", "personal")).toMatchObject({ context: "personal", inferred: false });
+  });
+
   it("executes an unambiguous personal request from normal Chat", async () => {
     render(<App />);
     await waitFor(() => expect(screen.getByText("Systems nominal")).toBeTruthy());
@@ -116,16 +163,17 @@ describe("Jarvis desktop shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Ask Jarvis" }));
     await waitFor(() => expect(screen.getByText(/created the personal calendar event exactly as requested/i)).toBeTruthy());
     expect(screen.getByText(/Completed through the bounded personal capability/)).toBeTruthy();
+    expect(window.localStorage.getItem("jarvis.activeConversation")).toBe("jarvis_personal_synthetic");
   });
 
   it("shows protected daily-use surfaces and refreshed local state", async () => {
     render(<App />);
     expect(screen.getByText("JARVIS")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Work Ledger" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Inbox" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Actions" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Capability Studio" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "More" }));
-    expect(screen.getByRole("button", { name: "Capability Studio" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Teach Jarvis" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Build & Automate" }));
+    expect(screen.getByRole("button", { name: "Teach Jarvis" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Learning" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Talk" })).toBeTruthy();
     await waitFor(() => expect(screen.getByText("12")).toBeTruthy());
@@ -156,9 +204,9 @@ describe("Jarvis desktop shell", () => {
     expect(screen.getByText(/Nothing was recorded or submitted/)).toBeTruthy();
   });
 
-  it("shows evidence-bound commitment controls in the Work Ledger", async () => {
+  it("shows evidence-bound commitment controls in the Inbox", async () => {
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: "Work Ledger" }));
+    fireEvent.click(screen.getByRole("button", { name: "Inbox" }));
     await waitFor(() => expect(screen.getByText("Finish verified work")).toBeTruthy());
     expect(screen.getByText("Evidence required")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Open commitment from this evidence" })).toBeTruthy();
@@ -166,7 +214,7 @@ describe("Jarvis desktop shell", () => {
 
   it("requires an exact guided-navigation preview before opening", async () => {
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    fireEvent.click(screen.getByRole("button", { name: "Build & Automate" }));
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Preview exact navigation" }));
     await waitFor(() => expect(screen.getByText("Profile 1 · Personal / Upwork")).toBeTruthy());
@@ -185,8 +233,8 @@ describe("Jarvis desktop shell", () => {
 
   it("renders a code-requiring capability as a Codex spec without activation", async () => {
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: "More" }));
-    fireEvent.click(screen.getByRole("button", { name: "Capability Studio" }));
+    fireEvent.click(screen.getByRole("button", { name: "Build & Automate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Teach Jarvis" }));
     fireEvent.change(screen.getByPlaceholderText("Capability name"), { target: { value: "Add a private local parser" } });
     fireEvent.change(screen.getByPlaceholderText("Describe the low-risk workflow"), { target: { value: "Build and test a new parser integration" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "Requires new code or integration" }));
@@ -210,9 +258,10 @@ describe("Jarvis desktop shell", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Pre-meeting" }));
     await waitFor(() => expect(screen.getByText(/"mode": "pre-meeting"/)).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /Personal · \d+%/ }));
     fireEvent.change(screen.getByRole("combobox", { name: "Current context" }), { target: { value: "mitchell" } });
     await waitFor(() => expect(screen.queryByText(/"mode": "pre-meeting"/)).toBeNull());
-    expect((screen.getByRole("combobox", { name: "Current context" }) as HTMLSelectElement).value).toBe("mitchell");
+    expect(screen.getByRole("button", { name: /Mitchell · dormant · \d+%/ })).toBeTruthy();
   });
 
   it("retains failed dictation and exposes retry edit and discard", async () => {
@@ -237,8 +286,8 @@ describe("Jarvis desktop shell", () => {
 
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Talk" }));
-    await waitFor(() => expect(screen.getAllByRole("button", { name: "Stop listening" })).toHaveLength(2));
-    fireEvent.click(screen.getAllByRole("button", { name: "Stop listening" })[1]);
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Done speaking" })).toHaveLength(2));
+    fireEvent.click(screen.getAllByRole("button", { name: "Done speaking" })[1]);
     await waitFor(() => expect(screen.getByRole("button", { name: "Retry transcription" })).toBeTruthy());
     expect(screen.getByRole("button", { name: "Retry delivery" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Edit transcript" })).toBeTruthy();
@@ -249,7 +298,7 @@ describe("Jarvis desktop shell", () => {
 
   it("visibly stages and retries a fail-safe voice delivery", async () => {
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    fireEvent.click(screen.getByRole("button", { name: "Build & Automate" }));
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Stage recovery check" }));
     await waitFor(() => expect(screen.getByText(/Diagnostic backend rejection injected before delivery/)).toBeTruthy());
@@ -264,7 +313,7 @@ describe("Jarvis desktop shell", () => {
 
   it("exposes a local spoken-stop diagnostic without submitting a request", async () => {
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    fireEvent.click(screen.getByRole("button", { name: "Build & Automate" }));
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     expect(screen.getByText(/No dictation or model request is submitted/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Test spoken Stop" }));

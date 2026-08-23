@@ -7,12 +7,14 @@ import tempfile
 from urllib.parse import parse_qs, urlparse
 
 import unittest
+from unittest.mock import patch
 
 from hermes_attention.personal_google_action_oauth import (
     PERSONAL_ACTION_SCOPES, PersonalGoogleActionTokenManager,
 )
 from hermes_attention.personal_google_actions import PersonalGoogleActionTransport
 from hermes_attention.storage import Store
+from hermes_attention.computer_awareness import AwarenessPolicy, ComputerAwareness
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -44,6 +46,25 @@ BLOCKED = [
 
 
 class PersonalGoogleLiveBoundaryTests(unittest.TestCase):
+    def test_focus_pause_resume_and_ninety_minute_window_are_explicit(self) -> None:
+        with Store(":memory:") as store:
+            awareness = ComputerAwareness(store)
+            focus_id = awareness.start_focus(
+                context_id="personal", minutes=90, policy=AwarenessPolicy(),
+            )
+            awareness.pause(focus_id)
+            with self.assertRaises(PermissionError):
+                awareness.observe_metadata(
+                    focus_id=focus_id, app_id="com.openai.codex", window_title="Project",
+                    domain=None, browser_profile=None, context_id="personal",
+                )
+            awareness.resume(focus_id)
+            event_id = awareness.observe_metadata(
+                focus_id=focus_id, app_id="com.openai.codex", window_title="Project",
+                domain=None, browser_profile=None, context_id="personal",
+            )
+            self.assertTrue(event_id)
+
     def test_owner_callback_allows_deliberate_consent_review(self) -> None:
         source = (ROOT / "scripts" / "authorize_personal_google_actions.py").read_text()
         self.assertIn("deadline = time.monotonic() + 900", source)
@@ -102,6 +123,162 @@ class PersonalGoogleLiveBoundaryTests(unittest.TestCase):
         for blocked in ("invite ", "attendee", "recurring", "work calendar", "send the email"):
             self.assertIn(blocked, source)
         self.assertIn('str(value.get("context") or "") != "personal"', source)
+
+    def test_canonical_action_turn_requires_existing_jarvis_owned_session(self) -> None:
+        import jarvis_local_state as local_state
+
+        class FakeDB:
+            def __init__(self, source: str = "jarvis_desktop") -> None:
+                self.source = source
+                self.appended = None
+                self.closed = False
+
+            def get_session(self, session_id: str) -> dict:
+                return {"id": session_id, "source": self.source}
+
+            def append_messages_batch(self, session_id: str, messages: list[dict]) -> None:
+                self.appended = (session_id, messages)
+
+            def close(self) -> None:
+                self.closed = True
+
+        database = FakeDB()
+        self.assertTrue(local_state._append_canonical_conversation(
+            "jarvis_personal_0123456789abcdef",
+            "Create an unsent draft",
+            "I created the unsent draft.",
+            db_factory=lambda: database,
+        ))
+        self.assertEqual("jarvis_personal_0123456789abcdef", database.appended[0])
+        self.assertEqual(["user", "assistant"], [item["role"] for item in database.appended[1]])
+        self.assertTrue(database.closed)
+
+        with self.assertRaises(PermissionError):
+            local_state._append_canonical_conversation(
+                "not-jarvis", "request", "answer", db_factory=lambda: FakeDB()
+            )
+        with self.assertRaises(PermissionError):
+            local_state._append_canonical_conversation(
+                "jarvis_personal_0123456789abcdef",
+                "request",
+                "answer",
+                db_factory=lambda: FakeDB("another_client"),
+            )
+
+    def test_conversation_controls_are_recoverable_and_jarvis_owned(self) -> None:
+        import jarvis_local_state as local_state
+
+        class FakeDB:
+            def __init__(self) -> None:
+                self.actions: list[tuple] = []
+                self.closed = False
+
+            def get_session(self, session_id: str) -> dict | None:
+                source = "another_client" if session_id.endswith("foreign") else "jarvis_desktop"
+                return {"id": session_id, "source": source}
+
+            def set_session_title(self, session_id: str, title: str) -> bool:
+                self.actions.append(("rename", session_id, title)); return True
+
+            def set_session_pinned(self, session_id: str, value: bool) -> bool:
+                self.actions.append(("pin", session_id, value)); return True
+
+            def set_session_archived(self, session_id: str, value: bool) -> bool:
+                self.actions.append(("archive", session_id, value)); return True
+
+            def close(self) -> None:
+                self.closed = True
+
+        database = FakeDB()
+        with patch.object(local_state, "_canonical_session_db", return_value=database):
+            result = local_state.conversation_control(None, {
+                "sessionId": "jarvis_personal_0123456789abcdef", "action": "rename", "title": "Daily review",
+            })
+        self.assertTrue(result["recoverable"])
+        self.assertEqual([("rename", "jarvis_personal_0123456789abcdef", "Daily review")], database.actions)
+        self.assertTrue(database.closed)
+
+        with patch.object(local_state, "_canonical_session_db", return_value=FakeDB()):
+            with self.assertRaises(PermissionError):
+                local_state.conversation_control(None, {
+                    "sessionId": "jarvis_personal_foreign", "action": "archive",
+                })
+        with patch.object(local_state, "_canonical_session_db", return_value=FakeDB()):
+            with self.assertRaises(PermissionError):
+                local_state.conversation_control(None, {
+                    "sessionId": "jarvis_personal_0123456789abcdef", "action": "delete",
+                })
+
+    def test_governed_turn_persists_only_owner_request_and_final_answer(self) -> None:
+        import jarvis_local_state as local_state
+
+        class FakeDB:
+            def __init__(self) -> None:
+                self.rows: list[dict] = []
+                self.closed = False
+
+            def get_session(self, session_id: str) -> dict:
+                return {"id": session_id, "source": "jarvis_desktop", "message_count": len(self.rows)}
+
+            def get_messages(self, _session_id: str, **_kwargs: object) -> list[dict]:
+                return list(self.rows)
+
+            def append_messages_batch(self, _session_id: str, messages: list[dict]) -> int:
+                self.rows.extend(messages); return len(messages)
+
+            def close(self) -> None:
+                self.closed = True
+
+        database = FakeDB()
+        session_id = "jarvis_personal_0123456789abcdef"
+        with patch.object(local_state, "_canonical_session_db", return_value=database):
+            first = local_state.conversation_turn_begin(None, {
+                "sessionId": session_id, "turnId": "turn-123", "context": "personal",
+                "ownerRequest": "Review this security decision",
+            })
+        with patch.object(local_state, "_canonical_session_db", return_value=database):
+            duplicate = local_state.conversation_turn_begin(None, {
+                "sessionId": session_id, "turnId": "turn-123", "context": "personal",
+                "ownerRequest": "Review this security decision",
+            })
+        with patch.object(local_state, "_canonical_session_db", return_value=database):
+            finished = local_state.conversation_turn_finish(None, {
+                "sessionId": session_id, "turnId": "turn-123", "context": "personal",
+                "route": "review", "assistantMessage": "Final reviewed answer.",
+                "progress": ["Pro completed", "Terra review completed"],
+            })
+        with patch.object(local_state, "_canonical_session_db", return_value=database):
+            final_duplicate = local_state.conversation_turn_finish(None, {
+                "sessionId": session_id, "turnId": "turn-123", "context": "personal",
+                "route": "review", "assistantMessage": "Final reviewed answer.",
+                "progress": ["Pro completed", "Terra review completed"],
+            })
+        self.assertFalse(first["idempotent"])
+        self.assertTrue(duplicate["idempotent"])
+        self.assertFalse(finished["idempotent"])
+        self.assertTrue(final_duplicate["idempotent"])
+        self.assertEqual(["user", "assistant"], [row["role"] for row in database.rows])
+        self.assertEqual("Final reviewed answer.", database.rows[-1]["content"])
+        self.assertNotIn("ORIGINAL REQUEST", " ".join(row["content"] for row in database.rows))
+        self.assertTrue(database.rows[-1]["display_metadata"]["review_harness_isolated"])
+        self.assertTrue(database.closed)
+
+    def test_conversation_list_filters_foreign_rows(self) -> None:
+        import jarvis_local_state as local_state
+
+        class FakeDB:
+            def list_sessions_rich(self, **_kwargs: object) -> list[dict]:
+                return [
+                    {"id": "jarvis_personal_1", "source": "jarvis_desktop", "title": "Keep", "archived": 0, "pinned": 1},
+                    {"id": "other_1", "source": "another_client", "title": "Private foreign row"},
+                ]
+
+            def close(self) -> None:
+                pass
+
+        with patch.object(local_state, "_canonical_session_db", return_value=FakeDB()):
+            result = local_state.conversation_list(None, {"includeArchived": True})
+        self.assertEqual(["jarvis_personal_1"], [row["id"] for row in result["data"]])
 
 
 if __name__ == "__main__":

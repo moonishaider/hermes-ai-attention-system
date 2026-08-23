@@ -5,6 +5,7 @@ from contextlib import contextmanager
 import json
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from hermes_attention.action_firewall import ActionFirewall
 from hermes_attention.automation_miner import AutomationMiner
@@ -19,7 +20,7 @@ from hermes_attention.projects import Portfolio, RadarRegistry
 from hermes_attention.proactive import ProactiveChiefOfStaff
 from hermes_attention.storage import Store
 from hermes_attention.work_ledger import LedgerEntryInput, WorkLedger
-from scripts.jarvis_local_state import commitment_complete, commitment_open
+from scripts.jarvis_local_state import attention_control, commitment_complete, commitment_open, meeting_followup
 
 
 @contextmanager
@@ -96,6 +97,117 @@ def test_work_ledger_refresh_is_bounded_and_incremental() -> None:
         rows = ledger.query(context_id="personal", limit=10)
         assert len(rows) == 3
         assert all(row["actor_state"] == "owner" for row in rows)
+
+
+def test_meeting_followup_requires_zoom_evidence_and_updates_local_state_only() -> None:
+    with Store(":memory:") as store:
+        zoom = EvidenceItem(
+            evidence_id="zoom-1", title="Authorized meeting", content="Reviewed owner follow-up",
+            provenance=Provenance(
+                source_system="zoom", connection_id="zoom_readonly", source_id="meeting-1",
+                source_timestamp="2026-08-12T01:00:00+00:00", retrieved_at="2026-08-12T01:01:00+00:00",
+                uri="https://zoom.us/rec/share/reviewed",
+            ),
+            contexts=(ContextLabel("inside-success", 1.0, "fixture", "confirmed"),),
+        )
+        store.add_evidence(zoom)
+        ledger = WorkLedger(store)
+        ledger.record(LedgerEntryInput(
+            kind="meeting", occurred_at_utc="2026-08-12T01:00:00+00:00",
+            context_id="inside-success", summary="Authorized meeting", evidence_ids=("zoom-1",),
+            actor_id="Syed", actor_state="verified",
+        ))
+        portfolio = Portfolio(store)
+        portfolio.upsert_project(
+            project_id="project-1", context_id="inside-success", name="System",
+            objective="Ship safely", completion_contract="Accepted", phase="active",
+        )
+        service = SimpleNamespace(store=store, portfolio=portfolio)
+        result = meeting_followup(service, {
+            "context": "inside-success", "evidenceId": "zoom-1",
+            "title": "Review the meeting decision", "projectId": "project-1",
+        })
+        assert result["externalWrite"] is False and result["snapshotId"]
+        task = store.connection.execute("SELECT * FROM tasks WHERE task_id=?", (result["taskId"],)).fetchone()
+        assert task["task_type"] == "meeting-task" and json.loads(task["evidence_ids_json"]) == ["zoom-1"]
+        assert store.connection.execute("SELECT count(*) FROM project_snapshots").fetchone()[0] == 1
+
+        store.add_evidence(evidence("not-zoom", "inside-success"))
+        ledger.record(LedgerEntryInput(
+            kind="meeting", occurred_at_utc="2026-08-12T02:00:00+00:00",
+            context_id="inside-success", summary="Other evidence", evidence_ids=("not-zoom",),
+            actor_id="Syed", actor_state="verified",
+        ))
+        with raises(PermissionError):
+            meeting_followup(service, {
+                "context": "inside-success", "evidenceId": "not-zoom", "title": "Do not create",
+            })
+
+
+def test_today_attention_controls_are_local_reversible_and_context_scoped() -> None:
+    with Store(":memory:") as store:
+        store.add_evidence(evidence("attention-source", "personal"))
+        ledger = WorkLedger(store)
+        entry_id, _ = ledger.record(LedgerEntryInput(
+            kind="task", occurred_at_utc="2026-08-24T01:00:00+00:00",
+            context_id="personal", summary="Review the current item",
+            evidence_ids=("attention-source",), actor_id="Syed", actor_state="verified",
+        ))
+        service = SimpleNamespace(store=store)
+        snoozed = attention_control(service, {
+            "context": "personal", "entryId": entry_id, "action": "snoozed",
+        })
+        assert snoozed["externalWrite"] is False and snoozed["snoozed_until"]
+        restored = attention_control(service, {
+            "context": "personal", "entryId": entry_id, "action": "restore",
+        })
+        assert restored["status"] == "active" and restored["reversible"] is True
+        corrected = attention_control(service, {
+            "context": "personal", "entryId": entry_id,
+            "action": "correct-context", "correctedContext": "inside-success",
+        })
+        assert corrected["context"] == "inside-success"
+        assert store.connection.execute(
+            "SELECT context_id FROM ledger_entries WHERE entry_id=?", (entry_id,),
+        ).fetchone()[0] == "inside-success"
+        with raises(ValueError):
+            attention_control(service, {
+                "context": "personal", "entryId": entry_id, "action": "dismissed",
+            })
+
+
+def test_calendar_preview_applies_reviewed_style_and_reports_conflicts() -> None:
+    from scripts import jarvis_local_state as local_state
+
+    with Store(":memory:") as store:
+        profiler = CalendarStyleProfiler(store)
+        events = [{
+            "summary": f"Focus {index}", "colorId": "5",
+            "start": {"dateTime": f"2026-08-{index + 1:02d}T12:00:00+05:00"},
+            "end": {"dateTime": f"2026-08-{index + 1:02d}T12:45:00+05:00"},
+            "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 15}]},
+        } for index in range(5)]
+        derived = profiler.derive(
+            account_id="personal", calendar_id="primary", events=events,
+            window_start="2026-08-01T00:00:00+05:00", window_end="2026-08-31T23:59:00+05:00",
+        )
+        profiler.review(derived["profile_id"], corrections={})
+        service = SimpleNamespace(store=store)
+        fake_calendar = SimpleNamespace(calendar_events=lambda *_args, **_kwargs: {
+            "items": [{"start": "2026-08-25T12:15:00+05:00", "end": "2026-08-25T12:30:00+05:00",
+                       "status": "confirmed", "source_ref": "https://calendar.google.com/event?x"}],
+        })
+        with patch.object(local_state, "PersonalGoogleDirect", return_value=fake_calendar):
+            preview = local_state.personal_action_preview(service, {
+                "action": "calendar", "title": "Deep work",
+                "start": "2026-08-25T12:00:00+05:00", "end": "2026-08-25T12:30:00+05:00",
+                "durationExplicit": False,
+            })
+        assert preview["calendarStyleApplied"] is True
+        assert preview["payload"]["end"]["dateTime"] == "2026-08-25T12:45:00+05:00"
+        assert preview["payload"]["colorId"] == "5"
+        assert preview["payload"]["reminders"]["overrides"][0]["minutes"] == 15
+        assert len(preview["conflicts"]) == 1 and preview["externalWritePerformed"] is False
 
 
 def test_model_governor_route_matrix_and_no_sol() -> None:

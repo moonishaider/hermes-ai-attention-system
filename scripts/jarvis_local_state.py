@@ -24,7 +24,7 @@ from hermes_attention.capabilities import CapabilityStudio
 from hermes_attention.computer_awareness import AwarenessPolicy
 from hermes_attention.action_firewall import ActionFirewall
 from hermes_attention.actions import ActionController
-from hermes_attention.domain import ActionProposal, ActionState, RiskClass, stable_hash, utc_now
+from hermes_attention.domain import ActionProposal, ActionState, RiskClass, TaskRecord, stable_hash, utc_now
 from hermes_attention.google_direct import PersonalGoogleDirect
 from hermes_attention.personal_google_action_oauth import PersonalGoogleActionTokenManager
 from hermes_attention.personal_google_actions import (
@@ -45,6 +45,222 @@ GMAIL_CAPABILITY = "personal-gmail-draft-only"
 PERSONAL_ACTIONS_SETTING = "personal_google_actions_enabled"
 PERSONAL_ACTIONS_MODE_SETTING = "personal_google_actions_mode"
 PERSONAL_ACTION_MODES = {"off", "preview", "auto-explicit", "earned-auto"}
+
+
+def _append_canonical_conversation(
+    session_id: Any,
+    owner_request: Any,
+    assistant_message: Any,
+    *,
+    db_factory: Any | None = None,
+) -> bool:
+    """Append one completed local action turn to Hermes' canonical session DB.
+
+    The gateway intentionally has no append-only HTTP endpoint. This adapter
+    therefore uses Hermes' own SessionDB primitive, but only for an existing
+    Jarvis-owned session and only for bounded user/assistant text. It cannot
+    create sessions, write tool/reasoning rows, or touch another client source.
+    """
+    session_id = bounded(session_id, maximum=96, name="Jarvis conversation id")
+    if not session_id.startswith("jarvis_") or not re.fullmatch(r"[A-Za-z0-9_-]+", session_id):
+        raise PermissionError("invalid Jarvis conversation id")
+    owner_request = bounded(owner_request, maximum=2_000, name="owner request")
+    assistant_message = bounded(assistant_message, maximum=2_000, name="assistant result")
+    if db_factory is None:
+        hermes_source = Path.home() / ".hermes" / "hermes-agent"
+        if not (hermes_source / "hermes_state.py").is_file():
+            raise RuntimeError("reviewed Hermes SessionDB source is unavailable")
+        sys.path.insert(0, str(hermes_source))
+        from hermes_state import SessionDB
+
+        db_factory = lambda: SessionDB(db_path=Path.home() / ".hermes" / "state.db")
+    db = db_factory()
+    try:
+        session = db.get_session(session_id)
+        if not session or session.get("source") != "jarvis_desktop":
+            raise PermissionError("canonical Jarvis conversation is absent or owned by another source")
+        db.append_messages_batch(
+            session_id,
+            [
+                {"role": "user", "content": owner_request},
+                {"role": "assistant", "content": assistant_message, "finish_reason": "local_action"},
+            ],
+        )
+        return True
+    finally:
+        close = getattr(db, "close", None)
+        if callable(close):
+            close()
+
+
+def _canonical_session_db() -> Any:
+    """Open the installed Hermes session database through its reviewed API."""
+    hermes_source = Path.home() / ".hermes" / "hermes-agent"
+    if not (hermes_source / "hermes_state.py").is_file():
+        raise RuntimeError("reviewed Hermes SessionDB source is unavailable")
+    source = str(hermes_source)
+    if source not in sys.path:
+        sys.path.insert(0, source)
+    from hermes_state import SessionDB
+
+    return SessionDB(db_path=Path.home() / ".hermes" / "state.db")
+
+
+def _jarvis_session(db: Any, session_id: Any) -> dict[str, Any]:
+    session_id = bounded(session_id, maximum=96, name="Jarvis conversation id")
+    if not session_id.startswith("jarvis_") or not re.fullmatch(r"[A-Za-z0-9_-]+", session_id):
+        raise PermissionError("invalid Jarvis conversation id")
+    session = db.get_session(session_id)
+    if not session or session.get("source") != "jarvis_desktop":
+        raise PermissionError("canonical Jarvis conversation is absent or owned by another source")
+    return session
+
+
+def _jarvis_turn_id(value: Any) -> str:
+    turn_id = bounded(value, maximum=96, name="Jarvis turn id")
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", turn_id):
+        raise PermissionError("invalid Jarvis turn id")
+    return turn_id
+
+
+def _recent_canonical_messages(db: Any, session: dict[str, Any]) -> list[dict[str, Any]]:
+    """Read only the bounded tail needed for turn idempotency checks."""
+    count = max(0, int(session.get("message_count") or 0))
+    return db.get_messages(session["id"], limit=80, offset=max(0, count - 80))
+
+
+def _canonical_turn_seen(messages: list[dict[str, Any]], turn_id: str, role: str) -> bool:
+    for message in messages:
+        metadata = message.get("display_metadata")
+        if (
+            message.get("role") == role
+            and isinstance(metadata, dict)
+            and metadata.get("jarvis_turn_id") == turn_id
+        ):
+            return True
+    return False
+
+
+def conversation_turn_begin(_service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    """Persist the owner's submitted text before an isolated governed run.
+
+    This is used only when a second-pass reviewer is planned. The actual model
+    stages run in isolated Hermes sessions so their private review harnesses can
+    never appear in the owner's canonical conversation.
+    """
+    turn_id = _jarvis_turn_id(value.get("turnId"))
+    context_id = str(value.get("context") or "")
+    if context_id not in CONTEXTS:
+        raise ValueError("invalid conversation context")
+    owner_request = bounded(value.get("ownerRequest"), maximum=50_000, name="owner request")
+    db = _canonical_session_db()
+    try:
+        session = _jarvis_session(db, value.get("sessionId"))
+        if f"jarvis_{context_id}_" not in session["id"]:
+            raise PermissionError("conversation context does not match the governed turn")
+        messages = _recent_canonical_messages(db, session)
+        if _canonical_turn_seen(messages, turn_id, "user"):
+            return {"ok": True, "persisted": True, "idempotent": True, "turnId": turn_id}
+        db.append_messages_batch(session["id"], [{
+            "role": "user",
+            "content": owner_request,
+            "display_kind": "jarvis_user",
+            "display_metadata": {
+                "jarvis_turn_id": turn_id,
+                "context": context_id,
+                "stage": "submitted",
+            },
+        }])
+        return {"ok": True, "persisted": True, "idempotent": False, "turnId": turn_id}
+    finally:
+        db.close()
+
+
+def conversation_turn_finish(_service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    """Append only the final governed answer to the owner-visible thread."""
+    turn_id = _jarvis_turn_id(value.get("turnId"))
+    context_id = str(value.get("context") or "")
+    if context_id not in CONTEXTS:
+        raise ValueError("invalid conversation context")
+    assistant_message = bounded(value.get("assistantMessage"), maximum=50_000, name="assistant result")
+    route = bounded(value.get("route"), maximum=40, name="model route")
+    raw_progress = value.get("progress") or []
+    if not isinstance(raw_progress, list) or len(raw_progress) > 20:
+        raise ValueError("conversation progress must be a bounded list")
+    progress = [bounded(item, maximum=160, name="progress item") for item in raw_progress]
+    db = _canonical_session_db()
+    try:
+        session = _jarvis_session(db, value.get("sessionId"))
+        if f"jarvis_{context_id}_" not in session["id"]:
+            raise PermissionError("conversation context does not match the governed turn")
+        messages = _recent_canonical_messages(db, session)
+        if _canonical_turn_seen(messages, turn_id, "assistant"):
+            return {"ok": True, "persisted": True, "idempotent": True, "turnId": turn_id}
+        db.append_messages_batch(session["id"], [{
+            "role": "assistant",
+            "content": assistant_message,
+            "finish_reason": "governed_final",
+            "display_kind": "jarvis_answer",
+            "display_metadata": {
+                "jarvis_turn_id": turn_id,
+                "context": context_id,
+                "route": route,
+                "progress": progress,
+                "review_harness_isolated": True,
+            },
+        }])
+        return {"ok": True, "persisted": True, "idempotent": False, "turnId": turn_id}
+    finally:
+        db.close()
+
+
+def conversation_list(_service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    """List only Jarvis-owned canonical conversations, including soft archives."""
+    include_archived = bool(value.get("includeArchived", True))
+    db = _canonical_session_db()
+    try:
+        rows = db.list_sessions_rich(
+            source="jarvis_desktop",
+            limit=100,
+            order_by_last_active=True,
+            include_archived=include_archived,
+            compact_rows=True,
+            include_pinned=True,
+        )
+        safe_rows = []
+        for row in rows:
+            if row.get("source") != "jarvis_desktop" or not str(row.get("id", "")).startswith("jarvis_"):
+                continue
+            safe_rows.append({key: row.get(key) for key in (
+                "id", "source", "title", "preview", "message_count", "last_active",
+                "started_at", "archived", "pinned",
+            )})
+        return {"ok": True, "data": safe_rows}
+    finally:
+        db.close()
+
+
+def conversation_control(_service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    """Apply one reversible metadata change to an existing Jarvis conversation."""
+    action = bounded(value.get("action"), maximum=20, name="conversation action")
+    if action not in {"rename", "pin", "unpin", "archive", "unarchive"}:
+        raise PermissionError("unsupported conversation action")
+    db = _canonical_session_db()
+    try:
+        session = _jarvis_session(db, value.get("sessionId"))
+        session_id = session["id"]
+        if action == "rename":
+            title = bounded(value.get("title"), maximum=100, name="conversation title")
+            changed = db.set_session_title(session_id, title)
+        elif action in {"pin", "unpin"}:
+            changed = db.set_session_pinned(session_id, action == "pin")
+        else:
+            changed = db.set_session_archived(session_id, action == "archive")
+        if not changed:
+            raise RuntimeError("conversation metadata did not change")
+        return {"ok": True, "sessionId": session_id, "action": action, "recoverable": True}
+    finally:
+        db.close()
 
 
 def bounded(value: Any, *, maximum: int, name: str) -> str:
@@ -167,6 +383,28 @@ def personal_action_setting(service: AttentionService, value: dict[str, Any]) ->
     return {"ok": True, "enabled": enabled, "mode": mode, "connected": connected}
 
 
+def _reviewed_calendar_style(service: AttentionService) -> dict[str, Any]:
+    row = service.store.connection.execute(
+        """SELECT profile_json FROM calendar_style_profiles
+           WHERE account_id='personal' AND review_status='owner-reviewed'
+           ORDER BY updated_at DESC LIMIT 1""",
+    ).fetchone()
+    return json.loads(row["profile_json"]) if row else {}
+
+
+def _calendar_conflicts(start: datetime, end: datetime) -> list[dict[str, str]]:
+    result = PersonalGoogleDirect().calendar_events(start.isoformat(), end.isoformat(), limit=10)
+    conflicts = []
+    for row in result.get("items", []):
+        if row.get("status") == "cancelled":
+            continue
+        conflicts.append({
+            "start": str(row.get("start") or ""), "end": str(row.get("end") or ""),
+            "source_ref": str(row.get("source_ref") or ""),
+        })
+    return conflicts
+
+
 def personal_action_preview(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
     action = str(value.get("action") or "")
     if action not in {"calendar", "gmail-draft"}:
@@ -177,12 +415,29 @@ def personal_action_preview(service: AttentionService, value: dict[str, Any]) ->
         end = datetime.fromisoformat(bounded(value.get("end"), maximum=80, name="event end"))
         if start.tzinfo is None or end.tzinfo is None or end <= start or end - start > timedelta(hours=12):
             raise ValueError("event requires an aware start and a later end within 12 hours")
-        reminder = int(value.get("reminderMinutes") or 10)
+        style = _reviewed_calendar_style(service)
+        if not bool(value.get("durationExplicit")) and style.get("median_timed_duration_minutes"):
+            reviewed_duration = max(15, min(int(style["median_timed_duration_minutes"]), 240))
+            end = start + timedelta(minutes=reviewed_duration)
+        common_colors = style.get("common_color_ids") or []
+        style_color = str(common_colors[0][0]) if common_colors else "9"
+        common_reminders = style.get("common_reminder_configs") or []
+        style_reminder = 10
+        if common_reminders:
+            try:
+                reminder_config = json.loads(common_reminders[0][0])
+                popup = next((item for item in reminder_config.get("overrides", []) if item.get("method") == "popup"), None)
+                if popup and int(popup.get("minutes")) in {0, 5, 10, 15, 30, 60}:
+                    style_reminder = int(popup["minutes"])
+            except (TypeError, ValueError, json.JSONDecodeError, StopIteration):
+                pass
+        reminder = int(value.get("reminderMinutes") if value.get("reminderMinutes") is not None else style_reminder)
         if reminder not in {0, 5, 10, 15, 30, 60}:
             raise ValueError("reminder must be one reviewed value")
-        color = str(value.get("colorId") or "9")
+        color = str(value.get("colorId") or style_color)
         if color not in {str(number) for number in range(1, 12)}:
             raise ValueError("calendar color is invalid")
+        conflicts = _calendar_conflicts(start, end)
         payload = {"summary": title, "start": {"dateTime": start.isoformat(), "timeZone": "Asia/Karachi"},
                    "end": {"dateTime": end.isoformat(), "timeZone": "Asia/Karachi"}, "colorId": color,
                    "reminders": {"useDefault": False, "overrides": [] if reminder == 0 else
@@ -203,7 +458,10 @@ def personal_action_preview(service: AttentionService, value: dict[str, Any]) ->
     )
     return {"ok": True, "capabilityId": capability, "proposalId": proposal.proposal_id,
             "previewHash": proposal.preview_hash, "expiresAt": proposal.expires_at,
-            "target": target, "payload": payload, "externalWritePerformed": False}
+            "target": target, "payload": payload,
+            "conflicts": conflicts if action == "calendar" else [],
+            "calendarStyleApplied": bool(style) if action == "calendar" else False,
+            "externalWritePerformed": False}
 
 
 def _proposal(service: AttentionService, proposal_id: str) -> ActionProposal:
@@ -305,11 +563,33 @@ def personal_action_explicit(service: AttentionService, value: dict[str, Any]) -
     else:
         raise ValueError("unsupported personal action")
     staged = personal_action_preview(service, value)
-    return personal_action_execute(service, {
+    if action == "calendar" and staged.get("conflicts"):
+        raise PermissionError("calendar conflict detected; review the exact preview before creating this event")
+    result = personal_action_execute(service, {
         "proposalId": staged["proposalId"], "previewHash": staged["previewHash"],
         "nativeNonce": bounded(value.get("nativeNonce"), maximum=160, name="native owner interaction"),
         "ownerRequest": request_text,
     })
+    assistant_message = (
+        "I created the unsent personal Gmail draft and opened it. Sending is unavailable."
+        if result["resourceKind"] == "gmail-draft"
+        else "I created the personal calendar event exactly as requested. Undo is available in Actions."
+    )
+    session_id = value.get("sessionId")
+    if session_id:
+        try:
+            result["conversationPersisted"] = _append_canonical_conversation(
+                session_id, request_text, assistant_message
+            )
+        except Exception as error:
+            # The external action already completed. Report the persistence
+            # defect separately rather than pretending the action failed or
+            # retrying it and risking a duplicate provider write.
+            result["conversationPersisted"] = False
+            result["conversationWarning"] = f"Action completed, but conversation persistence failed: {error}"
+    else:
+        result["conversationPersisted"] = False
+    return result
 
 
 def personal_calendar_undo(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
@@ -330,7 +610,7 @@ def guided_public_read(_service: AttentionService, value: dict[str, Any]) -> dic
 def state(service: AttentionService, context_id: str) -> dict[str, Any]:
     connection = service.store.connection
     projects = [dict(row) for row in connection.execute(
-        "SELECT project_id,name,objective,phase,lifecycle,freshness_at FROM projects "
+        "SELECT project_id,name,objective,completion_contract,phase,lifecycle,freshness_at FROM projects "
         "WHERE context_id=? ORDER BY updated_at DESC LIMIT 20", (context_id,),
     )]
     missions = [dict(row) for row in connection.execute(
@@ -348,11 +628,38 @@ def state(service: AttentionService, context_id: str) -> dict[str, Any]:
     for item in capabilities:
         spec = json.loads(item.pop("spec_json"))
         item["name"] = str(spec.get("name") or spec.get("description") or item["kind"])
+    for item in projects:
+        snapshot = connection.execute(
+            "SELECT snapshot_id,state_json,evidence_ids_json,created_at FROM project_snapshots "
+            "WHERE project_id=? ORDER BY created_at DESC LIMIT 1", (item["project_id"],),
+        ).fetchone()
+        item["latest_snapshot"] = None if not snapshot else {
+            "snapshot_id": snapshot["snapshot_id"],
+            "state": json.loads(snapshot["state_json"]),
+            "evidence_ids": json.loads(snapshot["evidence_ids_json"]),
+            "created_at": snapshot["created_at"],
+        }
+        item["recent_progress"] = [dict(row) for row in connection.execute(
+            """SELECT entry_id,summary,local_date,confidence_state,freshness_at
+               FROM ledger_entries WHERE project_id=? AND context_id=?
+               ORDER BY occurred_at_utc DESC LIMIT 5""",
+            (item["project_id"], context_id),
+        )]
+        item["decisions"] = [dict(row) for row in connection.execute(
+            """SELECT decision_id,decision,reasoning,decided_at,actual_outcome
+               FROM decisions WHERE project_id=? AND context_id=?
+               ORDER BY decided_at DESC LIMIT 5""",
+            (item["project_id"], context_id),
+        )]
+        snapshot_state = item["latest_snapshot"]["state"] if item["latest_snapshot"] else {}
+        item["blockers"] = [value for value in [snapshot_state.get("unresolved_issue")] if value and value != "None recorded"]
+        item["next_actions"] = [value for value in [snapshot_state.get("exact_next_step")] if value]
+        item["resources"] = list(snapshot_state.get("relevant_resources") or [])[:10]
     ledger_count = connection.execute(
         "SELECT count(*) FROM ledger_entries WHERE context_id=?", (context_id,)
     ).fetchone()[0]
     task_count = connection.execute(
-        "SELECT count(*) FROM tasks WHERE context_id=? AND status='open'", (context_id,)
+        "SELECT count(*) FROM tasks WHERE context_id=? AND status NOT IN ('completed','verified','archived')", (context_id,)
     ).fetchone()[0]
     status_value = service.status()
     timezone = {
@@ -397,16 +704,39 @@ def state(service: AttentionService, context_id: str) -> dict[str, Any]:
            ORDER BY occurred_at_utc DESC LIMIT 25""", (context_id,),
     )]
     for item in recent_ledger:
-        item["evidence_ids"] = [row["evidence_id"] for row in connection.execute(
-            "SELECT evidence_id FROM ledger_sources WHERE entry_id=? ORDER BY evidence_id",
+        evidence_rows = list(connection.execute(
+            """SELECT e.evidence_id,e.provenance_json FROM ledger_sources ls
+               JOIN evidence e ON e.evidence_id=ls.evidence_id
+               WHERE ls.entry_id=? ORDER BY e.evidence_id""",
             (item["entry_id"],),
-        )]
+        ))
+        item["evidence_ids"] = [row["evidence_id"] for row in evidence_rows]
+        item["evidence_sources"] = []
+        for row in evidence_rows:
+            provenance = json.loads(row["provenance_json"] or "{}")
+            item["evidence_sources"].append({
+                "evidence_id": row["evidence_id"],
+                "source_system": provenance.get("source_system"),
+                "uri": provenance.get("uri") or provenance.get("permalink") or provenance.get("url"),
+            })
+        attention_row = connection.execute(
+            "SELECT value_json FROM runtime_settings WHERE key=?", (f"attention:{item['entry_id']}",),
+        ).fetchone()
+        item["attention_state"] = json.loads(attention_row["value_json"]) if attention_row else None
     commitments = [dict(row) for row in connection.execute(
         """SELECT task_id,title,status,due_at,evidence_ids_json,confidence,updated_at
            FROM tasks WHERE context_id=? AND task_type='commitment'
            ORDER BY updated_at DESC LIMIT 12""", (context_id,),
     )]
     for item in commitments:
+        item["evidence_ids"] = json.loads(item.pop("evidence_ids_json"))
+    inbox_items = [dict(row) for row in connection.execute(
+        """SELECT task_id,title,task_type,status,priority,owner,waiting_on,due_at,
+                  evidence_ids_json,confidence,updated_at
+           FROM tasks WHERE context_id=? AND status!='archived'
+           ORDER BY priority DESC,due_at IS NULL,due_at,updated_at DESC LIMIT 50""", (context_id,),
+    )]
+    for item in inbox_items:
         item["evidence_ids"] = json.loads(item.pop("evidence_ids_json"))
     recent_decisions = [dict(row) for row in connection.execute(
         """SELECT decision_id,decision,reasoning,decided_at,review_at,actual_outcome
@@ -420,6 +750,30 @@ def state(service: AttentionService, context_id: str) -> dict[str, Any]:
         """SELECT memory_id,statement,namespace,confidence,status,created_at
            FROM memory_proposals WHERE context_id=? ORDER BY created_at DESC LIMIT 10""", (context_id,),
     )]
+    meeting_evidence = []
+    for row in connection.execute(
+        """SELECT DISTINCT e.evidence_id,e.title,e.provenance_json,e.confidence_state,e.indexed_at
+           FROM evidence e JOIN ledger_sources ls ON ls.evidence_id=e.evidence_id
+           JOIN ledger_entries le ON le.entry_id=ls.entry_id
+           WHERE le.context_id=? AND (
+             json_extract(e.provenance_json,'$.source_system')='zoom' OR
+             json_extract(e.provenance_json,'$.connection_id')='zoom_readonly')
+           ORDER BY e.indexed_at DESC LIMIT 12""", (context_id,),
+    ):
+        provenance = json.loads(row["provenance_json"])
+        meeting_evidence.append({
+            "evidence_id": row["evidence_id"], "title": row["title"],
+            "confidence_state": row["confidence_state"], "indexed_at": row["indexed_at"],
+            "source_timestamp": provenance.get("source_timestamp"), "uri": provenance.get("uri"),
+            "account_id": provenance.get("account_id"), "container": provenance.get("container"),
+        })
+    backfill_stats = {}
+    for source in ("chatgpt_export", "gemini_export", "codex"):
+        row = connection.execute(
+            """SELECT count(*) AS count,min(indexed_at) AS first_indexed,max(indexed_at) AS last_indexed
+               FROM evidence WHERE json_extract(provenance_json,'$.source_system')=?""", (source,),
+        ).fetchone()
+        backfill_stats[source] = dict(row)
     return {
         "ok": True,
         "context": context_id,
@@ -430,6 +784,10 @@ def state(service: AttentionService, context_id: str) -> dict[str, Any]:
         "radars": radars,
         "capabilities": capabilities,
         "budget": status_value["budget"],
+        "modelRoutes": [{
+            "id": route.route_id, "provider": route.provider, "model": route.model,
+            "purpose": route.purpose, "enabled": route.enabled,
+        } for route in service.models.routes.values()],
         "integrations": status_value["integrations"],
         "codexSync": status_value["codex_sync"],
         "killSwitch": status_value["kill_switch"],
@@ -440,10 +798,267 @@ def state(service: AttentionService, context_id: str) -> dict[str, Any]:
         "backgroundMode": json.loads(background_row["value_json"]) if background_row else "running",
         "recentLedger": recent_ledger,
         "commitments": commitments,
+        "inboxItems": inbox_items,
         "recentDecisions": recent_decisions,
         "actionPreviews": action_previews,
         "learningItems": learning,
+        "meetingEvidence": meeting_evidence,
+        "backfillStats": backfill_stats,
     }
+
+
+def _validated_context(value: dict[str, Any]) -> str:
+    context_id = str(value.get("context") or "")
+    if context_id not in CONTEXTS or context_id in {"mixed", "unknown"}:
+        raise ValueError("operation requires one explicit context")
+    return context_id
+
+
+def task_create(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    context_id = _validated_context(value)
+    task_type = str(value.get("taskType") or "personal-task")
+    if task_type not in {"personal-task", "open-loop", "reminder", "meeting-task", "blocker"}:
+        raise ValueError("unsupported local task type")
+    due_at = str(value.get("dueAt") or "").strip() or None
+    if due_at:
+        due = datetime.fromisoformat(due_at)
+        if due.tzinfo is None or due < datetime.now(UTC) - timedelta(days=1) or due > datetime.now(UTC) + timedelta(days=730):
+            raise ValueError("task due date must be timezone-aware and within the reviewed window")
+    identifier = f"jarvis-task-{uuid4()}"
+    service.store.upsert_task(TaskRecord(
+        task_id=identifier, title=bounded(value.get("title"), maximum=500, name="task title"),
+        context_id=context_id, task_type=task_type, status="confirmed", priority=int(value.get("priority") or 50),
+        owner="Syed", waiting_on=str(value.get("waitingOn") or "").strip() or None,
+        due_at=due_at, evidence_ids=(), confidence=1.0,
+    ))
+    return {"ok": True, "taskId": identifier, "status": "confirmed", "externalWrite": False}
+
+
+def task_control(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    task_id = bounded(value.get("taskId"), maximum=100, name="task id")
+    action = str(value.get("action") or "")
+    allowed = {"confirmed", "planned", "in-progress", "completed", "verified", "snoozed", "archived"}
+    if action not in allowed:
+        raise ValueError("unsupported task lifecycle action")
+    row = service.store.connection.execute(
+        "SELECT task_type,status FROM tasks WHERE task_id=?", (task_id,),
+    ).fetchone()
+    if not row:
+        raise ValueError("task not found")
+    if row["task_type"] == "commitment" and action in {"completed", "verified"}:
+        raise PermissionError("sourced commitments require same-context completion evidence")
+    due_at = None
+    if action == "snoozed":
+        due_at = datetime.now(UTC) + timedelta(days=int(value.get("days") or 1))
+    with service.store.connection:
+        service.store.connection.execute(
+            "UPDATE tasks SET status=?,due_at=COALESCE(?,due_at),updated_at=? WHERE task_id=?",
+            (action, due_at.isoformat() if due_at else None, utc_now(), task_id),
+        )
+    return {"ok": True, "taskId": task_id, "status": action, "externalWrite": False, "reversible": True}
+
+
+def attention_control(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    """Record one reversible owner action for a Today evidence item.
+
+    Evidence identity and provenance never change. Context correction changes
+    only the semantic ledger label and is separately audited.
+    """
+    context_id = _validated_context(value)
+    entry_id = bounded(value.get("entryId"), maximum=100, name="attention entry")
+    action = str(value.get("action") or "")
+    if action not in {"completed", "snoozed", "dismissed", "restore", "correct-context"}:
+        raise ValueError("unsupported attention action")
+    row = service.store.connection.execute(
+        "SELECT context_id FROM ledger_entries WHERE entry_id=?", (entry_id,),
+    ).fetchone()
+    if not row or row["context_id"] != context_id:
+        raise ValueError("attention item is not in the active context")
+    now = utc_now()
+    if action == "correct-context":
+        corrected = str(value.get("correctedContext") or "")
+        if corrected not in CONTEXTS or corrected in {"mixed", "unknown"}:
+            raise ValueError("context correction requires one explicit context")
+        with service.store.connection:
+            service.store.connection.execute(
+                "UPDATE ledger_entries SET context_id=?,updated_at=? WHERE entry_id=?",
+                (corrected, now, entry_id),
+            )
+        service.store.audit("owner", "correct_attention_context", corrected, "allowed", {
+            "entry_id": entry_id, "previous_context": context_id, "new_context": corrected,
+            "external_write": False,
+        })
+        return {"ok": True, "entryId": entry_id, "context": corrected, "externalWrite": False, "reversible": True}
+    state = {
+        "status": "active" if action == "restore" else action,
+        "updated_at": now,
+        "snoozed_until": (datetime.now(UTC) + timedelta(days=1)).isoformat() if action == "snoozed" else None,
+    }
+    with service.store.connection:
+        service.store.connection.execute(
+            """INSERT INTO runtime_settings(key,value_json,updated_at) VALUES(?,?,?)
+               ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=excluded.updated_at""",
+            (f"attention:{entry_id}", json.dumps(state, sort_keys=True), now),
+        )
+    service.store.audit("owner", f"attention_{action}", context_id, "allowed", {
+        "entry_id": entry_id, "external_write": False,
+    })
+    return {"ok": True, "entryId": entry_id, **state, "externalWrite": False, "reversible": True}
+
+
+def meeting_followup(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    """Create one owner-reviewed local follow-up from authorized Zoom evidence.
+
+    The meeting text is evidence, never authority: the owner must supply the
+    exact follow-up title in the native UI. An optional project link records a
+    lightweight checkpoint against the same immutable evidence without
+    changing Zoom, Calendar, Slack, or any other provider.
+    """
+    context_id = _validated_context(value)
+    evidence_id = bounded(value.get("evidenceId"), maximum=160, name="meeting evidence")
+    evidence = service.store.connection.execute(
+        """SELECT e.title,e.provenance_json FROM evidence e
+           JOIN ledger_sources ls ON ls.evidence_id=e.evidence_id
+           JOIN ledger_entries le ON le.entry_id=ls.entry_id
+           WHERE e.evidence_id=? AND le.context_id=? LIMIT 1""",
+        (evidence_id, context_id),
+    ).fetchone()
+    if not evidence:
+        raise ValueError("meeting evidence is not in this context")
+    provenance = json.loads(evidence["provenance_json"] or "{}")
+    if provenance.get("source_system") != "zoom" and provenance.get("connection_id") != "zoom_readonly":
+        raise PermissionError("follow-up source must be authorized Zoom evidence")
+    title = bounded(value.get("title"), maximum=500, name="meeting follow-up")
+    project_id = str(value.get("projectId") or "").strip()
+    project = None
+    if project_id:
+        project = service.store.connection.execute(
+            "SELECT name FROM projects WHERE project_id=? AND context_id=? AND lifecycle='active'",
+            (project_id, context_id),
+        ).fetchone()
+        if not project:
+            raise ValueError("meeting follow-up project is not active in this context")
+    task_id = f"jarvis-meeting-task-{uuid4()}"
+    service.store.upsert_task(TaskRecord(
+        task_id=task_id, title=title, context_id=context_id,
+        task_type="meeting-task", status="confirmed", priority=60,
+        owner="Syed", waiting_on=None, due_at=None,
+        evidence_ids=(evidence_id,), confidence=1.0,
+    ))
+    snapshot_id = None
+    if project_id:
+        snapshot_id = service.portfolio.snapshot(project_id, {
+            "what_was_being_done": f"Meeting follow-up reviewed for {evidence['title']}",
+            "what_changed": title,
+            "unresolved_issue": "Follow-up remains open in Jarvis Inbox",
+            "exact_next_step": title,
+            "relevant_resources": [provenance.get("uri")] if provenance.get("uri") else [],
+            "confidence": "confirmed-owner-meeting-followup",
+        }, (evidence_id,))
+    return {
+        "ok": True, "taskId": task_id, "snapshotId": snapshot_id,
+        "evidenceId": evidence_id, "externalWrite": False, "reversible": True,
+    }
+
+
+def project_checkpoint(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    context_id = _validated_context(value)
+    project_id = bounded(value.get("projectId"), maximum=100, name="project id")
+    project = service.store.connection.execute(
+        "SELECT 1 FROM projects WHERE project_id=? AND context_id=? AND lifecycle='active'", (project_id, context_id),
+    ).fetchone()
+    if not project:
+        raise ValueError("active project not found in this context")
+    evidence_id = bounded(value.get("evidenceId"), maximum=160, name="checkpoint evidence")
+    linked = service.store.connection.execute(
+        """SELECT 1 FROM ledger_sources ls JOIN ledger_entries le ON le.entry_id=ls.entry_id
+           WHERE ls.evidence_id=? AND le.context_id=? LIMIT 1""", (evidence_id, context_id),
+    ).fetchone()
+    if not linked:
+        raise ValueError("checkpoint evidence is not in this project context")
+    checkpoint = {
+        "what_was_being_done": bounded(value.get("summary"), maximum=1_000, name="checkpoint summary"),
+        "what_changed": bounded(value.get("changed") or "No additional change recorded", maximum=1_000, name="what changed"),
+        "unresolved_issue": bounded(value.get("unresolved") or "None recorded", maximum=1_000, name="unresolved issue"),
+        "exact_next_step": bounded(value.get("nextStep"), maximum=1_000, name="next step"),
+        "relevant_resources": [bounded(item, maximum=500, name="relevant resource") for item in value.get("resources", [])[:10]],
+        "confidence": "confirmed-owner-checkpoint",
+    }
+    snapshot_id = service.portfolio.snapshot(project_id, checkpoint, (evidence_id,))
+    return {"ok": True, "snapshotId": snapshot_id, "externalWrite": False}
+
+
+def decision_create(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    context_id = _validated_context(value)
+    evidence_id = bounded(value.get("evidenceId"), maximum=160, name="decision evidence")
+    linked = service.store.connection.execute(
+        """SELECT 1 FROM ledger_sources ls JOIN ledger_entries le ON le.entry_id=ls.entry_id
+           WHERE ls.evidence_id=? AND le.context_id=? LIMIT 1""", (evidence_id, context_id),
+    ).fetchone()
+    if not linked:
+        raise ValueError("decision evidence is not in this context")
+    project_id = str(value.get("projectId") or "").strip() or None
+    if project_id and not service.store.connection.execute(
+        "SELECT 1 FROM projects WHERE project_id=? AND context_id=?", (project_id, context_id),
+    ).fetchone():
+        raise ValueError("decision project is outside this context")
+    alternatives = [bounded(item, maximum=300, name="alternative") for item in value.get("alternatives", [])[:10]]
+    identifier = service.portfolio.record_decision(
+        context_id=context_id, decision=bounded(value.get("decision"), maximum=1_000, name="decision"),
+        alternatives=alternatives, reasoning=bounded(value.get("reasoning"), maximum=2_000, name="reasoning"),
+        expected_outcome=str(value.get("expectedOutcome") or "").strip() or None,
+        review_at=str(value.get("reviewAt") or "").strip() or None,
+        project_id=project_id, evidence_ids=(evidence_id,),
+    )
+    return {"ok": True, "decisionId": identifier, "externalWrite": False}
+
+
+def decision_outcome(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    decision_id = bounded(value.get("decisionId"), maximum=100, name="decision id")
+    outcome = bounded(value.get("outcome"), maximum=2_000, name="actual outcome")
+    with service.store.connection:
+        result = service.store.connection.execute(
+            "UPDATE decisions SET actual_outcome=? WHERE decision_id=?", (outcome, decision_id),
+        )
+    if not result.rowcount:
+        raise ValueError("decision not found")
+    return {"ok": True, "decisionId": decision_id, "reversible": True, "externalWrite": False}
+
+
+def radar_evaluate(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    radar_id = bounded(value.get("radarId"), maximum=100, name="radar id")
+    radar = service.store.connection.execute(
+        "SELECT context_id FROM radars WHERE radar_id=? AND lifecycle='active'", (radar_id,),
+    ).fetchone()
+    if not radar:
+        raise ValueError("active radar not found")
+    rows = service.store.connection.execute(
+        """SELECT DISTINCT e.evidence_id,e.content_hash,e.indexed_at
+           FROM evidence e JOIN ledger_sources ls ON ls.evidence_id=e.evidence_id
+           JOIN ledger_entries le ON le.entry_id=ls.entry_id
+           WHERE le.context_id=? ORDER BY e.indexed_at DESC LIMIT 20""", (radar["context_id"],),
+    ).fetchall()
+    if not rows:
+        raise ValueError("no approved evidence is available for this radar")
+    fingerprint = stable_hash([(row["evidence_id"], row["content_hash"]) for row in rows])
+    changed = service.radars.record_run(radar_id, fingerprint, tuple(row["evidence_id"] for row in rows))
+    return {"ok": True, "radarId": radar_id, "materialChange": changed,
+            "evidenceCount": len(rows), "notification": "digest" if changed else "none", "externalWrite": False}
+
+
+def memory_control(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    memory_id = bounded(value.get("memoryId"), maximum=100, name="memory id")
+    action = str(value.get("action") or "")
+    if action not in {"confirmed", "rejected", "superseded"}:
+        raise ValueError("unsupported memory review action")
+    with service.store.connection:
+        result = service.store.connection.execute(
+            "UPDATE memory_proposals SET status=?,reviewed_at=? WHERE memory_id=?",
+            (action, utc_now(), memory_id),
+        )
+    if not result.rowcount:
+        raise ValueError("learned item not found")
+    return {"ok": True, "memoryId": memory_id, "status": action, "reversible": True}
 
 
 def create(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
@@ -513,7 +1128,28 @@ def focus(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
 def stop_focus(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
     focus_id = bounded(value.get("focusId"), maximum=100, name="focus id")
     service.computer_awareness.stop(focus_id)
-    return {"ok": True, "focusId": focus_id, "stopped": True}
+    timeline = service.computer_awareness.timeline(focus_id)
+    applications = list(dict.fromkeys(
+        item["app_id"] for item in timeline["events"] if item.get("app_id")
+    ))
+    return {"ok": True, "focusId": focus_id, "stopped": True,
+            "summary": {"observationCount": len(timeline["events"]),
+                        "applications": applications[:10], "screenshotsRetained": 0,
+                        "context": timeline["context_id"]}}
+
+
+def focus_control(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
+    focus_id = bounded(value.get("focusId"), maximum=100, name="focus id")
+    action = str(value.get("action") or "")
+    if action == "pause":
+        service.computer_awareness.pause(focus_id)
+    elif action == "resume":
+        service.computer_awareness.resume(focus_id)
+    else:
+        raise ValueError("focus control supports only pause or resume")
+    return {"ok": True, "focusId": focus_id,
+            "mode": "paused" if action == "pause" else "focus",
+            "visibleIndicator": True, "externalWrite": False}
 
 
 def observe(service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
@@ -703,7 +1339,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "operation",
-        choices=("state", "create", "focus", "stop-focus", "observe", "setting", "calendar-profile", "review-calendar-profile", "projection", "capability-control", "automation-outcome", "record-model-decision", "commitment-open", "commitment-complete", "personal-action-status", "personal-action-setting", "personal-action-preview", "personal-action-execute", "personal-action-explicit", "personal-calendar-undo", "guided-public-read"),
+        choices=("state", "create", "focus", "stop-focus", "focus-control", "observe", "setting", "calendar-profile", "review-calendar-profile", "projection", "capability-control", "automation-outcome", "record-model-decision", "commitment-open", "commitment-complete", "personal-action-status", "personal-action-setting", "personal-action-preview", "personal-action-execute", "personal-action-explicit", "personal-calendar-undo", "guided-public-read", "conversation-list", "conversation-control", "conversation-turn-begin", "conversation-turn-finish", "task-create", "task-control", "attention-control", "meeting-followup", "project-checkpoint", "decision-create", "decision-outcome", "radar-evaluate", "memory-control"),
     )
     parser.add_argument("--context")
     arguments = parser.parse_args()
@@ -720,7 +1356,7 @@ def main() -> int:
                     raise ValueError("local item request is too large")
                 value = json.loads(raw or b"{}")
                 output = {
-                    "create": create, "focus": focus, "stop-focus": stop_focus, "observe": observe, "setting": setting,
+                    "create": create, "focus": focus, "stop-focus": stop_focus, "focus-control": focus_control, "observe": observe, "setting": setting,
                     "calendar-profile": calendar_profile,
                     "review-calendar-profile": review_calendar_profile,
                     "projection": projection,
@@ -736,6 +1372,19 @@ def main() -> int:
                     "personal-action-explicit": personal_action_explicit,
                     "personal-calendar-undo": personal_calendar_undo,
                     "guided-public-read": guided_public_read,
+                    "conversation-list": conversation_list,
+                    "conversation-control": conversation_control,
+                    "conversation-turn-begin": conversation_turn_begin,
+                    "conversation-turn-finish": conversation_turn_finish,
+                    "task-create": task_create,
+                    "task-control": task_control,
+                    "attention-control": attention_control,
+                    "meeting-followup": meeting_followup,
+                    "project-checkpoint": project_checkpoint,
+                    "decision-create": decision_create,
+                    "decision-outcome": decision_outcome,
+                    "radar-evaluate": radar_evaluate,
+                    "memory-control": memory_control,
                 }[arguments.operation](service, value)
         finally:
             service.close()

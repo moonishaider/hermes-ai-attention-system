@@ -30,8 +30,8 @@ class ComputerAwareness:
         self.store = store
 
     def start_focus(self, *, context_id: str, minutes: int, policy: AwarenessPolicy) -> str:
-        if minutes not in {30, 60, 120}:
-            raise ValueError("focus duration must be 30, 60, or 120 minutes")
+        if minutes not in {30, 60, 90, 120}:
+            raise ValueError("focus duration must be 30, 60, 90, or 120 minutes")
         focus_id = str(uuid4())
         now = datetime.now(UTC)
         with self.store.connection:
@@ -50,7 +50,7 @@ class ComputerAwareness:
         session = self.store.connection.execute(
             "SELECT * FROM focus_sessions WHERE focus_id=?", (focus_id,)
         ).fetchone()
-        if not session or session["stopped_at"] or datetime.fromisoformat(session["expires_at"]) <= datetime.now(UTC):
+        if not session or session["mode"] != "focus" or session["stopped_at"] or datetime.fromisoformat(session["expires_at"]) <= datetime.now(UTC):
             raise PermissionError("focus session is not active")
         if incognito or app_id.casefold() in SENSITIVE_APPS or any(
             domain and blocked in domain.casefold() for blocked in SENSITIVE_DOMAINS
@@ -73,6 +73,28 @@ class ComputerAwareness:
             self.store.connection.execute(
                 "UPDATE focus_sessions SET stopped_at=? WHERE focus_id=? AND stopped_at IS NULL",
                 (utc_now(), focus_id),
+            )
+
+    def pause(self, focus_id: str) -> None:
+        with self.store.connection:
+            result = self.store.connection.execute(
+                "UPDATE focus_sessions SET mode='paused' WHERE focus_id=? AND mode='focus' AND stopped_at IS NULL",
+                (focus_id,),
+            )
+        if not result.rowcount:
+            raise ValueError("active focus session not found")
+
+    def resume(self, focus_id: str) -> None:
+        session = self.store.connection.execute(
+            "SELECT expires_at,stopped_at,mode FROM focus_sessions WHERE focus_id=?", (focus_id,)
+        ).fetchone()
+        if not session or session["stopped_at"] or session["mode"] != "paused":
+            raise ValueError("paused focus session not found")
+        if datetime.fromisoformat(session["expires_at"]) <= datetime.now(UTC):
+            raise PermissionError("focus session expired while paused")
+        with self.store.connection:
+            self.store.connection.execute(
+                "UPDATE focus_sessions SET mode='focus' WHERE focus_id=?", (focus_id,)
             )
 
     def timeline(self, focus_id: str) -> dict[str, Any]:
@@ -101,9 +123,9 @@ class ComputerAwareness:
         if action_type not in safe | preview_required:
             raise ValueError("unsupported guided action")
         session = self.store.connection.execute(
-            "SELECT stopped_at,expires_at FROM focus_sessions WHERE focus_id=?", (focus_id,)
+            "SELECT mode,stopped_at,expires_at FROM focus_sessions WHERE focus_id=?", (focus_id,)
         ).fetchone()
-        if not session or session["stopped_at"] or datetime.fromisoformat(session["expires_at"]) <= datetime.now(UTC):
+        if not session or session["mode"] != "focus" or session["stopped_at"] or datetime.fromisoformat(session["expires_at"]) <= datetime.now(UTC):
             raise PermissionError("focus session is not active")
         if action_type in safe:
             return {"mode": "navigation", "action": action_type, "target": target, "mutation": False}
