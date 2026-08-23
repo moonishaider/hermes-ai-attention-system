@@ -272,6 +272,20 @@ class HistoryAndServiceTests(unittest.TestCase):
         self.assertNotIn("hermes_attention_execute_action", registered)
         self.assertFalse(any(name.startswith(("send", "create", "delete", "update")) for name in registered))
 
+    def test_sync_codex_accepts_only_the_bounded_legacy_thread_alias(self):
+        path = ROOT / ".hermes/plugins/hermes-attention/__init__.py"
+        spec = importlib.util.spec_from_file_location("hermes_attention_prompt8_plugin", path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(module)
+        with patch.object(module, "_call", return_value="ok") as call:
+            self.assertEqual("ok", module.sync_codex(max_threads=7, maximum_items=20))
+        call.assert_called_once_with(
+            "sync_codex", lookback_days=14, maximum_threads=7, maximum_items=20,
+        )
+        with self.assertRaises(ValueError):
+            module.sync_codex(max_threads=7, maximum_threads=8)
+
     def test_plugin_resolves_marked_project_independently_of_process_cwd(self):
         path = ROOT / ".hermes/plugins/hermes-attention/__init__.py"
         spec = importlib.util.spec_from_file_location("hermes_attention_desktop_plugin", path)
