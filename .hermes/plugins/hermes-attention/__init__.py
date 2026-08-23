@@ -65,8 +65,19 @@ def search_evidence(query: str, context_id: str = "", limit: int = 10) -> str:
     return _call("search", query=query, context_id=context_id or None, limit=limit)
 
 
-def sync_codex(lookback_days: int = 14, maximum_threads: int = 50, maximum_items: int = 2000) -> str:
+def sync_codex(
+    lookback_days: int = 14,
+    maximum_threads: int = 50,
+    maximum_items: int = 2000,
+    max_threads: int | None = None,
+) -> str:
     """Read recent Codex chats through the official local read-only interface."""
+    # Calls created before the canonical schema rename can still contain the
+    # legacy spelling. Accept only this bounded alias and reject conflicts.
+    if max_threads is not None:
+        if maximum_threads != 50 and maximum_threads != max_threads:
+            raise ValueError("maximum_threads and max_threads disagree")
+        maximum_threads = max_threads
     return _call(
         "sync_codex",
         lookback_days=lookback_days,
