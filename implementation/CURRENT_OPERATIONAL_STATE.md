@@ -1,6 +1,6 @@
 # Current Operational State
 
-**Authoritative as of:** 12 August 2026
+**Authoritative as of:** 24 August 2026
 
 **Prompt 7 state:** Jarvis native application operational; **42 of 42 visible requirements are accepted**. The installed final build uses the separate personal Calendar/Gmail-draft grant in **Auto Explicit Request** mode: unambiguous requests made directly by Syed execute through the bounded personal capability, while ambiguity, attendees, recurrence, work accounts, and consequential requests still stop for review. The exact Calendar create/Undo and unsent Gmail draft create/open cycles are owner-visible and provider-backed.
 
@@ -13,6 +13,14 @@
 **Operational implementation through:** the commit containing this record
 
 **Purpose:** This is the single current source of truth. Historical milestone records are evidence of what was true when written, not the present status.
+
+## Prompt 8 installed candidate state
+
+Prompt 8 is active and not yet complete. The exact installed `/Applications/Jarvis.app` embeds commit `8866bd1194d86d96f1ca087336265f9caa1209b8`, has binary SHA-256 `6172c4f2eed6b5d386fbf48ba4fcd34ec18dbfdc0f0008d6980cc65466bdf3ce`, passes deep strict signature verification, and owns one Hermes gateway on authenticated private loopback. The installed runtime plugin matches repository source byte-for-byte.
+
+The exact installed candidate has now passed canonical `desktop` conversation creation, two-message persistence, rename/pin/unpin/recoverable archive/restore, full process relaunch recovery, a bounded Flash connectivity call, a cancelled synthetic run, local task lifecycle, Focus with zero screenshots, clean Personal Radar no-change, five-citation public read, one Personal Calendar create plus exact Undo, and one unsent Personal Gmail draft. No email, Slack message, work-calendar mutation, company/client write, browser control, purchase, submission, or destructive deletion occurred. The full automated gate is 107 Python tests, 20 frontend tests, nine Rust tests, TypeScript/production build, Rust formatting, warnings-denied Clippy, safety controls, secret scan, configuration doctor, deep code-signature verification, and zero production npm vulnerabilities.
+
+The installed health endpoint is honest: model, configuration, state database, gateway, and background queues are healthy, but overall readiness is degraded because disk use is 92.2%. Idle Jarvis plus its exact gateway currently use about 60,176 KB RSS and 0.1% CPU. The final completion authority is `implementation/PROMPT_08_ACCEPTANCE_LEDGER.md`; owner-visible voice/cadence/Stop, common-size visual inspection, normal-Chat visibility, and profile-preview checks remain before the exact storage quarantine and guarded publication.
 
 ## Prompt 7 Jarvis state
 

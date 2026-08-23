@@ -3,17 +3,17 @@
 Date opened: 2026-08-23
 Exact pre-cleanup measurement: 2026-08-24 (Asia/Karachi)
 
-No Prompt 8 cleanup has occurred. Measurements below are the exact current pre-cleanup baseline after installing commit `af8ee1128ea472ed1a5316eae99b9cc443a70659`.
+No Prompt 8 cleanup has occurred. Measurements below are the exact current pre-cleanup baseline, refreshed after installing commit `8866bd1194d86d96f1ca087336265f9caa1209b8`.
 
 | Exact path | Initial size | Classification |
 |---|---:|---|
-| Repository root | 13,748,504 KB | Active project plus reproducible build output and historical rollbacks; retain until acceptance |
-| `/Applications/Jarvis.app` | 6,020 KB | Active product; retain |
-| `~/.hermes/jarvis-runtime` | 67,372 KB | Active runtime/database/code; retain |
+| Repository root | 14,159,236 KB | Active project plus reproducible build output and historical rollbacks; retain until acceptance |
+| `/Applications/Jarvis.app` | 6,052 KB | Active product; retain |
+| `~/.hermes/jarvis-runtime` | 67,424 KB | Active runtime/database/code; retain |
 | Entire `~/.hermes` | 15,588,104 KB | Shared Hermes runtime, connectors, tokens, memory, skills, histories, and state; never broad-delete |
-| `jarvis/src-tauri/target` | 10,446,496 KB | Reproducible Rust build output; largest safe candidate after acceptance |
+| `jarvis/src-tauri/target` | 10,714,820 KB | Reproducible Rust build output; largest safe candidate after acceptance |
 | `.tooling` | 1,100,568 KB | Project-local pinned Node/Rust/Cargo toolchains; reproducible but useful for rollback/rebuild |
-| `backups` | 1,956,428 KB | Mixed required and obsolete rollbacks; exact-manifest review required |
+| `backups` | 2,098,412 KB | Mixed required and obsolete rollbacks; exact-manifest review required |
 | `jarvis/node_modules` | 123,656 KB | Lockfile-reproducible project dependency tree |
 | `runtime-data` | 62,584 KB | Active/private project runtime material; retain |
 | `.workspace-quarantine` | 43,880 KB | Already quarantined recoverable project artifacts; retain under current policy |
@@ -45,4 +45,4 @@ The Prompt 8 text asks for an executing cleanup script, but `AGENTS.md` line 63 
 
 The tool creates an owner-only manifest under ignored `runtime-data/storage-manifests/`, records byte/object counts plus a deterministic metadata SHA-256, revalidates every entry immediately before action, rejects top-level, broken, absolute, or escaping symlinks plus path escapes/protected paths/tampering, and hashes safe internal dependency links without following them. It moves exact candidates only to a recoverable `.workspace-quarantine/prompt8-storage-<manifest-id>` destination. Dry-run and quarantine behavior are covered by `tests/test_prompt8_storage.py`. It reports `freed_bytes=0` because project-local quarantine does not release filesystem space. No real candidate has been quarantined yet; execution remains gated on final installed acceptance.
 
-The first real four-candidate plan and dry-run passed with manifest ID `5254cce7f71fc529`, four exact entries, 16,635,801,851 candidate bytes, owner-only mode `0600`, and zero moved or freed bytes. This proves the plan against the current dependency/build trees without changing them; it must be regenerated if a later rebuild changes candidate metadata.
+The current real four-candidate plan and dry-run passed with manifest ID `2d680dac73177bef`, four exact entries, 16,873,798,593 candidate bytes, owner-only mode `0600`, and zero moved or freed bytes. This proves the plan against the installed `8866bd1` dependency/build trees without changing them; it must be regenerated if a later rebuild changes candidate metadata.

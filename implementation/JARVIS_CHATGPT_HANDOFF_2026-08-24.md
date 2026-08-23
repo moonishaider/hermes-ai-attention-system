@@ -130,7 +130,7 @@ Prompt 8 treats the installed application as product truth rather than relying o
 
 ## Prompt 8 work currently installed
 
-The current branch is `main`, at commit `db3f78cf2bd88a11f2beaa053d2694098e5ad49c`, six commits ahead of `origin/main`. The exact installed `/Applications/Jarvis.app` binary embeds that commit, has SHA-256 `41fe2a6fce7fd09f5a5596ff37d1eb87b835f1ae5a4d8607aa36bb646c44949d`, and passes deep strict code-signature verification. One Jarvis process owns one authenticated private-loopback Hermes gateway, and the installed runtime plugin matches repository source byte-for-byte.
+The current branch is `main`, at commit `8866bd1194d86d96f1ca087336265f9caa1209b8`, seven commits ahead of `origin/main`. The exact installed `/Applications/Jarvis.app` binary embeds that commit, has SHA-256 `6172c4f2eed6b5d386fbf48ba4fcd34ec18dbfdc0f0008d6980cc65466bdf3ce`, and passes deep strict code-signature verification. One Jarvis process owns one authenticated private-loopback Hermes gateway, and the installed runtime plugin matches repository source byte-for-byte.
 
 Implemented in the current source work includes:
 
@@ -157,7 +157,7 @@ Prompt 8 is **not complete**. The authoritative ledger has 48 requirements: five
 
 Remaining work is now concentrated in acceptance and closeout:
 
-1. Exercise the full 48-item contract against the exact installed `db3f78c` build, including normal Chat Calendar create/exact Undo, an unsent Gmail draft, conversation persistence, voice cadence and Stop, common-size screenshot review, navigation/profile previews, Today/Inbox/Project/meeting/learning lifecycles, and final health.
+1. Finish the owner-visible portion of the 48-item contract against the exact installed `8866bd1` build, including normal Chat Calendar create/exact Undo, an unsent Gmail draft, voice cadence and Stop, common-size screenshot review, navigation/profile previews, and visible Today/Inbox/Project/meeting/learning checks. Canonical conversation creation, two-message persistence, rename/pin/archive/restore, clean quit, and relaunch recovery now pass against the installed build.
 2. Apply only the policy-compliant exact-manifest storage quarantine after installed acceptance, then verify the current app, runtime, database, secrets, histories, memory, and required rollbacks remain intact. Quarantine is recoverable and must not be misreported as immediately freed disk space.
 3. Reconcile the Prompt 8 acceptance ledger and current-state records from observed evidence, commit the final records, publish only through `scripts/safe_git_push.sh`, and leave the worktree clean.
 

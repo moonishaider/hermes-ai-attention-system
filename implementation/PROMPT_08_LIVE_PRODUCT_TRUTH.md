@@ -33,17 +33,18 @@ The Codex Computer Use capture attempt failed with a macOS ScreenCaptureKit stre
 ## Installed Prompt 8 build truth
 
 - Installed path: `/Applications/Jarvis.app`.
-- Installed source identity: `db3f78cf2bd88a11f2beaa053d2694098e5ad49c` (`Handle safe internal storage links`).
-- Installed binary SHA-256: `41fe2a6fce7fd09f5a5596ff37d1eb87b835f1ae5a4d8607aa36bb646c44949d`.
+- Installed source identity: `8866bd1194d86d96f1ca087336265f9caa1209b8` (`Fix persistent desktop conversation ownership`).
+- Installed binary SHA-256: `6172c4f2eed6b5d386fbf48ba4fcd34ec18dbfdc0f0008d6980cc65466bdf3ce`.
 - Signature: ad-hoc signed for this Mac; `codesign --verify --deep --strict` passes. It is intentionally not Apple-notarized, so Gatekeeper assessment is not represented as passing.
 - Runtime: one Jarvis process owns one exact Hermes gateway child on private loopback; the runtime plugin matches repository source byte-for-byte.
 - Database: current runtime database `PRAGMA quick_check` returns `ok`.
 - Post-gate backup/restore drill: `backups/prompt8-post-gate-20260823T201116Z.sqlite3` and `backups/prompt8-post-gate-20260823T201116Z-restore-check.sqlite3` are each 66,473,984 bytes, pass `PRAGMA quick_check`, and share SHA-256 `f3ea01f5a17a6ece44c5e53dc5527de6dc9658f0463bbcfabb239f7b36fd8a1e`.
 - Personal Google: connected, exact-scope, refreshable, `ready-refreshable`, and `auto-explicit`; Calendar/Gmail-draft capabilities are enabled while Gmail send and Work Google writes remain absent.
+- Installed Personal-action acceptance: one clearly labeled Personal Calendar event was created through the exact native capability and then exactly undone; one clearly labeled unsent Personal Gmail draft was created once. Both actions used canonical `desktop` conversation records, no email was sent, and no company/client account was mutated. A request containing a send phrase failed closed before the accepted unsent-draft request.
 
 ### Conversation persistence repair discovered during installed acceptance
 
-An authenticated installed-gateway probe found that Hermes normalizes the unsupported session source `jarvis_desktop` to `api_server`. That made a newly created Jarvis conversation fail the reviewed ownership filter after relaunch. The native client, renderer, and owner-local conversation controls now use Hermes' supported `desktop` source consistently. The repair is covered by Python, frontend, and Rust tests; packaging and installed lifecycle confirmation remain required before the acceptance item can pass.
+An authenticated installed-gateway probe found that Hermes normalizes the unsupported session source `jarvis_desktop` to `api_server`. That made a newly created Jarvis conversation fail the reviewed ownership filter after relaunch. The native client, renderer, and owner-local conversation controls now use Hermes' supported `desktop` source consistently. The exact installed build created a canonical `desktop` thread, persisted one user and one assistant message, passed rename/pin/unpin/archive/unarchive, fully quit with no orphan gateway, relaunched, and recovered the archived two-message thread. Synthetic acceptance threads remain recoverably archived.
 - Integrations: all ten reviewed read-only logical integrations are registered, including separate Google, Slack, GitHub, Zoom, Codex, ChatGPT, and Gemini sources.
 - Routes: routine/difficult/vision/review remain DeepSeek V4 Flash, DeepSeek V4 Pro, GPT-5.6 Luna, and GPT-5.6 Terra; Sol remains builder-only.
 - A minimal direct Flash probe succeeded in 1.373 seconds. A prior `402 Insufficient Balance` entry in the app log is stale historical output, not the current provider state.
@@ -63,4 +64,4 @@ The installed Prompt 8 source contains the following reviewed product work:
 - truthful model, connector, budget, token-freshness, personal-action, and runtime diagnostics with only bounded reviewed repairs;
 - fixed-domain evidence opening and public research with no arbitrary browser/computer authority.
 
-The complete post-fix source gate passes 107 Python tests, 20 frontend tests under pinned Node 24, the production TypeScript/Vite build, eight Rust tests under Rust 1.97.1, Rust formatting, warnings-denied Clippy, marked-root preflight, safety controls and negative command checks, secret scan, configuration doctor, and a production npm audit with zero vulnerabilities. The project now also contains a tested exact-manifest, project-local quarantine tool for allowlisted reproducible build artifacts; it has no deletion mode and has not yet been applied. Installation is proven, but the installed 48-item acceptance contract remains the completion authority.
+The complete post-fix source gate passes 107 Python tests, 20 frontend tests under pinned Node 24, the production TypeScript/Vite build, nine Rust tests under Rust 1.97.1, Rust formatting, warnings-denied Clippy, marked-root preflight, safety controls and negative command checks, secret scan, configuration doctor, and a production npm audit with zero vulnerabilities. The project now also contains a tested exact-manifest, project-local quarantine tool for allowlisted reproducible build artifacts; it has no deletion mode and has not yet been applied. Installation is proven, but the installed 48-item acceptance contract remains the completion authority.

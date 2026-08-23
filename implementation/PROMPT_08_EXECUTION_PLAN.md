@@ -26,7 +26,7 @@ This is the live implementation plan for `PROMPT_08_JARVIS_PRODUCT_HARDENING_GOA
 
 ## Current milestone
 
-Milestones 1–6 and the policy-compliant storage quarantine tool are implemented, committed, packaged, signed, installed, and running from exact source commit `db3f78cf2bd88a11f2beaa053d2694098e5ad49c`. The personal Google grant is connected, exact-scope, refreshable, and refresh-on-demand; the regression cause was a runtime setting of `off`, and only the two allowlisted Personal capabilities were restored to `auto-explicit`. The generic company/client kill switch and prohibited write surfaces remain unchanged.
+Milestones 1–6, the canonical conversation-persistence repair, and the policy-compliant storage quarantine tool are implemented, committed, packaged, signed, installed, and running from exact source commit `8866bd1194d86d96f1ca087336265f9caa1209b8`. The personal Google grant is connected, exact-scope, refreshable, and refresh-on-demand; the regression cause was a runtime setting of `off`, and only the two allowlisted Personal capabilities were restored to `auto-explicit`. The generic company/client kill switch and prohibited write surfaces remain unchanged.
 
 The complete post-fix gate includes 107 Python tests, 20 frontend tests under pinned Node 24, the production TypeScript/Vite build, nine Rust tests under Rust 1.97.1, warnings-denied Clippy, Rust formatting, the marked-root preflight, safety-control negatives, configuration doctor, secret scan, and a zero-vulnerability production npm audit. The first unpinned-shell rerun selected stale Node 22.9 and no Cargo; those environment failures were corrected by selecting the already reviewed pinned toolchains, without changing product dependencies.
 
