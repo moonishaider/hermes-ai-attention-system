@@ -12,7 +12,7 @@
 
 Jarvis is now a separate native macOS application at `/Applications/Jarvis.app`. It is the intended daily interface and reuses the reviewed Hermes Agent backend, runtime routing, connectors, memory, skills, provenance, and SQLite intelligence store. The stock `/Applications/Hermes.app` remains installed as an independent diagnostic and rollback interface. Jarvis does not require the old Hermes application to be open.
 
-Prompt 7 is historically complete at its stated acceptance level: all 42 of 42 Prompt 7 visible requirements passed on the accepted 12 August build. This does **not** mean every imaginable product goal is complete. Prompt 8 was subsequently opened because normal use exposed further product-hardening needs. Prompt 8 source work is substantial but, as of this handoff, has not yet been committed, packaged into `/Applications/Jarvis.app`, or accepted against its 48-item installed-app contract. The exact installed app therefore remains the accepted Prompt 7 build until Prompt 8 packaging and visible acceptance are finished.
+Prompt 7 is historically complete at its stated acceptance level: all 42 of 42 Prompt 7 visible requirements passed on the accepted 12 August build. This does **not** mean every imaginable product goal is complete. Prompt 8 was subsequently opened because normal use exposed further product-hardening needs. Its source work has now been committed, packaged, signed, and installed at `/Applications/Jarvis.app`, but Prompt 8 is **not yet complete** because the exact installed build has not passed all 48 owner-visible acceptance items, the final storage step, guarded publication, and clean-worktree closeout.
 
 ## Hermes and Jarvis coexistence
 
@@ -128,9 +128,9 @@ Prompt 8 treats the installed application as product truth rather than relying o
 - Today, Inbox, Project Cockpit, meeting follow-up, Teach Jarvis, Radars, and Decision Journal;
 - final packaging, 48 installed-app acceptance checks, storage audit, clean Git state, and guarded private publication.
 
-## Prompt 8 work currently present in source
+## Prompt 8 work currently installed
 
-The current branch is `main`, at commit `66ffdb3` and one commit ahead of `origin/main`. The worktree contains approximately 2,095 inserted and 133 deleted lines across 12 implementation/test files, plus Prompt 8 records. These changes are intentionally not described as installed completion.
+The current branch is `main`, at commit `db3f78cf2bd88a11f2beaa053d2694098e5ad49c`, six commits ahead of `origin/main`. The exact installed `/Applications/Jarvis.app` binary embeds that commit, has SHA-256 `41fe2a6fce7fd09f5a5596ff37d1eb87b835f1ae5a4d8607aa36bb646c44949d`, and passes deep strict code-signature verification. One Jarvis process owns one authenticated private-loopback Hermes gateway, and the installed runtime plugin matches repository source byte-for-byte.
 
 Implemented in the current source work includes:
 
@@ -149,23 +149,19 @@ Implemented in the current source work includes:
 - source-card opening limited to reviewed allowlisted evidence domains;
 - extended frontend, Rust, and Python coverage, including 100-message/5,000-character chat behavior.
 
-During this Prompt 8 development session, the source tests passed at 101 Python tests, 20 frontend tests plus TypeScript and production Vite build, and 8 Rust tests plus formatting and warnings-denied Clippy. Safety preflight, safety controls, secret scan, configuration doctor, and the production npm audit also passed; npm reported zero vulnerabilities. These are automated development checks, not proof that the exact installed app passes visible acceptance.
+The current source gate passes 107 Python tests, 20 frontend tests under pinned Node 24, TypeScript and the production Vite build, 9 Rust tests, Rust formatting, and warnings-denied Clippy. Safety preflight, safety controls and negative-command checks, secret scan, configuration doctor, and the production npm audit also pass; npm reports zero vulnerabilities. These checks prove the source/package gate, not the remaining owner-visible installed-app behavior.
 
 ## Prompt 8 status and remaining work
 
-Prompt 8 is **not complete**. The authoritative installed-app acceptance ledger contains 48 requirements and has not yet been reconciled with the new source work. Remaining work includes:
+Prompt 8 is **not complete**. The authoritative ledger has 48 requirements: five currently have direct installed evidence, thirty-four have automated evidence awaiting installed/visible confirmation, and nine remain explicitly untested. Each item has one status; no Prompt 7 result is silently carried forward.
 
-1. Review the full uncommitted Prompt 8 diff and rerun final security, dependency, formatting, type, and test checks.
-2. Update Prompt 8 current-state, plan, acceptance, external-write, and storage records honestly.
-3. Make a coherent implementation commit so build metadata can embed the exact source commit.
-4. Build, ad-hoc sign, back up the current installed app, install the new exact `/Applications/Jarvis.app`, and verify binary/signature/runtime identity.
-5. Exercise the 48-item contract against the exact installed build. User-visible checks must not be inferred from automated tests.
-6. Re-test the narrowly authorized Personal Calendar create/exact Undo and unsent Gmail draft flow; never send email.
-7. Verify launch/quit lifecycle, voice, Quick Entry, Today/Inbox/Project Cockpit, health, citations, model routing, actions, and no unintended gateway/audio process.
-8. Record before/after storage usage. Do not delete current runtime data, credentials, histories, memories, the live database, or required rollback copies.
-9. Leave a clean worktree and publish only through `scripts/safe_git_push.sh` to the private `moonishaider/hermes-ai-attention-system` repository.
+Remaining work is now concentrated in acceptance and closeout:
 
-Until this is done, the installed Prompt 7 build remains the accepted daily version and the Prompt 8 source work remains a development milestone.
+1. Exercise the full 48-item contract against the exact installed `db3f78c` build, including normal Chat Calendar create/exact Undo, an unsent Gmail draft, conversation persistence, voice cadence and Stop, common-size screenshot review, navigation/profile previews, Today/Inbox/Project/meeting/learning lifecycles, and final health.
+2. Apply only the policy-compliant exact-manifest storage quarantine after installed acceptance, then verify the current app, runtime, database, secrets, histories, memory, and required rollbacks remain intact. Quarantine is recoverable and must not be misreported as immediately freed disk space.
+3. Reconcile the Prompt 8 acceptance ledger and current-state records from observed evidence, commit the final records, publish only through `scripts/safe_git_push.sh`, and leave the worktree clean.
+
+Until these steps are done, Prompt 7 remains the last fully accepted milestone, while the installed Prompt 8 build is the current daily candidate rather than a completed release.
 
 ## Safety boundaries that must survive every future change
 
@@ -185,14 +181,14 @@ Until this is done, the installed Prompt 7 build remains the accepted daily vers
 For detailed audit, read these after this handoff:
 
 1. `implementation/PROMPT_07_FINAL_HANDOFF_2026-08-12.md` — complete accepted Prompt 7 narrative.
-2. `implementation/CURRENT_OPERATIONAL_STATE.md` — detailed Prompt 7 operational truth; portions can become stale when Prompt 8 is installed.
+2. `implementation/CURRENT_OPERATIONAL_STATE.md` — detailed accepted Prompt 7 operational truth; it must be reconciled at Prompt 8 closeout.
 3. `implementation/PROMPT_07_ACCEPTANCE_LEDGER.md` — direct evidence for the 42 accepted Prompt 7 requirements.
 4. `PROMPT_08_JARVIS_PRODUCT_HARDENING_GOAL.md` — full active hardening specification.
-5. `implementation/PROMPT_08_LIVE_PRODUCT_TRUTH.md` — Prompt 8 starting audit; currently pre-package and partly stale relative to the source diff.
-6. `implementation/PROMPT_08_ACCEPTANCE_LEDGER.md` — 48-item installed-app contract; current statuses must be refreshed only from evidence.
+5. `implementation/PROMPT_08_LIVE_PRODUCT_TRUTH.md` — current installed Prompt 8 build, runtime, grants, routes, tests, backups, and limitations.
+6. `implementation/PROMPT_08_ACCEPTANCE_LEDGER.md` — authoritative 48-item installed-app contract; statuses change only from evidence.
 7. `implementation/ISSUES_AND_DEFERRED.md` — limitations, resolved incidents, and intentionally deferred authority.
 8. `START_HERE_JARVIS.md` — accepted daily-use instructions; update only after the new installed build changes user-visible behavior.
 
 ## Recommended next discussion
 
-The next ChatGPT conversation should not invent another architecture. It should review this handoff and the Prompt 8 specification, then advise whether to finish the current Prompt 8 package and acceptance exactly as written or deliberately narrow its remaining acceptance scope. It must distinguish source implementation, automated checks, installed behavior, and owner-visible acceptance.
+The next ChatGPT conversation should not invent another architecture. It should review this handoff and the Prompt 8 records, then help finish or deliberately rescope the remaining installed acceptance and closeout. It must distinguish source implementation, automated checks, installed behavior, and owner-visible acceptance.

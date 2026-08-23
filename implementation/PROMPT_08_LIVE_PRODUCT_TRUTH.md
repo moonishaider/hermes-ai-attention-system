@@ -33,13 +33,17 @@ The Codex Computer Use capture attempt failed with a macOS ScreenCaptureKit stre
 ## Installed Prompt 8 build truth
 
 - Installed path: `/Applications/Jarvis.app`.
-- Installed source identity: `af8ee1128ea472ed1a5316eae99b9cc443a70659` (`Accept bounded Codex sync thread alias`).
-- Installed binary SHA-256: `ff9f483c1a3bfaaa78340c6710c245714fdc8219d13f3d9c48e3b9d18cd7260f`.
+- Installed source identity: `db3f78cf2bd88a11f2beaa053d2694098e5ad49c` (`Handle safe internal storage links`).
+- Installed binary SHA-256: `41fe2a6fce7fd09f5a5596ff37d1eb87b835f1ae5a4d8607aa36bb646c44949d`.
 - Signature: ad-hoc signed for this Mac; `codesign --verify --deep --strict` passes. It is intentionally not Apple-notarized, so Gatekeeper assessment is not represented as passing.
-- Runtime: one Jarvis process owns one exact Hermes gateway child on private loopback; the runtime plugin matches repository source.
+- Runtime: one Jarvis process owns one exact Hermes gateway child on private loopback; the runtime plugin matches repository source byte-for-byte.
 - Database: current runtime database `PRAGMA quick_check` returns `ok`.
 - Post-gate backup/restore drill: `backups/prompt8-post-gate-20260823T201116Z.sqlite3` and `backups/prompt8-post-gate-20260823T201116Z-restore-check.sqlite3` are each 66,473,984 bytes, pass `PRAGMA quick_check`, and share SHA-256 `f3ea01f5a17a6ece44c5e53dc5527de6dc9658f0463bbcfabb239f7b36fd8a1e`.
 - Personal Google: connected, exact-scope, refreshable, `ready-refreshable`, and `auto-explicit`; Calendar/Gmail-draft capabilities are enabled while Gmail send and Work Google writes remain absent.
+
+### Conversation persistence repair discovered during installed acceptance
+
+An authenticated installed-gateway probe found that Hermes normalizes the unsupported session source `jarvis_desktop` to `api_server`. That made a newly created Jarvis conversation fail the reviewed ownership filter after relaunch. The native client, renderer, and owner-local conversation controls now use Hermes' supported `desktop` source consistently. The repair is covered by Python, frontend, and Rust tests; packaging and installed lifecycle confirmation remain required before the acceptance item can pass.
 - Integrations: all ten reviewed read-only logical integrations are registered, including separate Google, Slack, GitHub, Zoom, Codex, ChatGPT, and Gemini sources.
 - Routes: routine/difficult/vision/review remain DeepSeek V4 Flash, DeepSeek V4 Pro, GPT-5.6 Luna, and GPT-5.6 Terra; Sol remains builder-only.
 - A minimal direct Flash probe succeeded in 1.373 seconds. A prior `402 Insufficient Balance` entry in the app log is stale historical output, not the current provider state.
