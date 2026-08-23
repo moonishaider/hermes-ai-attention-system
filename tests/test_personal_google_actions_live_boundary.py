@@ -128,7 +128,7 @@ class PersonalGoogleLiveBoundaryTests(unittest.TestCase):
         import jarvis_local_state as local_state
 
         class FakeDB:
-            def __init__(self, source: str = "jarvis_desktop") -> None:
+            def __init__(self, source: str = "desktop") -> None:
                 self.source = source
                 self.appended = None
                 self.closed = False
@@ -174,7 +174,7 @@ class PersonalGoogleLiveBoundaryTests(unittest.TestCase):
                 self.closed = False
 
             def get_session(self, session_id: str) -> dict | None:
-                source = "another_client" if session_id.endswith("foreign") else "jarvis_desktop"
+                source = "another_client" if session_id.endswith("foreign") else "desktop"
                 return {"id": session_id, "source": source}
 
             def set_session_title(self, session_id: str, title: str) -> bool:
@@ -218,7 +218,7 @@ class PersonalGoogleLiveBoundaryTests(unittest.TestCase):
                 self.closed = False
 
             def get_session(self, session_id: str) -> dict:
-                return {"id": session_id, "source": "jarvis_desktop", "message_count": len(self.rows)}
+                return {"id": session_id, "source": "desktop", "message_count": len(self.rows)}
 
             def get_messages(self, _session_id: str, **_kwargs: object) -> list[dict]:
                 return list(self.rows)
@@ -269,7 +269,7 @@ class PersonalGoogleLiveBoundaryTests(unittest.TestCase):
         class FakeDB:
             def list_sessions_rich(self, **_kwargs: object) -> list[dict]:
                 return [
-                    {"id": "jarvis_personal_1", "source": "jarvis_desktop", "title": "Keep", "archived": 0, "pinned": 1},
+                    {"id": "jarvis_personal_1", "source": "desktop", "title": "Keep", "archived": 0, "pinned": 1},
                     {"id": "other_1", "source": "another_client", "title": "Private foreign row"},
                 ]
 

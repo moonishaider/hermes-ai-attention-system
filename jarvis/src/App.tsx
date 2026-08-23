@@ -322,7 +322,7 @@ function App() {
   async function refreshConversations() {
     try {
       const value = await invoke<{ data?: HermesSession[] }>("list_conversations");
-      const recent = (value.data ?? []).filter((item) => item.source === "jarvis_desktop");
+      const recent = (value.data ?? []).filter((item) => item.source === "desktop");
       setConversations(recent);
       setConversationNotice(recent.length ? "" : "No conversations yet");
       return recent;

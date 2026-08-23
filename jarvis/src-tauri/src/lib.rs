@@ -948,7 +948,11 @@ impl HermesAdapter {
         let session_id = format!("jarvis_{context}_{suffix}");
         let payload = json!({
             "id": session_id,
-            "source": "jarvis_desktop",
+            // Hermes' authenticated session API accepts only a reviewed
+            // source vocabulary. `desktop` preserves native-client ownership;
+            // an unknown value is normalized to `api_server`, which would
+            // make the thread fail Jarvis' ownership filter after relaunch.
+            "source": "desktop",
             "title": title,
             "model": "deepseek-v4-flash",
         });
@@ -2266,5 +2270,12 @@ mod tests {
         assert!(source.contains("voice_deliveries: Mutex"));
         assert!(source.contains("invalid voice delivery id"));
         assert!(source.contains("delivery_id.len() > 80"));
+    }
+
+    #[test]
+    fn canonical_conversation_uses_supported_desktop_source() {
+        let source = include_str!("lib.rs");
+        assert!(source.contains(r#""source": "desktop""#));
+        assert!(source.contains("unknown value is normalized to `api_server`"));
     }
 }

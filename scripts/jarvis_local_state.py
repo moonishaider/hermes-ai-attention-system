@@ -77,7 +77,7 @@ def _append_canonical_conversation(
     db = db_factory()
     try:
         session = db.get_session(session_id)
-        if not session or session.get("source") != "jarvis_desktop":
+        if not session or session.get("source") != "desktop":
             raise PermissionError("canonical Jarvis conversation is absent or owned by another source")
         db.append_messages_batch(
             session_id,
@@ -111,7 +111,7 @@ def _jarvis_session(db: Any, session_id: Any) -> dict[str, Any]:
     if not session_id.startswith("jarvis_") or not re.fullmatch(r"[A-Za-z0-9_-]+", session_id):
         raise PermissionError("invalid Jarvis conversation id")
     session = db.get_session(session_id)
-    if not session or session.get("source") != "jarvis_desktop":
+    if not session or session.get("source") != "desktop":
         raise PermissionError("canonical Jarvis conversation is absent or owned by another source")
     return session
 
@@ -220,7 +220,7 @@ def conversation_list(_service: AttentionService, value: dict[str, Any]) -> dict
     db = _canonical_session_db()
     try:
         rows = db.list_sessions_rich(
-            source="jarvis_desktop",
+            source="desktop",
             limit=100,
             order_by_last_active=True,
             include_archived=include_archived,
@@ -229,7 +229,7 @@ def conversation_list(_service: AttentionService, value: dict[str, Any]) -> dict
         )
         safe_rows = []
         for row in rows:
-            if row.get("source") != "jarvis_desktop" or not str(row.get("id", "")).startswith("jarvis_"):
+            if row.get("source") != "desktop" or not str(row.get("id", "")).startswith("jarvis_"):
                 continue
             safe_rows.append({key: row.get(key) for key in (
                 "id", "source", "title", "preview", "message_count", "last_active",

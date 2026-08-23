@@ -38,7 +38,7 @@ vi.mock("@tauri-apps/api/core", () => ({
     };
     if (command === "list_conversations") return { data: mockState.conversations };
     if (command === "create_conversation") return {
-      session: { id: "jarvis_personal_synthetic", source: "jarvis_desktop", title: "Synthetic", message_count: 0 },
+      session: { id: "jarvis_personal_synthetic", source: "desktop", title: "Synthetic", message_count: 0 },
     };
     if (command === "conversation_messages") return { data: mockState.conversationMessages };
     if (command === "request_microphone_access") return "authorized";
@@ -113,7 +113,7 @@ describe("Jarvis desktop shell", () => {
 
   it("keeps a 100-message thread usable with a 5,000-character prompt", async () => {
     const id = "jarvis_personal_longthread";
-    mockState.conversations = [{ id, source: "jarvis_desktop", title: "Long thread", message_count: 100 }];
+    mockState.conversations = [{ id, source: "desktop", title: "Long thread", message_count: 100 }];
     mockState.conversationMessages = Array.from({ length: 100 }, (_, index) => ({
       id: `message-${index}`, role: index % 2 ? "assistant" : "user",
       content: `Message ${index} ${"detail ".repeat(20)}`,
