@@ -156,7 +156,7 @@ describe("Jarvis desktop shell", () => {
 
   it("executes an unambiguous personal request from normal Chat", async () => {
     render(<App />);
-    await waitFor(() => expect(screen.getByText("Systems nominal")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Jarvis core ready")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Chat" }));
     const composer = screen.getByPlaceholderText("What needs your attention?");
     fireEvent.change(composer, { target: { value: "Create a personal calendar event called Focus block tomorrow at 3 PM for 30 minutes." } });
@@ -178,12 +178,12 @@ describe("Jarvis desktop shell", () => {
     expect(screen.getByRole("button", { name: "Talk" })).toBeTruthy();
     await waitFor(() => expect(screen.getByText("12")).toBeTruthy());
     expect(screen.getByText("ledger entries in Personal")).toBeTruthy();
-    expect(screen.getByText("Systems nominal")).toBeTruthy();
+    expect(screen.getByText("Jarvis core ready")).toBeTruthy();
   });
 
   it("makes absent and preview-only action authority visible", async () => {
     render(<App />);
-    await waitFor(() => expect(screen.getByText("Systems nominal")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Jarvis core ready")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Actions" }));
     expect(screen.queryByText("What Jarvis can safely do")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Safety details" }));
