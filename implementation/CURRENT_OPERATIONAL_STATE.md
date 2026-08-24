@@ -10,7 +10,7 @@
 
 **Prompt 4 rollback checkpoints:** milestone start `015948b`; pre-closeout `ac43070`; pre-Google-refresh `bf04f22`
 
-**Operational implementation through:** the commit containing this record
+**Operational implementation through:** `38a5bc4` (`Record final Prompt 8 visible acceptance`); the subsequent publication note changes documentation only
 
 **Purpose:** This is the single current source of truth. Historical milestone records are evidence of what was true when written, not the present status.
 
