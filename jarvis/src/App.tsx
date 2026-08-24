@@ -113,6 +113,14 @@ export function isSpokenStopCommand(value: string) {
   return /^(?:(?:hey\s+)?jarvis\s+)?(?:stop|stop speaking|be quiet|cancel)(?:\s+(?:now|please))?$/.test(normalized);
 }
 
+export function bargeVoiceDetected(rms: number, baseline: number, consecutiveFrames: number) {
+  // The stream is echo-cancelled, so sustained energy materially above the
+  // response's own calibrated playback floor is owner speech. Five animation
+  // frames is short enough to feel immediate but rejects clicks and bumps.
+  const threshold = Math.max(0.018, baseline * 3.2);
+  return rms > threshold && consecutiveFrames >= 5;
+}
+
 export function voiceSilenceState(speechSeen: boolean, silenceMs: number) {
   return {
     settling: speechSeen && silenceMs >= 1_800,
@@ -294,8 +302,9 @@ function App() {
   const voiceDeliveryIdRef = useRef<string | null>(null);
   const currentSessionIdRef = useRef<string | null>(null);
   const speechSessionRef = useRef(0);
-  const bargeRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const bargeStreamRef = useRef<MediaStream | null>(null);
+  const bargeAudioContextRef = useRef<AudioContext | null>(null);
+  const bargeAudioFrameRef = useRef<number | null>(null);
   const silenceTimerRef = useRef<number | null>(null);
   const voiceDeadlineRef = useRef<number | null>(null);
   const voiceAudioContextRef = useRef<AudioContext | null>(null);
@@ -307,13 +316,11 @@ function App() {
   const scrollPositionsRef = useRef<Record<string, number>>({});
 
   function stopBargeListener() {
-    const listener = bargeRecognitionRef.current;
-    bargeRecognitionRef.current = null;
-    if (listener) {
-      listener.onend = null;
-      listener.onerror = null;
-      try { listener.stop(); } catch { /* already stopped */ }
-    }
+    if (bargeAudioFrameRef.current !== null) cancelAnimationFrame(bargeAudioFrameRef.current);
+    bargeAudioFrameRef.current = null;
+    const context = bargeAudioContextRef.current;
+    bargeAudioContextRef.current = null;
+    if (context && context.state !== "closed") void context.close();
     const stream = bargeStreamRef.current;
     bargeStreamRef.current = null;
     stream?.getTracks().forEach((track) => track.stop());
@@ -329,10 +336,11 @@ function App() {
 
   async function startBargeListener(session: number) {
     stopBargeListener();
-    // WKWebView's SpeechRecognition can silently fail to open the microphone
-    // while speech synthesis is active. Hold one explicit, echo-cancelled
-    // owner microphone stream for the lifetime of the spoken answer so macOS
-    // shows the recording indicator and recognition receives live input.
+    // WKWebView SpeechRecognition does not produce reliable hypotheses while
+    // speech synthesis is active. Hold one explicit, echo-cancelled stream and
+    // use a transient energy detector instead: any clear owner speech is true
+    // barge-in under the product contract, while no audio is recorded, sent,
+    // transcribed, or retained.
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
@@ -342,36 +350,39 @@ function App() {
         return;
       }
       bargeStreamRef.current = stream;
+      const context = new AudioContext();
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.2;
+      context.createMediaStreamSource(stream).connect(analyser);
+      bargeAudioContextRef.current = context;
+      const samples = new Float32Array(analyser.fftSize);
+      const startedAt = performance.now();
+      let baseline = 0;
+      let consecutiveFrames = 0;
+      const monitor = () => {
+        if (speechSessionRef.current !== session || !window.speechSynthesis.speaking) return;
+        analyser.getFloatTimeDomainData(samples);
+        const rms = Math.sqrt(samples.reduce((sum, sample) => sum + sample * sample, 0) / samples.length);
+        if (performance.now() - startedAt < 700) {
+          baseline = baseline ? baseline * 0.8 + rms * 0.2 : rms;
+        } else {
+          const threshold = Math.max(0.018, baseline * 3.2);
+          consecutiveFrames = rms > threshold ? consecutiveFrames + 1 : 0;
+          if (bargeVoiceDetected(rms, baseline, consecutiveFrames)) {
+            cancelSpeech(session, "stopped");
+            return;
+          }
+          if (rms <= threshold) baseline = baseline ? baseline * 0.995 + rms * 0.005 : rms;
+        }
+        bargeAudioFrameRef.current = requestAnimationFrame(monitor);
+      };
+      bargeAudioFrameRef.current = requestAnimationFrame(monitor);
     } catch {
       // The visible Stop speaking button remains the fail-safe; no recording
       // or request is submitted when the owner stream cannot be opened.
       return;
     }
-    const Recognition = (window as unknown as { webkitSpeechRecognition?: new () => BrowserSpeechRecognition }).webkitSpeechRecognition;
-    if (!Recognition) return;
-    const recognition = new Recognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
-    recognition.onresult = (event) => {
-      // Match only the newest microphone recognition hypothesis. Combining
-      // previous hypotheses made an owner's standalone "Stop" become
-      // "previous words stop", which could never match the exact command.
-      // Assistant response text is never inspected here.
-      const latest = Array.from(event.results).slice(-1).map((result) => result[0]?.transcript ?? "").join(" ").trim();
-      if (isSpokenStopCommand(latest)) cancelSpeech(session, "stopped");
-    };
-    recognition.onend = () => {
-      if (bargeRecognitionRef.current !== recognition || speechSessionRef.current !== session || !window.speechSynthesis.speaking) return;
-      window.setTimeout(() => {
-        if (bargeRecognitionRef.current === recognition && speechSessionRef.current === session && window.speechSynthesis.speaking) {
-          try { recognition.start(); } catch { /* fail closed; button remains available */ }
-        }
-      }, 120);
-    };
-    recognition.onerror = () => undefined;
-    bargeRecognitionRef.current = recognition;
-    try { recognition.start(); } catch { bargeRecognitionRef.current = null; }
   }
 
   function speakText(value: string) {
@@ -1584,7 +1595,7 @@ function App() {
       {active === "Settings" && <section className="settings-grid">
         <article className="card"><h3>Activation</h3><p><kbd>⌘</kbd><kbd>⇧</kbd><kbd>Space</kbd> opens Quick Entry.</p><p><kbd>⌃</kbd><kbd>⌥</kbd><kbd>Space</kbd> starts Talk to Jarvis.</p><div className="setting"><span>Wake phrase <small>Off by default · local only</small></span><button disabled>Off</button></div></article>
         <article className="card"><h3>Voice recovery</h3><p>Run a private diagnostic rejection to prove a failed delivery preserves the transcript and exposes Retry delivery, Edit, and Discard. It records and submits nothing until Retry is chosen.</p><button className="quiet" onClick={runVoiceRecoveryDiagnostic}>Stage recovery check</button></article>
-        <article className="card"><h3>Spoken interruption</h3><p>Play a harmless local passage and listen only for an explicit Stop command. No dictation or model request is submitted.</p><button className="quiet" onClick={runSpokenStopDiagnostic}>Test spoken Stop</button></article>
+        <article className="card"><h3>Spoken interruption</h3><p>Play a harmless local passage and interrupt it by speaking. No audio, dictation, or model request is submitted.</p><button className="quiet" onClick={runSpokenStopDiagnostic}>Test spoken Stop</button></article>
         <article className="card"><h3>Background intelligence</h3><div className="segmented"><button className={background === "off" ? "selected" : ""} onClick={() => void setBackgroundMode("off")}>Off</button><button className={background === "running" ? "selected" : ""} onClick={() => void setBackgroundMode("running")}>While running</button><button className={background === "login" ? "selected" : ""} onClick={() => void setBackgroundMode("login")}>While logged in</button></div><div className="setting"><span>Launch at login <small>Visible opt-in</small></span><button onClick={toggleAutostart}>{autostart ? "On" : "Off"}</button></div></article>
         <article className="card"><h3>Personal Calendar style</h3><p>{localState?.calendarStyle ? `${localState.calendarStyle.review_status} · updated ${localState.calendarStyle.updated_at.slice(0, 10)}` : "No bounded style profile has been generated yet."}</p><span className="pill">Existing personal calendar only</span>{localState?.calendarStyle && <dl><div><dt>Sample</dt><dd>{localState.calendarStyle.profile.sample_size} events</dd></div><div><dt>Typical timed event</dt><dd>{localState.calendarStyle.profile.median_timed_duration_minutes ?? "—"} min</dd></div><div><dt>All-day / recurring</dt><dd>{Math.round(localState.calendarStyle.profile.all_day_ratio * 100)}% / {Math.round(localState.calendarStyle.profile.recurrence_ratio * 100)}%</dd></div><div><dt>Meeting links</dt><dd>{Math.round(localState.calendarStyle.profile.meeting_link_ratio * 100)}%</dd></div></dl>}<div className="setting"><button onClick={() => void buildCalendarProfile()}>Build read-only profile</button>{localState?.calendarStyle?.review_status === "pending-owner-review" && <button className="quiet" onClick={() => void reviewCalendarProfile()}>Looks right</button>}</div>{localNotice && <small>{localNotice}</small>}</article>
         <article className="card"><h3>Safety</h3><p>Company/client writes unavailable. DLOA remains exact-preview only. Personal actions are capability-scoped.</p><span className="pill">External-action kill switch on</span></article>

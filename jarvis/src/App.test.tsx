@@ -69,7 +69,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   }),
 }));
 
-import App, { hasNewVoiceHypothesis, humanSourceProgress, inferContext, isSpokenStopCommand, parseExplicitPersonalAction, sourceCards, spokenProjection, transcriptsMateriallyDisagree, visibleConversationTurns, voiceSilenceState, withoutRawSourceUrls } from "./App";
+import App, { bargeVoiceDetected, hasNewVoiceHypothesis, humanSourceProgress, inferContext, isSpokenStopCommand, parseExplicitPersonalAction, sourceCards, spokenProjection, transcriptsMateriallyDisagree, visibleConversationTurns, voiceSilenceState, withoutRawSourceUrls } from "./App";
 import { invoke } from "@tauri-apps/api/core";
 
 afterEach(() => {
@@ -168,6 +168,13 @@ describe("Jarvis desktop shell", () => {
     for (const phrase of ["do not stop", "do not stop the analysis", "the bus stopped nearby", "cancel culture", "quiet room"]) {
       expect(isSpokenStopCommand(phrase)).toBe(false);
     }
+  });
+
+  it("requires sustained owner energy above the calibrated playback floor", () => {
+    expect(bargeVoiceDetected(0.01, 0.006, 12)).toBe(false);
+    expect(bargeVoiceDetected(0.04, 0.006, 4)).toBe(false);
+    expect(bargeVoiceDetected(0.04, 0.006, 5)).toBe(true);
+    expect(bargeVoiceDetected(0.07, 0.025, 8)).toBe(false);
   });
 
   it("parses only deterministic low-risk explicit personal actions", () => {
@@ -350,7 +357,7 @@ describe("Jarvis desktop shell", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Build & Automate" }));
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-    expect(screen.getByText(/No dictation or model request is submitted/)).toBeTruthy();
+    expect(screen.getByText(/No audio, dictation, or model request is submitted/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Test spoken Stop" }));
     await waitFor(() => expect(screen.getByText(/Local spoken-interruption diagnostic/)).toBeTruthy());
     expect(screen.getByText(/no request or recording will be submitted/i)).toBeTruthy();
