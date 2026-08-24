@@ -69,7 +69,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   }),
 }));
 
-import App, { humanSourceProgress, inferContext, isSpokenStopCommand, parseExplicitPersonalAction, sourceCards, spokenProjection, transcriptsMateriallyDisagree, visibleConversationTurns, voiceSilenceState, withoutRawSourceUrls } from "./App";
+import App, { hasNewVoiceHypothesis, humanSourceProgress, inferContext, isSpokenStopCommand, parseExplicitPersonalAction, sourceCards, spokenProjection, transcriptsMateriallyDisagree, visibleConversationTurns, voiceSilenceState, withoutRawSourceUrls } from "./App";
 
 afterEach(() => {
   cleanup();
@@ -106,6 +106,12 @@ describe("Jarvis desktop shell", () => {
     expect(voiceSilenceState(false, 9_000)).toEqual({ settling: false, finished: false });
     expect(voiceSilenceState(true, 3_000)).toEqual({ settling: true, finished: false });
     expect(voiceSilenceState(true, 4_800)).toEqual({ settling: true, finished: true });
+  });
+
+  it("resets natural voice completion only for a changed hypothesis", () => {
+    expect(hasNewVoiceHypothesis("", "Read my recent Slack messages")).toBe(true);
+    expect(hasNewVoiceHypothesis("Read my recent Slack messages", " read  my RECENT slack messages ")).toBe(false);
+    expect(hasNewVoiceHypothesis("Read my recent Slack messages", "Read my recent Slack messages from today")).toBe(true);
   });
 
   it("turns connector internals into compact human progress", () => {

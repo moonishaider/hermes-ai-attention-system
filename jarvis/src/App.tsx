@@ -120,6 +120,12 @@ export function voiceSilenceState(speechSeen: boolean, silenceMs: number) {
   };
 }
 
+export function hasNewVoiceHypothesis(previous: string, next: string) {
+  const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
+  const normalizedNext = normalize(next);
+  return Boolean(normalizedNext) && normalizedNext !== normalize(previous);
+}
+
 export function humanSourceProgress(value: string, completed = false) {
   const name = value.toLowerCase();
   const action = completed ? "Checked" : "Checking";
@@ -295,6 +301,7 @@ function App() {
   const voiceAudioFrameRef = useRef<number | null>(null);
   const voiceSpeechSeenRef = useRef(false);
   const voiceLastSpeechAtRef = useRef(0);
+  const voiceLastHypothesisRef = useRef("");
   const conversationViewportRef = useRef<HTMLDivElement | null>(null);
   const scrollPositionsRef = useRef<Record<string, number>>({});
 
@@ -494,6 +501,10 @@ function App() {
     // Recording still works; only the silence-based automatic finish is skipped.
     if (!AudioContextConstructor) return;
     const audioContext = new AudioContextConstructor();
+    // WebKit can create the context in a suspended state after the native
+    // permission round-trip. Resume it explicitly so the independent silence
+    // detector cannot appear inert even though live transcription is moving.
+    void audioContext.resume().catch(() => undefined);
     const analyser = audioContext.createAnalyser();
     analyser.fftSize = 1024;
     analyser.smoothingTimeConstant = 0.35;
@@ -536,11 +547,7 @@ function App() {
     setVoiceSettling(true);
     silenceTimerRef.current = window.setTimeout(() => {
       if (recorderRef.current?.state === "recording") {
-        recognitionRef.current?.stop();
-        recorderRef.current.stop();
-        setRecording(false);
-        setVoiceSettling(false);
-        setProgress(["Thought complete · transcribing the full recording…"]);
+        finishVoiceRecording("Thought complete · transcribing the full recording…");
       }
     }, 5500);
   }
@@ -887,6 +894,7 @@ function App() {
       chunksRef.current = [];
       voiceDeliveryIdRef.current = crypto.randomUUID();
       liveTranscriptRef.current = "";
+      voiceLastHypothesisRef.current = "";
       setVoiceTranscript("");
       const Recognition = (window as unknown as { webkitSpeechRecognition?: new () => BrowserSpeechRecognition }).webkitSpeechRecognition;
       if (Recognition) {
@@ -898,9 +906,15 @@ function App() {
             liveTranscriptRef.current = text;
             setVoiceTranscript(text);
           }
-          const latest = Array.from(event.results).slice(-1)[0];
-          if (latest?.isFinal && text.split(/\s+/).length >= 2) scheduleNaturalVoiceFinish();
-          else clearSilenceTimer();
+          // WebKit often never marks its last hypothesis final until capture
+          // is manually stopped. Treat the last *changed* hypothesis as
+          // speech activity and finish only after 5.5 seconds without another
+          // change. This preserves ordinary mid-sentence pauses while making
+          // automatic submission independent of the unreliable `isFinal` bit.
+          if (hasNewVoiceHypothesis(voiceLastHypothesisRef.current, text)) {
+            voiceLastHypothesisRef.current = text;
+            scheduleNaturalVoiceFinish();
+          }
         };
         recognition.onend = null;
         recognition.onerror = null;
