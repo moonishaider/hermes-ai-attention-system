@@ -16,7 +16,9 @@ const CONTEXTS: { id: ContextId; label: string }[] = [
 
 export function inferContext(value: string, fallback: ContextId = "personal") {
   const text = value.toLowerCase();
-  const inside = /\b(inside success|dloa|dla|reps?|appointment setters?|sales department|sd-dloa|miami workday)\b/.test(text);
+  // Mitchell is dormant and has no proactive routing. An unqualified Slack
+  // request therefore means the active Inside Success work connection.
+  const inside = /\b(inside success|slack|dloa|dla|reps?|appointment setters?|sales department|sd-dloa|miami workday)\b/.test(text);
   const mitchell = /\b(mitchell|transformify|kajabi|bookfunnel|mitchell client)\b/.test(text);
   const personal = /\b(personal|upwork|home|my own|moonishaider12|private calendar)\b/.test(text);
   const matches = [inside, mitchell, personal].filter(Boolean).length;
@@ -101,13 +103,55 @@ export function spokenProjection(value: string) {
     .replace(/[*#_`>|\[\]()]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  const sentences = plain.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [];
-  return sentences.slice(0, 2).map((sentence) => sentence.trim()).join(" ").slice(0, 420);
+  // Voice requests hear the complete useful answer. Markdown, code, raw URLs,
+  // and citation mechanics stay on screen rather than being read aloud.
+  return plain.slice(0, 4_000);
 }
 
 export function isSpokenStopCommand(value: string) {
   const normalized = value.toLowerCase().replace(/[^a-z\s']/g, " ").replace(/\s+/g, " ").trim();
   return /^(?:(?:hey\s+)?jarvis\s+)?(?:stop|stop speaking|be quiet|cancel)(?:\s+(?:now|please))?$/.test(normalized);
+}
+
+export function voiceSilenceState(speechSeen: boolean, silenceMs: number) {
+  return {
+    settling: speechSeen && silenceMs >= 1_800,
+    finished: speechSeen && silenceMs >= 4_800,
+  };
+}
+
+export function humanSourceProgress(value: string, completed = false) {
+  const name = value.toLowerCase();
+  const action = completed ? "Checked" : "Checking";
+  if (name.includes("slack")) return `${action} company Slack`;
+  if (name.includes("calendar")) return `${action} Calendar`;
+  if (name.includes("gmail") || name.includes("mail")) return `${action} Gmail`;
+  if (name.includes("github")) return `${action} GitHub`;
+  if (name.includes("zoom") || name.includes("meeting")) return `${action} meetings`;
+  if (name.includes("evidence") || name.includes("attention")) return `${action} saved evidence`;
+  return `${action} approved sources`;
+}
+
+// Hermes stores intermediate assistant observations around tool calls. Those
+// remain available in Technical details, but normal Chat shows one final
+// assistant message per owner turn instead of a wall of implementation noise.
+export function visibleConversationTurns(messages: HermesMessage[]) {
+  const visible: HermesMessage[] = [];
+  let pendingAssistant: HermesMessage | null = null;
+  const flushAssistant = () => {
+    if (pendingAssistant) visible.push(pendingAssistant);
+    pendingAssistant = null;
+  };
+  for (const message of messages) {
+    if (message.role === "user") {
+      flushAssistant();
+      visible.push(message);
+    } else if (message.role === "assistant" && message.content?.trim()) {
+      pendingAssistant = message;
+    }
+  }
+  flushAssistant();
+  return visible;
 }
 
 export type SourceCard = { url: string; label: string; host: string; openable: boolean };
@@ -247,6 +291,10 @@ function App() {
   const bargeRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const silenceTimerRef = useRef<number | null>(null);
   const voiceDeadlineRef = useRef<number | null>(null);
+  const voiceAudioContextRef = useRef<AudioContext | null>(null);
+  const voiceAudioFrameRef = useRef<number | null>(null);
+  const voiceSpeechSeenRef = useRef(false);
+  const voiceLastSpeechAtRef = useRef(0);
   const conversationViewportRef = useRef<HTMLDivElement | null>(null);
   const scrollPositionsRef = useRef<Record<string, number>>({});
 
@@ -277,7 +325,11 @@ function App() {
     recognition.interimResults = true;
     recognition.lang = "en-US";
     recognition.onresult = (event) => {
-      const latest = Array.from(event.results).slice(-2).map((result) => result[0]?.transcript ?? "").join(" ").trim();
+      // Match only the newest microphone recognition hypothesis. Combining
+      // previous hypotheses made an owner's standalone "Stop" become
+      // "previous words stop", which could never match the exact command.
+      // Assistant response text is never inspected here.
+      const latest = Array.from(event.results).slice(-1).map((result) => result[0]?.transcript ?? "").join(" ").trim();
       if (isSpokenStopCommand(latest)) cancelSpeech(session, "stopped");
     };
     recognition.onend = () => {
@@ -297,7 +349,11 @@ function App() {
     if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
     const session = ++speechSessionRef.current;
-    const utterance = new SpeechSynthesisUtterance(value);
+    // Do not feed the spoken interruption keyword back through the speakers.
+    // The displayed answer remains exact; only the audio projection uses a
+    // natural synonym, so the temporary microphone listener can react solely
+    // to Syed saying the standalone command.
+    const utterance = new SpeechSynthesisUtterance(value.replace(/\bstop\b/gi, "pause"));
     const ryan = window.speechSynthesis.getVoices().find((voice) => voice.name.toLowerCase().includes("ryan"));
     if (ryan) utterance.voice = ryan;
     utterance.rate = 1.08;
@@ -408,6 +464,73 @@ function App() {
     setVoiceSettling(false);
   }
 
+  function stopVoiceLevelMonitor() {
+    if (voiceAudioFrameRef.current !== null) window.cancelAnimationFrame(voiceAudioFrameRef.current);
+    voiceAudioFrameRef.current = null;
+    const audioContext = voiceAudioContextRef.current;
+    voiceAudioContextRef.current = null;
+    if (audioContext) void audioContext.close().catch(() => undefined);
+  }
+
+  function finishVoiceRecording(message: string) {
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state === "inactive") return;
+    clearSilenceTimer();
+    stopVoiceLevelMonitor();
+    recognitionRef.current?.stop();
+    recorder.stop();
+    setRecording(false);
+    setVoiceSettling(false);
+    setProgress([message]);
+  }
+
+  function startVoiceLevelMonitor(stream: MediaStream) {
+    stopVoiceLevelMonitor();
+    const audioWindow = window as typeof window & {
+      webkitAudioContext?: typeof AudioContext;
+    };
+    const AudioContextConstructor = audioWindow.AudioContext ?? audioWindow.webkitAudioContext;
+    // jsdom and older embedded WebKit builds may not expose the Web Audio API.
+    // Recording still works; only the silence-based automatic finish is skipped.
+    if (!AudioContextConstructor) return;
+    const audioContext = new AudioContextConstructor();
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.35;
+    audioContext.createMediaStreamSource(stream).connect(analyser);
+    const samples = new Float32Array(analyser.fftSize);
+    voiceAudioContextRef.current = audioContext;
+    voiceSpeechSeenRef.current = false;
+    voiceLastSpeechAtRef.current = performance.now();
+
+    const inspect = () => {
+      if (recorderRef.current?.state !== "recording") return;
+      analyser.getFloatTimeDomainData(samples);
+      let energy = 0;
+      for (const sample of samples) energy += sample * sample;
+      const rms = Math.sqrt(energy / samples.length);
+      const now = performance.now();
+      if (rms >= 0.018) {
+        voiceSpeechSeenRef.current = true;
+        voiceLastSpeechAtRef.current = now;
+        setVoiceSettling(false);
+      } else if (voiceSpeechSeenRef.current) {
+        const silenceMs = now - voiceLastSpeechAtRef.current;
+        const silence = voiceSilenceState(voiceSpeechSeenRef.current, silenceMs);
+        setVoiceSettling(silence.settling);
+        // Three-second mid-sentence pauses remain safe; a sustained 4.8s
+        // silence completes naturally even when WebKit never emits a final
+        // SpeechRecognition result.
+        if (silence.finished) {
+          finishVoiceRecording("Done speaking · transcribing the complete recording…");
+          return;
+        }
+      }
+      voiceAudioFrameRef.current = window.requestAnimationFrame(inspect);
+    };
+    voiceAudioFrameRef.current = window.requestAnimationFrame(inspect);
+  }
+
   function scheduleNaturalVoiceFinish() {
     clearSilenceTimer();
     setVoiceSettling(true);
@@ -465,8 +588,10 @@ function App() {
         const sessionId = currentSessionIdRef.current;
         if (sessionId) window.setTimeout(() => { void loadConversation(sessionId); void refreshConversations(); }, 120);
       }
-      if (payload.event === "tool.started") setProgress((old) => [...old, `Checking ${payload.tool || payload.name || "source"}…`]);
-      if (payload.event === "tool.completed") setProgress((old) => [...old, `Completed ${payload.tool || payload.name || "source"}`]);
+      if (payload.event === "tool.started" || payload.event === "tool.completed") {
+        const label = humanSourceProgress(payload.tool || payload.name || "source", payload.event === "tool.completed");
+        setProgress((old) => [...old.filter((item) => item !== label).slice(-4), label]);
+      }
       if (["run.completed", "run.failed", "run.cancelled"].includes(payload.event)) {
         setBusy(false); setRunId(null);
       }
@@ -483,6 +608,7 @@ function App() {
       streamRef.current?.getTracks().forEach((track) => track.stop());
       stopBargeListener();
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      stopVoiceLevelMonitor();
       unlisten.then((fn) => fn());
       unlistenVoice.then((fn) => fn());
     };
@@ -528,10 +654,12 @@ function App() {
       .filter((item) => !query || `${item.title ?? ""} ${item.preview ?? ""}`.toLowerCase().includes(query))
       .sort((left, right) => Number(Boolean(right.pinned)) - Number(Boolean(left.pinned)));
   }, [conversations, conversationSearch, showArchivedConversations]);
-  const conversationContent = useMemo(() => messages.filter((item) => item.role === "user" || item.role === "assistant"), [messages]);
+  const conversationContent = useMemo(() => visibleConversationTurns(messages), [messages]);
   const technicalMessages = useMemo(() => messages.filter((item) => item.role === "tool"), [messages]);
   const currentFocus = useMemo(() => localState?.focusSessions?.find((item) => !item.stopped_at) ?? null, [localState?.focusSessions]);
   const visibleTodayEvidence = useMemo(() => (localState?.recentLedger ?? []).filter((item) => {
+    const localDay = new Date(`${item.local_date}T12:00:00`);
+    if (!Number.isNaN(localDay.getTime()) && Date.now() - localDay.getTime() > 7 * 24 * 60 * 60 * 1000) return false;
     const state = item.attention_state;
     if (!state || state.status === "active") return true;
     if (state.status === "snoozed" && state.snoozed_until) return new Date(state.snoozed_until).getTime() <= Date.now();
@@ -662,6 +790,8 @@ function App() {
           lastRecordingRef.current = null;
           voiceDeliveryIdRef.current = null;
           setVoiceRetryAvailable(false);
+          liveTranscriptRef.current = "";
+          setVoiceTranscript("");
         } else {
           setProgress((old) => [...old, "The recording is retained only in memory so you can retry, edit, or discard it."]);
           setVoiceRetryAvailable(true);
@@ -721,10 +851,7 @@ function App() {
       clearSilenceTimer();
       if (voiceDeadlineRef.current !== null) window.clearTimeout(voiceDeadlineRef.current);
       voiceDeadlineRef.current = null;
-      recognitionRef.current?.stop();
-      recorderRef.current.stop();
-      setRecording(false);
-      setProgress(["Done speaking · transcribing the complete recording…"]);
+      finishVoiceRecording("Done speaking · transcribing the complete recording…");
       return;
     }
     stopSpeaking();
@@ -783,6 +910,7 @@ function App() {
       recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data); };
       recorder.onstop = async () => {
         clearSilenceTimer();
+        stopVoiceLevelMonitor();
         if (voiceDeadlineRef.current !== null) window.clearTimeout(voiceDeadlineRef.current);
         voiceDeadlineRef.current = null;
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
@@ -795,6 +923,7 @@ function App() {
       // Timesliced capture avoids relying on one final WebKit buffer for a
       // long dictated request. Chunks remain memory-only.
       recorder.start(500);
+      startVoiceLevelMonitor(stream);
       voiceDeadlineRef.current = window.setTimeout(() => {
         if (recorderRef.current?.state === "recording") {
           recognitionRef.current?.stop();
@@ -805,12 +934,13 @@ function App() {
       }, 600_000);
       setRecording(true);
       if (speechStatus === "speaking") setSpeechStatus("stopped");
-      setProgress(["Listening · speak naturally, then choose Done speaking. Jarvis waits 5.5 seconds through pauses before finishing automatically."]);
+      setProgress(["Listening · speak naturally. Jarvis preserves mid-sentence pauses and submits after a sustained finish."]);
     } catch (error) {
       clearSilenceTimer();
       if (voiceDeadlineRef.current !== null) window.clearTimeout(voiceDeadlineRef.current);
       voiceDeadlineRef.current = null;
       setRecording(false);
+      stopVoiceLevelMonitor();
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
       setProgress([`Talk could not start: ${String(error)}. Nothing was recorded or submitted.`]);
@@ -1251,10 +1381,10 @@ function App() {
         <button className={ADVANCED_NAV.includes(active) ? "active nav-more" : "nav-more"} onClick={() => setShowAdvancedNav(!showAdvancedNav)}>{showAdvancedNav ? "Hide Build & Automate" : "Build & Automate"}</button>
         {showAdvancedNav && <div className="advanced-nav">{ADVANCED_NAV.map((item) => <button key={item} className={active === item ? "active" : ""} onClick={() => setActive(item)}>{item}</button>)}</div>}
       </nav>
-      <section className="thread-list" aria-label="Recent conversations">
+      {active === "Chat" && <section className="thread-list" aria-label="Recent conversations">
         <div><strong>Conversations</strong><button className="thread-new" onClick={newConversation} aria-label="New conversation">+</button></div>
         <input className="thread-search" aria-label="Search conversations" value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} placeholder="Search"/>
-        <button className="thread-archive-toggle" onClick={() => setShowArchivedConversations(!showArchivedConversations)}>{showArchivedConversations ? "← Recent" : "Archived"}</button>
+        <button className="thread-archive-toggle" onClick={() => setShowArchivedConversations(!showArchivedConversations)}>{showArchivedConversations ? "← Active conversations" : "Show archived"}</button>
         {visibleConversations.slice(0, 12).map((item) => <article className={`thread-row ${currentSessionId === item.id ? "selected" : ""}`} key={item.id}>
           {renamingSessionId === item.id ? <form onSubmit={(event) => { event.preventDefault(); void controlConversation(item.id, "rename", conversationTitle.trim()); }}>
             <input autoFocus value={conversationTitle} maxLength={100} onChange={(event) => setConversationTitle(event.target.value)}/><button type="submit" disabled={!conversationTitle.trim()}>Save</button><button type="button" className="quiet" onClick={() => setRenamingSessionId(null)}>Cancel</button>
@@ -1267,7 +1397,7 @@ function App() {
         </article>)}
         {!visibleConversations.length && !conversationNotice && <small>{showArchivedConversations ? "No archived conversations" : "No matching conversations"}</small>}
         {conversationNotice && <small>{conversationNotice}</small>}
-      </section>
+      </section>}
       <div className="sidebar-foot">
         <span className={`health-dot ${health.state}`}/><span>{health.state === "ready" ? "Jarvis core ready" : health.message}</span>
       </div>
@@ -1275,7 +1405,7 @@ function App() {
     <main>
       <header>
         <div><p className="eyebrow">{active}</p><h1>{active === "Today" ? "Good evening, Syed." : active}</h1></div>
-        <div className="header-actions"><button type="button" className={recording ? "danger" : "quiet"} onClick={() => void toggleVoice()}>{recording ? "Done speaking" : "Talk"}</button>{voiceSettling && <span className="voice-settling">Waiting for the rest…</span>}<div className="context-control"><small>{contextReason}</small><button type="button" className="context-badge" onClick={() => setShowContextCorrection(!showContextCorrection)}>{contextBadgeText}</button>{showContextCorrection && <label className="context-correction"><span>Correct context</span><select aria-label="Current context" value={context} onChange={(event) => { const value = event.target.value as ContextId; setContext(value); setContextReason("Corrected by you"); setShowContextCorrection(false); newConversation(); }}>
+        <div className="header-actions">{active !== "Chat" && <button type="button" className={recording ? "danger" : "quiet"} onClick={() => void toggleVoice()}>{recording ? "Done speaking" : "Talk"}</button>}{voiceSettling && <span className="voice-settling">Waiting for the rest…</span>}<div className="context-control"><small>{contextReason}</small><button type="button" className="context-badge" onClick={() => setShowContextCorrection(!showContextCorrection)}>{contextBadgeText}</button>{showContextCorrection && <label className="context-correction"><span>Correct context</span><select aria-label="Current context" value={context} onChange={(event) => { const value = event.target.value as ContextId; setContext(value); setContextReason("Corrected by you"); setShowContextCorrection(false); newConversation(); }}>
           {CONTEXTS.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}
         </select></label>}</div></div>
       </header>
@@ -1286,7 +1416,7 @@ function App() {
           <div className="pulse"><span/><span/><span/></div>
         </section>
         <section className="today-board">
-          <article className="card"><p className="eyebrow">Top evidence</p><h3>What changed recently</h3>{visibleTodayEvidence.slice(0, 3).map((item) => { const source = (item.evidence_sources ?? []).find((candidate) => candidate.uri && sourceCards(candidate.uri)[0]?.openable); return <div className="attention-item" key={item.entry_id}><strong>{item.summary}</strong><small>{item.local_date} · {item.confidence_state} · {item.evidence_ids.length} source link(s)</small><p>Why it matters: this is fresh, context-scoped evidence that may affect your current priorities.</p><div className="focus-controls">{source?.uri && <button className="quiet" onClick={() => void openEvidenceSource(source.uri!)}>Open evidence</button>}<button className="quiet" onClick={() => askAboutEvidence(item.summary)}>Ask Jarvis</button><button className="quiet" onClick={() => void controlAttention(item.entry_id, "completed")}>Complete</button><button className="quiet" onClick={() => void controlAttention(item.entry_id, "snoozed")}>Snooze</button><button className="quiet" onClick={() => prepareSchedule(item.summary)}>Schedule</button><button className="quiet" onClick={() => void controlAttention(item.entry_id, "dismissed")}>Dismiss</button><select aria-label={`Correct context for ${item.summary}`} value={context} onChange={(event) => void controlAttention(item.entry_id, "correct-context", event.target.value as ContextId)}>{CONTEXTS.filter((candidate) => !["mixed", "unknown"].includes(candidate.id)).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label}</option>)}</select></div></div>; })}{!visibleTodayEvidence.length && <p>No current-context evidence yet. Ask Jarvis for a bounded refresh.</p>}</article>
+          <article className="card"><p className="eyebrow">Top evidence</p><h3>What changed recently</h3>{visibleTodayEvidence.slice(0, 3).map((item) => { const source = (item.evidence_sources ?? []).find((candidate) => candidate.uri && sourceCards(candidate.uri)[0]?.openable); return <div className="attention-item" key={item.entry_id}><strong>{item.summary}</strong><small>{item.local_date} · {item.confidence_state} · {item.evidence_ids.length} source link(s)</small><p>Why it matters: this is context-scoped evidence that may affect your current priorities.</p><div className="focus-controls">{source?.uri && <button className="quiet" onClick={() => void openEvidenceSource(source.uri!)}>Open evidence</button>}<button className="quiet" onClick={() => askAboutEvidence(item.summary)}>Ask Jarvis</button></div><details className="item-actions"><summary>More actions</summary><div className="focus-controls"><button className="quiet" onClick={() => void controlAttention(item.entry_id, "completed")}>Complete</button><button className="quiet" onClick={() => void controlAttention(item.entry_id, "snoozed")}>Snooze</button><button className="quiet" onClick={() => prepareSchedule(item.summary)}>Schedule</button><button className="quiet" onClick={() => void controlAttention(item.entry_id, "dismissed")}>Dismiss</button><select aria-label={`Correct context for ${item.summary}`} value={context} onChange={(event) => void controlAttention(item.entry_id, "correct-context", event.target.value as ContextId)}>{CONTEXTS.filter((candidate) => !["mixed", "unknown"].includes(candidate.id)).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label}</option>)}</select></div></details></div>; })}{!visibleTodayEvidence.length && <p>No current-context evidence yet. Ask Jarvis for a bounded refresh.</p>}</article>
           <article className="card"><p className="eyebrow">Waiting & blockers</p><h3>{localState?.inboxItems.filter((item) => item.waiting_on || item.task_type === "blocker").length ?? 0} need review</h3>{localState?.inboxItems.filter((item) => item.waiting_on || item.task_type === "blocker").slice(0, 3).map((item) => <div className="attention-item" key={item.task_id}><strong>{item.title}</strong><small>{item.waiting_on ? `Waiting on ${item.waiting_on}` : "Blocker"} · {item.status}</small><p>Why it matters: this item is waiting, blocked, or at risk of being forgotten.</p><div className="focus-controls"><button className="quiet" onClick={() => askAboutEvidence(item.title)}>Ask Jarvis</button>{item.task_type !== "commitment" && <button className="quiet" onClick={() => void controlTask(item.task_id, "completed")}>Complete</button>}<button className="quiet" onClick={() => void controlTask(item.task_id, "snoozed")}>Snooze</button><button className="quiet" onClick={() => prepareSchedule(item.title)}>Schedule</button><button className="quiet" onClick={() => void controlTask(item.task_id, "archived")}>Dismiss</button></div></div>)}<button className="quiet" onClick={() => setActive("Inbox")}>Open Inbox</button></article>
           <article className="card"><p className="eyebrow">Meeting lifecycle</p><h3>{localState?.meetingEvidence[0]?.title || "No recent authorized Zoom evidence"}</h3><p>{localState?.meetingEvidence[0] ? `${localState.meetingEvidence[0].confidence_state} · ${localState.meetingEvidence[0].source_timestamp?.slice(0, 10) || localState.meetingEvidence[0].indexed_at.slice(0, 10)}` : "The meeting view stays empty rather than inventing one."}</p><div className="focus-controls"><button className="quiet" onClick={() => startMeetingWorkflow("before")}>Before</button><button className="quiet" onClick={() => startMeetingWorkflow("after")}>After</button><button className="quiet" onClick={() => startMeetingWorkflow("absent")}>I was absent</button><button className="quiet" onClick={() => void loadProjection("end-of-day")}>Draft DLOA · local only</button></div>{localState?.meetingEvidence[0] && <><small>Authorized Zoom evidence · {localState.meetingEvidence[0].account_id || "account recorded"}</small><details className="meeting-followup"><summary>Add a reviewed follow-up</summary><input value={meetingFollowupTitle} onChange={(event) => setMeetingFollowupTitle(event.target.value)} placeholder="Exact follow-up for Jarvis Inbox"/><select aria-label="Meeting follow-up project" value={meetingProjectId} onChange={(event) => setMeetingProjectId(event.target.value)}><option value="">Inbox only</option>{localState.projects.map((project) => <option key={project.project_id} value={project.project_id}>{project.name}</option>)}</select><button onClick={() => void applyMeetingFollowup()} disabled={!meetingFollowupTitle.trim()}>Add locally with meeting evidence</button></details></>}</article>
         </section>
@@ -1384,7 +1514,7 @@ function App() {
           </article>; })}</div>}
           {technicalMessages.length > 0 && <details className="technical-details"><summary>Technical details · {technicalMessages.length} tool event(s)</summary>{technicalMessages.map((item) => <pre key={String(item.id)}>{item.tool_name ? `${item.tool_name}\n` : ""}{item.content}</pre>)}</details>}
           {progress.length > 0 && <div className="progress">{progress.map((line, index) => <div key={`${line}-${index}`}><span className={line.startsWith("Completed") ? "done" : "working"}/>{line}</div>)}</div>}
-          {voiceTranscript && <div className="live-transcript"><small>Live transcript</small>{voiceTranscript}</div>}
+          {(recording || voiceSettling || voiceRetryAvailable || voiceDeliveryFailed) && voiceTranscript && <div className="live-transcript"><small>{recording || voiceSettling ? "Live transcript" : "Transcript needs review"}</small>{voiceTranscript}</div>}
           {speechStatus !== "idle" && <div className={`speech-status ${speechStatus}`} role="status">{speechStatus === "speaking" ? "Speaking · Talk or Stop speaking interrupts immediately" : speechStatus === "stopped" ? "Speech stopped · no replay scheduled" : "Spoken reply completed"}</div>}
           {answer && (busy || !conversationContent.some((item) => item.role === "assistant" && item.content === answer)) ? <div className="answer">{answer}</div> : conversationContent.length === 0 && <div className="empty">Ask naturally. Jarvis will show what it checks and cite the result.</div>}
           {conversationContent.length > 3 && <button className="quiet jump-latest" onClick={() => { if (conversationViewportRef.current) conversationViewportRef.current.scrollTop = conversationViewportRef.current.scrollHeight; }}>Jump to latest</button>}
