@@ -2,8 +2,9 @@
 
 Date opened: 2026-08-23
 Exact pre-cleanup measurement: 2026-08-24 (Asia/Karachi)
+Exact quarantine and post-check: 2026-08-25 (Asia/Karachi)
 
-No Prompt 8 cleanup has occurred. Measurements below are the exact current pre-cleanup baseline, refreshed after installing commit `8866bd1194d86d96f1ca087336265f9caa1209b8`.
+The table below preserves the exact pre-cleanup baseline. After final installed voice acceptance and non-overwriting backups, four allowlisted reproducible build paths were moved to recoverable project-local quarantine. No file was permanently deleted and no unrelated path was touched.
 
 | Exact path | Initial size | Classification |
 |---|---:|---|
@@ -20,7 +21,7 @@ No Prompt 8 cleanup has occurred. Measurements below are the exact current pre-c
 | `.git` | 8,948 KB | Active rollback/history; retain |
 | `jarvis/dist` | 312 KB | Reproducible frontend bundle |
 
-## Candidate detail (no action taken)
+## Candidate detail before quarantine
 
 - Rust target output: 8,631,440 KB debug plus 1,815,040 KB release.
 - Project toolchains: 576,320 KB Rustup, 324,232 KB Cargo, 199,964 KB Node, and 44 KB npm cache.
@@ -43,6 +44,34 @@ The Prompt 8 text asks for an executing cleanup script, but `AGENTS.md` line 63 
 - `jarvis/node_modules`
 - `.tooling/npm-cache`
 
-The tool creates an owner-only manifest under ignored `runtime-data/storage-manifests/`, records byte/object counts plus a deterministic metadata SHA-256, revalidates every entry immediately before action, rejects top-level, broken, absolute, or escaping symlinks plus path escapes/protected paths/tampering, and hashes safe internal dependency links without following them. It moves exact candidates only to a recoverable `.workspace-quarantine/prompt8-storage-<manifest-id>` destination. Dry-run and quarantine behavior are covered by `tests/test_prompt8_storage.py`. It reports `freed_bytes=0` because project-local quarantine does not release filesystem space. No real candidate has been quarantined yet; execution remains gated on final installed acceptance.
+The tool creates an owner-only manifest under ignored `runtime-data/storage-manifests/`, records byte/object counts plus a deterministic metadata SHA-256, revalidates every entry immediately before action, rejects top-level, broken, absolute, or escaping symlinks plus path escapes/protected paths/tampering, and hashes safe internal dependency links without following them. It moves exact candidates only to a recoverable `.workspace-quarantine/prompt8-storage-<manifest-id>` destination. Dry-run and quarantine behavior are covered by `tests/test_prompt8_storage.py`. It reports `freed_bytes=0` because project-local quarantine does not release filesystem space.
 
-The current real four-candidate plan and dry-run passed with manifest ID `2d680dac73177bef`, four exact entries, 16,873,798,593 candidate bytes, owner-only mode `0600`, and zero moved or freed bytes. This proves the plan against the installed `8866bd1` dependency/build trees without changing them; it must be regenerated if a later rebuild changes candidate metadata.
+## Executed recoverable quarantine
+
+The final real plan, dry-run, and quarantine all passed with manifest ID `15745f4bb900c021`, owner-only manifest `runtime-data/storage-manifests/prompt8-final-433484b-20260825T0212Z.json`, and these exact source paths:
+
+- `jarvis/dist`
+- `jarvis/node_modules`
+- `.tooling/npm-cache`
+- `jarvis/src-tauri/target`
+
+The four entries totaled 18,378,960,151 logical bytes. The tool revalidated the manifest immediately before moving them to `.workspace-quarantine/prompt8-storage-15745f4bb900c021`; all four original paths are absent. This is recoverable quarantine on the same filesystem, so the exact freed space is **0 bytes**. APFS free-space changes are not attributed to this operation.
+
+## Final retained footprint
+
+| Exact path | Post-quarantine size | Result |
+|---|---:|---|
+| Repository root | 15,124,588 KB | Active source, Git, backups, runtime data, and recoverable quarantine retained |
+| `/Applications/Jarvis.app` | 6,036 KB | Exact installed `433484b` product retained and healthy |
+| `~/.hermes/jarvis-runtime` | 67,456 KB | Active runtime/database retained |
+| Entire `~/.hermes` | 15,596,348 KB | Shared Hermes credentials, connectors, histories, memory, skills, and state retained |
+| `.workspace-quarantine` | 11,348,468 KB | Recoverable quarantined build/dependency artifacts; same-volume bytes not freed |
+| `backups` | 2,597,364 KB | Required app/database rollback copies retained |
+| `runtime-data` | 62,608 KB | Active/private project runtime material retained |
+| `.git` | 9,872 KB | Source history and rollback retained |
+
+Final database safeguards were written to new paths before quarantine: `backups/prompt8-final-433484b-20260825T0210.sqlite3` (62,468,096 bytes, SHA-256 `8e6b7cb3916dd4ba19fd2aad37c10bfde85045bf85e9eb4c3f34c63f3915ad2d`) and `backups/prompt8-final-runtime-copy-433484b-20260825T0210.sqlite3` (66,473,984 bytes, SHA-256 `7d10bb000b852bfd07c81d2145e6c67aabe6ac8c5206647f206944d156510713`). Both return `PRAGMA quick_check=ok`. Current config/SOUL/USER state is retained in owner-only `~/.hermes/backups/prompt8-final-433484b-20260825T0210/`.
+
+Post-quarantine checks confirmed the installed app and its owned gateway were still running, deep strict signature verification still passed, the installed SHA-256 was unchanged, runtime markers and plugin identity were correct, current and backup databases returned `quick_check=ok`, the required rollback app remained, and all files under `~/.hermes/credentials` and `~/.hermes/mcp-tokens` were owner-only mode `0600`.
+
+Rollback is a move, not a rebuild: with Jarvis quit, move an exact quarantined entry back to its original marked-root path after first verifying that the original path is still absent and the manifest metadata matches. Never overwrite a newly created path.
