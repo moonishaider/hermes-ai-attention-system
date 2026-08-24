@@ -69,7 +69,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   }),
 }));
 
-import App, { inferContext, isSpokenStopCommand, parseExplicitPersonalAction, sourceCards, spokenProjection, transcriptsMateriallyDisagree, withoutRawSourceUrls } from "./App";
+import App, { humanSourceProgress, inferContext, isSpokenStopCommand, parseExplicitPersonalAction, sourceCards, spokenProjection, transcriptsMateriallyDisagree, visibleConversationTurns, voiceSilenceState, withoutRawSourceUrls } from "./App";
 
 afterEach(() => {
   cleanup();
@@ -93,13 +93,39 @@ describe("Jarvis desktop shell", () => {
     )).toBe(false);
   });
 
-  it("speaks two natural sentences while leaving display detail untouched", () => {
+  it("speaks the complete useful answer while leaving display detail untouched", () => {
     const displayed = "**Direct answer:** You have one meeting. It starts at 2 PM. Full evidence follows. https://example.com/source\n```private technical block```";
     const spoken = spokenProjection(displayed);
-    expect(spoken).toBe("Direct answer: You have one meeting. It starts at 2 PM.");
+    expect(spoken).toBe("Direct answer: You have one meeting. It starts at 2 PM. Full evidence follows.");
     expect(spoken).not.toContain("https://");
     expect(spoken).not.toContain("technical block");
     expect(displayed).toContain("Full evidence follows");
+  });
+
+  it("waits through an ordinary pause and finishes after sustained silence", () => {
+    expect(voiceSilenceState(false, 9_000)).toEqual({ settling: false, finished: false });
+    expect(voiceSilenceState(true, 3_000)).toEqual({ settling: true, finished: false });
+    expect(voiceSilenceState(true, 4_800)).toEqual({ settling: true, finished: true });
+  });
+
+  it("turns connector internals into compact human progress", () => {
+    expect(humanSourceProgress("slack_search_public_and_private")).toBe("Checking company Slack");
+    expect(humanSourceProgress("calendar.events.list", true)).toBe("Checked Calendar");
+    expect(humanSourceProgress("tool_search")).toBe("Checking approved sources");
+  });
+
+  it("shows one final assistant answer per owner turn", () => {
+    const messages = [
+      { id: 1, session_id: "jarvis_personal_test", role: "user" as const, content: "Check Slack" },
+      { id: 2, session_id: "jarvis_personal_test", role: "assistant" as const, content: "I am searching." },
+      { id: 3, session_id: "jarvis_personal_test", role: "tool" as const, content: "private tool detail" },
+      { id: 4, session_id: "jarvis_personal_test", role: "assistant" as const, content: "Final cited answer." },
+      { id: 5, session_id: "jarvis_personal_test", role: "user" as const, content: "Say that again" },
+      { id: 6, session_id: "jarvis_personal_test", role: "assistant" as const, content: "Final cited answer." },
+    ];
+    expect(visibleConversationTurns(messages).map((item) => item.content)).toEqual([
+      "Check Slack", "Final cited answer.", "Say that again", "Final cited answer.",
+    ]);
   });
 
   it("turns reviewed citations into compact cards without dumping raw URLs", () => {
@@ -148,6 +174,7 @@ describe("Jarvis desktop shell", () => {
 
   it("infers named contexts and fails mixed requests closed", () => {
     expect(inferContext("Prepare my Inside Success DLOA", "personal").context).toBe("inside-success");
+    expect(inferContext("Read my recent Slack messages", "personal").context).toBe("inside-success");
     expect(inferContext("Review Mitchell open loops", "personal").context).toBe("mitchell");
     expect(inferContext("Check my private calendar", "inside-success").context).toBe("personal");
     expect(inferContext("Compare Inside Success and personal obligations", "personal").context).toBe("mixed");
@@ -286,8 +313,8 @@ describe("Jarvis desktop shell", () => {
 
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Talk" }));
-    await waitFor(() => expect(screen.getAllByRole("button", { name: "Done speaking" })).toHaveLength(2));
-    fireEvent.click(screen.getAllByRole("button", { name: "Done speaking" })[1]);
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Done speaking" })).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: "Done speaking" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Retry transcription" })).toBeTruthy());
     expect(screen.getByRole("button", { name: "Retry delivery" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Edit transcript" })).toBeTruthy();
