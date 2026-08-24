@@ -21,6 +21,8 @@ use tauri_plugin_autostart::{MacosLauncher, ManagerExt as AutostartManagerExt};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 #[cfg(target_os = "macos")]
+use objc2::runtime::Bool;
+#[cfg(target_os = "macos")]
 use objc2_av_foundation::{AVAuthorizationStatus, AVCaptureDevice, AVMediaTypeAudio};
 
 const HERMES_VERSION: &str = "0.20.0 (v2026.8.3)";
@@ -132,25 +134,57 @@ struct GovernedRun {
 /// relied upon to create the native TCC consent record for a packaged app.
 /// This command is called only from an explicit Talk button/shortcut action.
 #[tauri::command]
-fn request_microphone_access() -> Result<String, String> {
+async fn request_microphone_access(app: AppHandle) -> Result<String, String> {
     #[cfg(target_os = "macos")]
-    unsafe {
-        let media_type = AVMediaTypeAudio.ok_or("macOS audio media type is unavailable")?;
-        let status = AVCaptureDevice::authorizationStatusForMediaType(media_type);
-        match status {
-            AVAuthorizationStatus::Authorized => Ok("authorized".into()),
-            AVAuthorizationStatus::Denied => Ok("denied".into()),
-            AVAuthorizationStatus::Restricted => Ok("restricted".into()),
-            AVAuthorizationStatus::NotDetermined => {
-                let completion = block2::RcBlock::new(|_granted| {});
-                AVCaptureDevice::requestAccessForMediaType_completionHandler(
-                    media_type,
-                    &completion,
-                );
-                Ok("prompted".into())
+    {
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        app.run_on_main_thread(move || unsafe {
+            let Some(media_type) = AVMediaTypeAudio else {
+                let _ = sender.send(Err("macOS audio media type is unavailable".into()));
+                return;
+            };
+            let status = AVCaptureDevice::authorizationStatusForMediaType(media_type);
+            match status {
+                AVAuthorizationStatus::Authorized => {
+                    let _ = sender.send(Ok("authorized".into()));
+                }
+                AVAuthorizationStatus::Denied => {
+                    let _ = sender.send(Ok("denied".into()));
+                }
+                AVAuthorizationStatus::Restricted => {
+                    let _ = sender.send(Ok("restricted".into()));
+                }
+                AVAuthorizationStatus::NotDetermined => {
+                    // Keep the native completion block alive until macOS has
+                    // recorded the owner's one explicit decision. Returning a
+                    // temporary callback and polling this command could issue
+                    // overlapping requests and leave TCC in a denied state.
+                    let completion = block2::RcBlock::new(move |granted: Bool| {
+                        let decision = if granted.as_bool() {
+                            "authorized"
+                        } else {
+                            "denied"
+                        };
+                        let _ = sender.send(Ok(decision.into()));
+                    });
+                    AVCaptureDevice::requestAccessForMediaType_completionHandler(
+                        media_type,
+                        &completion,
+                    );
+                }
+                _ => {
+                    let _ = sender.send(Err("unknown macOS microphone authorization state".into()));
+                }
             }
-            _ => Err("unknown macOS microphone authorization state".into()),
-        }
+        })
+        .map_err(|error| format!("microphone permission dispatch failed: {error}"))?;
+        tauri::async_runtime::spawn_blocking(move || {
+            receiver
+                .recv_timeout(std::time::Duration::from_secs(60))
+                .map_err(|_| "microphone permission decision timed out".to_string())?
+        })
+        .await
+        .map_err(|error| format!("microphone permission worker failed: {error}"))?
     }
 
     #[cfg(not(target_os = "macos"))]

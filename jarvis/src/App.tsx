@@ -865,15 +865,8 @@ function App() {
     if (busy) await cancel();
     setActive("Chat");
     try {
-      let permission = await invoke<string>("request_microphone_access");
-      if (permission === "prompted") {
-        setProgress(["Waiting for macOS microphone permission…"]);
-        const deadline = Date.now() + 60_000;
-        while (permission === "prompted" && Date.now() < deadline) {
-          await new Promise((resolve) => window.setTimeout(resolve, 250));
-          permission = await invoke<string>("request_microphone_access");
-        }
-      }
+      setProgress(["Waiting for macOS microphone permission…"]);
+      const permission = await invoke<string>("request_microphone_access");
       if (permission !== "authorized") {
         const detail = permission === "denied"
           ? "Microphone access is off for Jarvis in System Settings"
