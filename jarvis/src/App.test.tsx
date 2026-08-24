@@ -70,6 +70,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import App, { hasNewVoiceHypothesis, humanSourceProgress, inferContext, isSpokenStopCommand, parseExplicitPersonalAction, sourceCards, spokenProjection, transcriptsMateriallyDisagree, visibleConversationTurns, voiceSilenceState, withoutRawSourceUrls } from "./App";
+import { invoke } from "@tauri-apps/api/core";
 
 afterEach(() => {
   cleanup();
@@ -320,6 +321,7 @@ describe("Jarvis desktop shell", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Talk" }));
     await waitFor(() => expect(screen.getAllByRole("button", { name: "Done speaking" })).toHaveLength(1));
+    expect(vi.mocked(invoke).mock.calls.filter(([command]) => command === "request_microphone_access")).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Done speaking" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Retry transcription" })).toBeTruthy());
     expect(screen.getByRole("button", { name: "Retry delivery" })).toBeTruthy();

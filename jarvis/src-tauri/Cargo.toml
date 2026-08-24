@@ -27,6 +27,7 @@ tauri-plugin-single-instance = "=2.4.3"
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "=0.6.2"
 libc = "=0.2.189"
+objc2 = "=0.6.4"
 objc2-app-kit = { version = "=0.3.2", features = ["NSRunningApplication", "NSWorkspace"] }
 objc2-av-foundation = { version = "=0.3.2", default-features = false, features = ["AVCaptureDevice", "AVMediaFormat", "block2", "std"] }
 

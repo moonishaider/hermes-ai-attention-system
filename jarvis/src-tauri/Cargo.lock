@@ -1891,6 +1891,7 @@ dependencies = [
  "block2",
  "getrandom 0.4.3",
  "libc",
+ "objc2",
  "objc2-app-kit",
  "objc2-av-foundation",
  "reqwest",
