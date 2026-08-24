@@ -295,6 +295,7 @@ function App() {
   const currentSessionIdRef = useRef<string | null>(null);
   const speechSessionRef = useRef(0);
   const bargeRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const bargeStreamRef = useRef<MediaStream | null>(null);
   const silenceTimerRef = useRef<number | null>(null);
   const voiceDeadlineRef = useRef<number | null>(null);
   const voiceAudioContextRef = useRef<AudioContext | null>(null);
@@ -313,6 +314,9 @@ function App() {
       listener.onerror = null;
       try { listener.stop(); } catch { /* already stopped */ }
     }
+    const stream = bargeStreamRef.current;
+    bargeStreamRef.current = null;
+    stream?.getTracks().forEach((track) => track.stop());
   }
 
   function cancelSpeech(session: number, status: "stopped" | "completed") {
@@ -323,8 +327,26 @@ function App() {
     setSpeechStatus(status);
   }
 
-  function startBargeListener(session: number) {
+  async function startBargeListener(session: number) {
     stopBargeListener();
+    // WKWebView's SpeechRecognition can silently fail to open the microphone
+    // while speech synthesis is active. Hold one explicit, echo-cancelled
+    // owner microphone stream for the lifetime of the spoken answer so macOS
+    // shows the recording indicator and recognition receives live input.
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
+      });
+      if (speechSessionRef.current !== session || !window.speechSynthesis.speaking) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      bargeStreamRef.current = stream;
+    } catch {
+      // The visible Stop speaking button remains the fail-safe; no recording
+      // or request is submitted when the owner stream cannot be opened.
+      return;
+    }
     const Recognition = (window as unknown as { webkitSpeechRecognition?: new () => BrowserSpeechRecognition }).webkitSpeechRecognition;
     if (!Recognition) return;
     const recognition = new Recognition();
@@ -367,7 +389,7 @@ function App() {
     utterance.onstart = () => {
       if (speechSessionRef.current !== session) return;
       setSpeechStatus("speaking");
-      startBargeListener(session);
+      void startBargeListener(session);
     };
     utterance.onend = () => {
       if (speechSessionRef.current !== session) return;
