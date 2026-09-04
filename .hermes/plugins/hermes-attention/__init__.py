@@ -201,6 +201,57 @@ def work_calendar_events(start_time: str, end_time: str, limit: int = 10) -> str
     return json.dumps(WorkGoogleDirect().calendar_events(start_time, end_time, limit), ensure_ascii=False)
 
 
+def memory_review(action: str = "pending", pending_id: str = "", confirmation: str = "") -> str:
+    """List or resolve one exact native Hermes memory proposal.
+
+    This deliberately leaves ``memory.write_approval`` enabled.  A mutating
+    operation requires an exact eight-character pending id and an independent
+    confirmation string, and bulk approval is never accepted.
+    """
+    from tools import write_approval as wa
+
+    normalized_action = action.strip().lower()
+    if normalized_action == "pending":
+        records = []
+        for record in wa.list_pending(wa.MEMORY):
+            summary = " ".join(str(record.get("summary", "")).split())[:240]
+            records.append({
+                "id": str(record.get("id", "")),
+                "origin": str(record.get("origin", "foreground")),
+                "action": str(record.get("action", "")),
+                "summary": summary,
+            })
+        return json.dumps({"pending": records, "count": len(records)}, ensure_ascii=False)
+
+    if normalized_action not in {"approve", "reject"}:
+        raise ValueError("action must be pending, approve, or reject")
+    exact_id = pending_id.strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{8}", exact_id):
+        raise ValueError("one exact eight-character pending memory id is required; bulk approval is unavailable")
+    expected = f"{normalized_action} {exact_id}"
+    if confirmation.strip().lower() != expected:
+        raise ValueError(f"confirmation must be exactly: {expected}")
+    if wa.get_pending(wa.MEMORY, exact_id) is None:
+        raise ValueError(f"pending memory write {exact_id} was not found")
+
+    from hermes_cli.write_approval_commands import handle_pending_subcommand
+    if normalized_action == "approve":
+        from tools.memory_tool import load_on_disk_store
+        result = handle_pending_subcommand(
+            wa.MEMORY, ["approve", exact_id], memory_store=load_on_disk_store(),
+        )
+    else:
+        result = handle_pending_subcommand(wa.MEMORY, ["reject", exact_id])
+    return json.dumps({
+        "ok": bool(result and result.startswith(("Approved 1", "Rejected pending"))),
+        "id": exact_id,
+        "action": normalized_action,
+        "result": result or "No result returned.",
+        "bulkApprovalAvailable": False,
+        "approvalGateStillEnabled": True,
+    }, ensure_ascii=False)
+
+
 def _handler(function: Any) -> Any:
     def invoke(args: dict[str, Any], **_: Any) -> str:
         return function(**args)
@@ -323,6 +374,12 @@ _TOOLS = (
         "List bounded events from the isolated work Calendar account; no create, update, delete, or response is available.",
         {"start_time": {"type": "string"}, "end_time": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 10}},
         ["start_time", "end_time"], "📅",
+    ),
+    (
+        "hermes_attention_memory_review", memory_review,
+        "List staged local Hermes memory writes, or approve/reject exactly one pending id only after Syed explicitly requests that exact action in the current message. For approval or rejection, pass confirmation exactly as 'approve <id>' or 'reject <id>'. Never infer consent, never approve all, and never use this tool to disable the approval gate. Ordinary explicitly stated preferences and workflow corrections may be saved through Hermes normally; uncertain personal facts, company/client facts, routing, permissions, tools, security, credentials, scopes, budgets, repositories, and external-action authority remain review-controlled.",
+        {"action": {"type": "string", "enum": ["pending", "approve", "reject"]}, "pending_id": {"type": "string", "pattern": "^[0-9a-fA-F]{8}$"}, "confirmation": {"type": "string", "maxLength": 32}},
+        ["action"], "🧠",
     ),
 )
 
