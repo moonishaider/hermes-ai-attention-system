@@ -4,6 +4,7 @@ import importlib.util
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -269,8 +270,60 @@ class HistoryAndServiceTests(unittest.TestCase):
         self.assertIn("hermes_attention_routed_reasoning", registered)
         self.assertIn("hermes_attention_context_time", registered)
         self.assertIn("hermes_attention_sync_codex", registered)
+        self.assertIn("hermes_attention_memory_review", registered)
         self.assertNotIn("hermes_attention_execute_action", registered)
         self.assertFalse(any(name.startswith(("send", "create", "delete", "update")) for name in registered))
+
+    def test_memory_review_is_exact_id_only_and_keeps_gate_enabled(self):
+        path = ROOT / ".hermes/plugins/hermes-attention/__init__.py"
+        spec = importlib.util.spec_from_file_location("hermes_attention_memory_review_plugin", path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(module)
+
+        import types
+        fake_tools = types.ModuleType("tools")
+        fake_wa = types.ModuleType("tools.write_approval")
+        fake_wa.MEMORY = "memory"
+        fake_wa.list_pending = lambda subsystem: [{
+            "id": "a1b2c3d4", "origin": "foreground", "action": "replace",
+            "summary": "  concise\n preference  ",
+        }]
+        fake_wa.get_pending = lambda subsystem, pending_id: (
+            {"id": pending_id} if pending_id == "a1b2c3d4" else None
+        )
+        fake_tools.write_approval = fake_wa
+
+        fake_memory_tool = types.ModuleType("tools.memory_tool")
+        sentinel_store = object()
+        fake_memory_tool.load_on_disk_store = lambda: sentinel_store
+        fake_commands = types.ModuleType("hermes_cli.write_approval_commands")
+        calls = []
+        def handle(subsystem, args, memory_store=None):
+            calls.append((subsystem, args, memory_store))
+            return "Approved 1 memory write(s)."
+        fake_commands.handle_pending_subcommand = handle
+
+        with patch.dict(sys.modules, {
+            "tools": fake_tools,
+            "tools.write_approval": fake_wa,
+            "tools.memory_tool": fake_memory_tool,
+            "hermes_cli.write_approval_commands": fake_commands,
+        }):
+            pending = json.loads(module.memory_review())
+            self.assertEqual("concise preference", pending["pending"][0]["summary"])
+            with self.assertRaisesRegex(ValueError, "bulk approval"):
+                module.memory_review("approve", "all", "approve all")
+            with self.assertRaisesRegex(ValueError, "confirmation must be exactly"):
+                module.memory_review("approve", "a1b2c3d4", "yes")
+            approved = json.loads(module.memory_review(
+                "approve", "a1b2c3d4", "approve a1b2c3d4",
+            ))
+
+        self.assertTrue(approved["ok"])
+        self.assertTrue(approved["approvalGateStillEnabled"])
+        self.assertFalse(approved["bulkApprovalAvailable"])
+        self.assertEqual([("memory", ["approve", "a1b2c3d4"], sentinel_store)], calls)
 
     def test_sync_codex_accepts_only_the_bounded_legacy_thread_alias(self):
         path = ROOT / ".hermes/plugins/hermes-attention/__init__.py"

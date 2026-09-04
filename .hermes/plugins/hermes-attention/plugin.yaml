@@ -1,5 +1,5 @@
 name: hermes-attention
-version: 0.3.0
+version: 0.3.1
 description: Provenance-first attention, retrieval, task, handoff, and action-preview tools.
 author: Hermes AI Attention project
 kind: standalone
@@ -24,3 +24,4 @@ provides_tools:
   - hermes_attention_work_gmail_search
   - hermes_attention_work_drive_recent
   - hermes_attention_work_calendar_events
+  - hermes_attention_memory_review
