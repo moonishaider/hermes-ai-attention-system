@@ -1,9 +1,9 @@
 # User-selected Codex builder configuration for this project.
 # Full Access removes normal filesystem/network containment. Project hooks, rules,
-# guarded scripts, AGENTS.md, Git checkpoints, and a private remote are compensating
+# guarded scripts, AGENTS.md, Git checkpoints, and the exact approved public remote are compensating
 # controls; they are not equivalent to an OS sandbox.
 
-model = "gpt-5.6-sol"
+model = "gpt-6-astra"
 model_reasoning_effort = "medium"
 approval_policy = "never"
 sandbox_mode = "danger-full-access"

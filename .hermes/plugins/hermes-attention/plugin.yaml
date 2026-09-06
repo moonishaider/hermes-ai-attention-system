@@ -4,6 +4,8 @@ description: Provenance-first attention, retrieval, task, handoff, and action-pr
 author: Hermes AI Attention project
 kind: standalone
 provides_tools:
+  - hermes_attention_browser_task
+  - hermes_attention_documents
   - hermes_attention_status
   - hermes_attention_search
   - hermes_attention_sync_codex

@@ -1,0 +1,9 @@
+import { useEffect,useState,type ReactNode } from 'react';
+import { useCompanionSession } from './transport';
+export function CompanionGate({children}:{children:ReactNode}){
+ const [ready,setReady]=useState(false);const [code,setCode]=useState('');const [notice,setNotice]=useState('Checking private transport…');const [busy,setBusy]=useState(false);
+ async function authenticate(path:string,body:Record<string,string>={}){const response=await fetch(path,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const value=await response.json();if(!response.ok)throw new Error(value.error||'Remote authentication unavailable');if(typeof value.csrf!=='string')throw new Error('Authenticated session unavailable');useCompanionSession(value.csrf);setReady(true);}
+ useEffect(()=>{if(location.protocol!=='https:'){setNotice('transport-blocked · A private HTTPS connection must be authorized locally.');return;}void authenticate('/api/session').catch(e=>setNotice(String(e)));},[]);
+ if(ready)return <><div className="companion-banner">Private read companion · actions and microphone controls require local Jarvis</div>{children}</>;
+ return <main className="companion-login"><h1>Your private Jarvis</h1><p>{notice}</p><p>Use a one-time pairing code issued in your local Jarvis after choosing a private HTTPS transport. No messaging provider or public tunnel is enabled by this page.</p><form onSubmit={event=>{event.preventDefault();setBusy(true);void authenticate('/api/login',{code}).catch(e=>setNotice(String(e))).finally(()=>{setBusy(false);setCode('');});}}><label>Local pairing code<input autoComplete="off" type="password" value={code} onChange={e=>setCode(e.target.value)}/></label><button disabled={busy||!code||location.protocol!=='https:'}>Pair this device</button></form></main>;
+}

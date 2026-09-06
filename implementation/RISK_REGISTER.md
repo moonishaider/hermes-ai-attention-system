@@ -1,5 +1,19 @@
 # Risk Register
 
+## Current candidate risks — 5 September 2026
+
+These entries supplement and supersede conflicting prototype assumptions below.
+See [compatibility and activation limits](CANDIDATE_COMPATIBILITY_2026-09-05.md).
+
+| Risk | Current control | Remaining verification |
+|---|---|---|
+| Public repository leakage | Exact public destination, reviewed branch/commit, actual committed-blob scanning and private exclusions. | Run publication guards on the final candidate. |
+| Duplicate action after crash or cancellation | Durable native action claims, canonical terminal authority, read-only outcome reconciliation and no automatic replay of unknown outcomes. | Packaged interruption and recovery acceptance. |
+| Browser authority or account confusion | Native selected-target binding, configured identity provenance, fresh observations and scoped owner task grants; normal driver permissions. | Runtime driver currently reports pending OS permission. Page markers alone do not prove account identity. |
+| Browser network containment | Backend fetch validates and pins public destinations; browser navigation validates proposed/observed scope. | Native browser subresource and redirect containment is not verified. |
+| App replacement loses OS grants | Preserve original signed app; verify replacement identity and retain rollback. | Ad-hoc signature changes can require normal owner consent. |
+| Dependency or database regression | Isolated locked environment, copy-based integrity/restore proof, code-only rollback and final-path venv creation. | Installed health and provider acceptance after activation. |
+
 | ID | Risk | Control | Status |
 |---|---|---|---|
 | R-001 | Full Access can reach unrelated local/network resources. | Marked-root preflight, trusted hooks, forbidden rules, protected safety files, Git checkpoints, no deletion. | Controlled, residual risk remains |

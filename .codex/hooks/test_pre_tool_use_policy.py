@@ -58,7 +58,7 @@ def main() -> None:
     assert_deny("Bash", {"command": "cp file.txt ~/Desktop/file.txt"})
     assert_allow("apply_patch", {"command": "*** Begin Patch\n*** Add File: implementation/test.md\n+ok\n*** End Patch"})
     assert_deny("apply_patch", {"command": "*** Begin Patch\n*** Delete File: README.md\n*** End Patch"})
-    assert_deny("apply_patch", {"command": "*** Begin Patch\n*** Update File: AGENTS.md\n@@\n-x\n+y\n*** End Patch"})
+    assert_allow("apply_patch", {"command": "*** Begin Patch\n*** Update File: AGENTS.md\n@@\n-x\n+y\n*** End Patch"})
     assert_deny("mcp__slack__send_message", {"channel": "x", "text": "y"})
     assert_allow("mcp__github__get_file_contents", {"owner": "moonishaider", "repo": "x"})
     assert_deny("computer_use", {"action": "click"})

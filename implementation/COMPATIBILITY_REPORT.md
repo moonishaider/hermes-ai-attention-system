@@ -1,5 +1,12 @@
 # Compatibility Report
 
+## Current candidate checkpoint — 5 September 2026
+
+The [dated candidate compatibility record](CANDIDATE_COMPATIBILITY_2026-09-05.md)
+records the reviewed compatibility and guarded local activations. Older version, builder, private-repository
+and blanket browser-disable statements below are historical where superseded by
+the current AGENTS authorization. Candidate tests do not establish installed acceptance.
+
 **Checked:** 2026-08-11
 **Status:** Updated through Gemini Takeout acceptance
 

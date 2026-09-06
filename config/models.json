@@ -6,21 +6,55 @@
       "provider": "deepseek",
       "model": "deepseek-v4-flash",
       "endpoint": "https://api.deepseek.com/chat/completions",
-      "input_usd_per_million": 0.14,
-      "output_usd_per_million": 0.28,
-      "capabilities": ["chat", "tool_calls"],
-      "purpose": "Routine Hermes work"
+      "input_usd_per_million": 0.44,
+      "output_usd_per_million": 1.32,
+      "capabilities": [
+        "chat",
+        "tool_calls"
+      ],
+      "purpose": "Routine Hermes work",
+      "cache_hit_usd_per_million": 0.014,
+      "off_peak_multiplier": 0.5,
+      "pricing_checked": "2026-09-05",
+      "pricing_source": "https://api-docs.deepseek.com/quick_start/pricing/",
+      "peak_utc_hours": [
+        [
+          1,
+          4
+        ],
+        [
+          6,
+          10
+        ]
+      ],
+      "thinking": false
     },
     "difficult": {
       "provider": "deepseek",
       "model": "deepseek-v4-pro",
       "endpoint": "https://api.deepseek.com/chat/completions",
-      "input_usd_per_million": 0.435,
-      "output_usd_per_million": 0.87,
+      "input_usd_per_million": 1.32,
+      "output_usd_per_million": 3.96,
       "thinking": true,
-      "capabilities": ["chat", "tool_calls"],
-      "limitations": ["Responses API unavailable at compatibility check"],
-      "purpose": "Difficult reasoning after routing verification"
+      "capabilities": [
+        "chat",
+        "tool_calls"
+      ],
+      "purpose": "Difficult reasoning after routing verification",
+      "cache_hit_usd_per_million": 0.044,
+      "off_peak_multiplier": 0.5,
+      "pricing_checked": "2026-09-05",
+      "pricing_source": "https://api-docs.deepseek.com/quick_start/pricing/",
+      "peak_utc_hours": [
+        [
+          1,
+          4
+        ],
+        [
+          6,
+          10
+        ]
+      ]
     },
     "vision": {
       "provider": "openai",
@@ -28,8 +62,14 @@
       "endpoint": "https://api.openai.com/v1/responses",
       "input_usd_per_million": 0.2,
       "output_usd_per_million": 1.2,
-      "capabilities": ["vision", "chat"],
-      "purpose": "Explicitly requested screen and image understanding"
+      "capabilities": [
+        "vision",
+        "chat"
+      ],
+      "purpose": "Explicitly requested screen and image understanding",
+      "cache_hit_usd_per_million": 0.02,
+      "pricing_checked": "2026-09-05",
+      "pricing_source": "https://developers.openai.com/api/docs/models/gpt-5.6-luna"
     },
     "review": {
       "provider": "openai",
@@ -37,10 +77,25 @@
       "endpoint": "https://api.openai.com/v1/responses",
       "input_usd_per_million": 2.0,
       "output_usd_per_million": 12.0,
-      "capabilities": ["chat", "tool_calls"],
-      "purpose": "Rare direct-API high-stakes review"
+      "capabilities": [
+        "chat",
+        "tool_calls"
+      ],
+      "purpose": "Rare direct-API high-stakes review",
+      "cache_hit_usd_per_million": 0.2,
+      "pricing_checked": "2026-09-05",
+      "pricing_source": "https://developers.openai.com/api/docs/models/gpt-5.6-terra"
     }
   },
-  "builder_only": {"provider": "openai", "model": "gpt-5.6-sol", "runtime_dependency": false},
-  "budget_usd_monthly": {"warning": 25.0, "soft": 40.0, "hard": 50.0, "stretch_requires_policy_change": 100.0}
+  "builder_only": {
+    "provider": "openai",
+    "model": "gpt-6-astra",
+    "runtime_dependency": false
+  },
+  "budget_usd_monthly": {
+    "warning": 25.0,
+    "soft": 40.0,
+    "hard": 50.0,
+    "stretch_requires_policy_change": 100.0
+  }
 }

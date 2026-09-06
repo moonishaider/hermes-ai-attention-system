@@ -633,7 +633,7 @@ class OperationalTests(unittest.TestCase):
         class Response:
             def __enter__(self): return self
             def __exit__(self, *_): return None
-            def read(self): return b'{"choices":[{"message":{"content":"ok"}}],"usage":{"prompt_tokens":3,"completion_tokens":1}}'
+            def read(self): return b'{"choices":[{"message":{"content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":1}}'
         client = DirectModelClient(ROOT / "config/models.json", self.store)
         with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "synthetic-test-key"}), patch("hermes_attention.runtime_models.urlopen", return_value=Response()) as opened:
             result = client.generate("difficult", "synthetic reasoning")
@@ -700,7 +700,7 @@ class OperationalTests(unittest.TestCase):
         class Response:
             def __enter__(self): return self
             def __exit__(self, *_): return None
-            def read(self): return b'{"output_text":"HERMES_ROUTE_OK","usage":{"input_tokens":2,"output_tokens":1}}'
+            def read(self): return b'{"output_text":"HERMES_ROUTE_OK","status":"completed","usage":{"input_tokens":2,"output_tokens":1}}'
         client = DirectModelClient(ROOT / "config/models.json", self.store)
         image = "data:image/png;base64,c3ludGhldGlj"
         with patch.dict(os.environ, {"OPENAI_API_KEY": "synthetic-test-key"}), patch("hermes_attention.runtime_models.urlopen", return_value=Response()):

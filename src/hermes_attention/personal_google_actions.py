@@ -9,12 +9,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import base64
+import re
+from email.parser import BytesParser
+from email import policy
+from email.utils import getaddresses
 from typing import Any, Callable
 from urllib.parse import quote, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from .domain import stable_hash, utc_now
 from .storage import Store
+from .personal_permissions import assert_operation_running
 from .google_offline_oauth import _ssl_context
 from .personal_google_action_oauth import PersonalGoogleActionTokenManager
 
@@ -33,20 +39,20 @@ class PersonalGoogleActionTransport:
     def _allowed(method: str, url: str) -> bool:
         parsed = urlparse(url)
         path = parsed.path
-        if parsed.scheme != "https":
+        if parsed.scheme != "https" or parsed.query or parsed.fragment:
             return False
         if parsed.netloc == "www.googleapis.com":
             base = "/calendar/v3/calendars/primary/events"
             return (method == "POST" and path == base) or (
-                method in {"PATCH", "DELETE"} and path.startswith(base + "/") and path.count("/") == 6)
+                method in {"GET", "PATCH", "DELETE"} and path.startswith(base + "/") and path.count("/") == 6 and bool(re.fullmatch(r"[A-Za-z0-9_-]+",path.rsplit("/",1)[-1])))
         if parsed.netloc == "gmail.googleapis.com":
             base = "/gmail/v1/users/me/drafts"
             return (method == "POST" and path == base) or (
-                method in {"GET", "PUT"} and path.startswith(base + "/") and path.count("/") == 6)
+                method in {"GET", "PUT"} and path.startswith(base + "/") and path.count("/") == 6 and bool(re.fullmatch(r"[A-Za-z0-9_-]+",path.rsplit("/",1)[-1])) and not path.endswith("/send"))
         return False
 
     def __call__(self, method: str, url: str, body: dict[str, Any] | None,
-                 params: dict[str, str] | None) -> dict[str, Any]:
+                 params: dict[str, str] | None, *, if_match: str | None = None) -> dict[str, Any]:
         method = method.upper()
         if not self._allowed(method, url):
             raise PermissionError("personal Google endpoint or method is not allowlisted")
@@ -55,6 +61,7 @@ class PersonalGoogleActionTransport:
         request = Request(target, data=data, method=method, headers={
             "Authorization": f"Bearer {self.tokens.access_token()}", "Accept": "application/json",
             **({"Content-Type": "application/json"} if data is not None else {}),
+            **({"If-Match": if_match} if if_match else {}),
         })
         try:
             with self.opener(request, timeout=30, context=_ssl_context()) as response:
@@ -81,6 +88,7 @@ class PersonalCalendarActions:
         self.capability_id = capability_id
 
     def create_explicit(self, event: dict[str, Any]) -> PersonalGoogleResult:
+        assert_operation_running(self.store,"calendar.create")
         forbidden = {"attendees", "recurrence", "conferenceData"} & set(event)
         if forbidden:
             raise PermissionError("attendees, recurrence, and conference creation require preview")
@@ -92,7 +100,27 @@ class PersonalCalendarActions:
         self._record(provider_id, payload)
         return PersonalGoogleResult(provider_id, "calendar-event", str(payload.get("htmlLink", "")))
 
+    def get_existing(self, provider_id: str) -> dict[str, Any]:
+        assert_operation_running(self.store,"calendar.read")
+        url = f"{self.BASE}/calendars/{quote(self.calendar_id, safe='')}/events/{quote(provider_id, safe='')}"
+        return self.transport("GET", url, None, None)
+
+    def update_existing_personal(self, provider_id: str, patch: dict[str, Any], *, expected_etag: str, operation: str = "calendar.update") -> dict[str, Any]:
+        if operation not in {"calendar.update","calendar.undo"}: raise ValueError("invalid calendar mutation operation")
+        assert_operation_running(self.store,operation)
+        if self.calendar_id != "primary": raise PermissionError("only the personal primary calendar is allowed")
+        allowed={"summary","description","location","start","end","colorId","reminders"}
+        if not patch or set(patch)-allowed: raise PermissionError("unsupported event fields")
+        current=self.get_existing(provider_id)
+        if current.get("etag")!=expected_etag: raise PermissionError("event changed; refresh the exact preview")
+        if not current.get("organizer",{}).get("self") or current.get("attendees") or current.get("recurrence") or current.get("recurringEventId"):
+            raise PermissionError("invited, shared or recurring events need separate review")
+        url=f"{self.BASE}/calendars/primary/events/{quote(provider_id,safe='')}"
+        assert_operation_running(self.store,operation)
+        return self.transport("PATCH",url,patch,{"sendUpdates":"none"},if_match=expected_etag)
+
     def update_created(self, provider_id: str, patch: dict[str, Any]) -> PersonalGoogleResult:
+        assert_operation_running(self.store,"calendar.update")
         self._assert_owned(provider_id)
         if {"attendees", "recurrence", "conferenceData"} & set(patch):
             raise PermissionError("unsafe event mutation")
@@ -102,6 +130,7 @@ class PersonalCalendarActions:
         return PersonalGoogleResult(provider_id, "calendar-event", str(payload.get("htmlLink", "")))
 
     def undo_created(self, provider_id: str) -> None:
+        assert_operation_running(self.store,"calendar.undo")
         self._assert_owned(provider_id)
         url = f"{self.BASE}/calendars/{quote(self.calendar_id, safe='')}/events/{quote(provider_id, safe='')}"
         self.transport("DELETE", url, None, {"sendUpdates": "none"})
@@ -151,22 +180,44 @@ class PersonalGmailDraftActions:
         if recipient and "@" not in recipient:
             raise ValueError("invalid recipient")
 
+    @staticmethod
+    def _validate_raw(raw_base64url: str, recipient: str | None = None) -> None:
+        if len(raw_base64url)>30_000_000: raise ValueError("draft exceeds bounded size")
+        try:
+            raw=base64.b64decode(raw_base64url+"="*(-len(raw_base64url)%4),altchars=b"-_",validate=True)
+            message=BytesParser(policy=policy.default).parsebytes(raw)
+        except Exception as exc: raise ValueError("invalid draft MIME encoding") from exc
+        if any(message.get_all(name) for name in ("Cc","Bcc","From","Sender","Resent-To","Resent-Cc","Resent-Bcc")):
+            raise PermissionError("hidden, bulk or forged-sender MIME headers are unavailable")
+        addresses=getaddresses(message.get_all("To",[]))
+        if len(addresses)>1: raise PermissionError("bulk draft recipients require separate review")
+        if addresses:
+            PersonalGmailDraftActions._validate_recipient(addresses[0][1])
+            if recipient is not None and addresses[0][1].casefold()!=recipient.casefold():
+                raise PermissionError("MIME recipient differs from the reviewed recipient")
+
     def create(self, *, raw_base64url: str, recipient: str = "") -> PersonalGoogleResult:
+        assert_operation_running(self.store,"draft.create")
         self._validate_recipient(recipient)
+        self._validate_raw(raw_base64url,recipient)
         payload = self.transport("POST", self.BASE, {"message": {"raw": raw_base64url}}, None)
         provider_id = str(payload["id"])
         self._record(provider_id)
         return PersonalGoogleResult(provider_id, "gmail-draft", f"https://mail.google.com/mail/u/0/#drafts/{provider_id}")
 
     def update_created(self, provider_id: str, *, raw_base64url: str) -> PersonalGoogleResult:
+        assert_operation_running(self.store,"draft.update")
         self._assert_owned(provider_id)
+        self._validate_raw(raw_base64url)
         url = f"{self.BASE}/{quote(provider_id, safe='')}"
         payload = self.transport("PUT", url, {"id": provider_id, "message": {"raw": raw_base64url}}, None)
         return PersonalGoogleResult(str(payload["id"]), "gmail-draft", f"https://mail.google.com/mail/u/0/#drafts/{provider_id}")
 
-    def get_created(self, provider_id: str) -> dict[str, Any]:
+    def get_created(self, provider_id: str, *, format: str = "metadata") -> dict[str, Any]:
+        assert_operation_running(self.store,"draft.read")
         self._assert_owned(provider_id)
-        return self.transport("GET", f"{self.BASE}/{quote(provider_id, safe='')}", None, {"format": "metadata"})
+        if format not in {"metadata", "raw", "full"}: raise ValueError("invalid draft format")
+        return self.transport("GET", f"{self.BASE}/{quote(provider_id, safe='')}", None, {"format": format})
 
     def _assert_owned(self, provider_id: str) -> None:
         row = self.store.connection.execute(

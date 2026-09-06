@@ -63,8 +63,8 @@ class ModelRouter:
     def assert_budget(self, *, optional: bool) -> float:
         month = datetime.now(UTC).strftime("%Y-%m")
         spent = self.store.monthly_cost(month)
-        if spent >= self.hard_budget and optional:
-            raise BudgetExceeded(f"optional model work stopped at ${spent:.2f}")
+        if spent >= self.hard_budget:
+            raise BudgetExceeded(f"model work stopped at ${spent:.2f}")
         return spent
 
     def budget_status(self) -> dict[str, float | str]:

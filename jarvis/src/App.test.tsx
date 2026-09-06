@@ -1,14 +1,20 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mockState = vi.hoisted(() => ({
   failRunStart: false, cancelScreen: false,
+  runCounter: 0,
+  runEvents: null as null | ((event: { payload: Record<string, unknown> }) => void),
+  messageLoader: null as null | ((sessionId: string) => Promise<{ data: Array<Record<string, unknown>> }>),
   conversations: [] as Array<Record<string, unknown>>,
   conversationMessages: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ label: "main" }) }));
-vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => undefined) }));
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async (name: string, callback: typeof mockState.runEvents) => {
+  if (name === "jarvis-run-event") mockState.runEvents = callback;
+  return () => undefined;
+}) }));
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (command: string, args?: Record<string, unknown>) => {
     if (command === "system_status") return {
@@ -40,7 +46,7 @@ vi.mock("@tauri-apps/api/core", () => ({
     if (command === "create_conversation") return {
       session: { id: "jarvis_personal_synthetic", source: "desktop", title: "Synthetic", message_count: 0 },
     };
-    if (command === "conversation_messages") return { data: mockState.conversationMessages };
+    if (command === "conversation_messages") return mockState.messageLoader ? mockState.messageLoader(String(args?.sessionId)) : { data: mockState.conversationMessages };
     if (command === "request_microphone_access") return "authorized";
     if (command === "transcribe_audio") return { transcript: "review my personal tasks", provider: "openai" };
     if (command === "look_at_selected_area") {
@@ -58,7 +64,8 @@ vi.mock("@tauri-apps/api/core", () => ({
     }
     if (command === "start_run") {
       if (mockState.failRunStart) throw new Error("synthetic backend unavailable");
-      return { runId: "run-1", route: "routine", reason: "routine request" };
+      const request = args?.request as { sessionId: string; turnId: string };
+      return { runId: `run-${++mockState.runCounter}`, sessionId: request.sessionId, turnId: request.turnId, route: "routine", reason: "routine request" };
     }
     if (command === "guided_navigation_preview") return {
       destination: "personal-upwork", label: "Upwork", context: "personal",
@@ -75,6 +82,7 @@ import { invoke } from "@tauri-apps/api/core";
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  mockState.runCounter = 0; mockState.runEvents = null; mockState.messageLoader = null;
   mockState.failRunStart = false;
   mockState.cancelScreen = false;
   mockState.conversations = [];
@@ -195,37 +203,38 @@ describe("Jarvis desktop shell", () => {
     expect(inferContext("Explain the sky", "personal")).toMatchObject({ context: "personal", inferred: false });
   });
 
-  it("executes an unambiguous personal request from normal Chat", async () => {
+  it("routes ordinary personal actions through the same canonical turn as conversation", async () => {
     render(<App />);
     await waitFor(() => expect(screen.getByText("Jarvis core ready")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Chat" }));
-    const composer = screen.getByPlaceholderText("What needs your attention?");
-    fireEvent.change(composer, { target: { value: "Create a personal calendar event called Focus block tomorrow at 3 PM for 30 minutes." } });
-    fireEvent.click(screen.getByRole("button", { name: "Ask Jarvis" }));
-    await waitFor(() => expect(screen.getByText(/created the personal calendar event exactly as requested/i)).toBeTruthy());
-    expect(screen.getByText(/Completed through the bounded personal capability/)).toBeTruthy();
-    expect(window.localStorage.getItem("jarvis.activeConversation")).toBe("jarvis_personal_synthetic");
+    fireEvent.change(screen.getByPlaceholderText("What needs your attention?"), { target: { value: "Put lunch on my personal calendar tomorrow at noon" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask Jarvis ↑" }));
+    await waitFor(() => expect(vi.mocked(invoke).mock.calls.some(([command]) => command === "start_run")).toBe(true));
+    const request = (vi.mocked(invoke).mock.calls.find(([command]) => command === "start_run")?.[1] as Record<string, unknown>)?.request;
+    expect(request).toMatchObject({ context: "personal", sessionId: "jarvis_personal_synthetic", turnId: expect.any(String) });
+    expect(vi.mocked(invoke).mock.calls.some(([command]) => command === "personal_action_explicit")).toBe(false);
   });
 
   it("shows protected daily-use surfaces and refreshed local state", async () => {
     render(<App />);
     expect(screen.getByText("JARVIS")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Inbox" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Actions" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Tasks" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Permissions" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Teach Jarvis" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Build & Automate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Manage Jarvis" }));
     expect(screen.getByRole("button", { name: "Teach Jarvis" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Learning" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Talk" })).toBeTruthy();
     await waitFor(() => expect(screen.getByText("12")).toBeTruthy());
-    expect(screen.getByText("ledger entries in Personal")).toBeTruthy();
+    expect(screen.getByText("ledger entries in Unknown")).toBeTruthy();
     expect(screen.getByText("Jarvis core ready")).toBeTruthy();
   });
 
   it("makes absent and preview-only action authority visible", async () => {
     render(<App />);
     await waitFor(() => expect(screen.getByText("Jarvis core ready")).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Manage Jarvis" }));
+    fireEvent.click(screen.getByRole("button", { name: "Permissions" }));
     expect(screen.queryByText("What Jarvis can safely do")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Safety details" }));
     expect(screen.getByText("What Jarvis can safely do")).toBeTruthy();
@@ -247,7 +256,7 @@ describe("Jarvis desktop shell", () => {
 
   it("shows evidence-bound commitment controls in the Inbox", async () => {
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: "Inbox" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
     await waitFor(() => expect(screen.getByText("Finish verified work")).toBeTruthy());
     expect(screen.getByText("Evidence required")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Open commitment from this evidence" })).toBeTruthy();
@@ -255,7 +264,7 @@ describe("Jarvis desktop shell", () => {
 
   it("requires an exact guided-navigation preview before opening", async () => {
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: "Build & Automate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Manage Jarvis" }));
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Preview exact navigation" }));
     await waitFor(() => expect(screen.getByText("Profile 1 · Personal / Upwork")).toBeTruthy());
@@ -274,7 +283,7 @@ describe("Jarvis desktop shell", () => {
 
   it("renders a code-requiring capability as a Codex spec without activation", async () => {
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: "Build & Automate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Manage Jarvis" }));
     fireEvent.click(screen.getByRole("button", { name: "Teach Jarvis" }));
     fireEvent.change(screen.getByPlaceholderText("Capability name"), { target: { value: "Add a private local parser" } });
     fireEvent.change(screen.getByPlaceholderText("Describe the low-risk workflow"), { target: { value: "Build and test a new parser integration" } });
@@ -295,14 +304,14 @@ describe("Jarvis desktop shell", () => {
     expect(screen.getByText(/"connector_fanout_performed": false/)).toBeTruthy();
   });
 
-  it("clears context-scoped projections and drafts when context changes", async () => {
+  it("changes the retrieval projection without inventing confidence or replacing the conversation", async () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Pre-meeting" }));
     await waitFor(() => expect(screen.getByText(/"mode": "pre-meeting"/)).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: /Personal · \d+%/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Auto context" }));
     fireEvent.change(screen.getByRole("combobox", { name: "Current context" }), { target: { value: "mitchell" } });
     await waitFor(() => expect(screen.queryByText(/"mode": "pre-meeting"/)).toBeNull());
-    expect(screen.getByRole("button", { name: /Mitchell · dormant · \d+%/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Mitchell · dormant" })).toBeTruthy();
   });
 
   it("retains failed dictation and exposes retry edit and discard", async () => {
@@ -340,7 +349,7 @@ describe("Jarvis desktop shell", () => {
 
   it("visibly stages and retries a fail-safe voice delivery", async () => {
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: "Build & Automate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Manage Jarvis" }));
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Stage recovery check" }));
     await waitFor(() => expect(screen.getByText(/Diagnostic backend rejection injected before delivery/)).toBeTruthy());
@@ -355,11 +364,111 @@ describe("Jarvis desktop shell", () => {
 
   it("exposes a local spoken-stop diagnostic without submitting a request", async () => {
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: "Build & Automate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Manage Jarvis" }));
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     expect(screen.getByText(/No audio, dictation, or model request is submitted/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Test spoken Stop" }));
     await waitFor(() => expect(screen.getByText(/Local spoken-interruption diagnostic/)).toBeTruthy());
     expect(screen.getByText(/no request or recording will be submitted/i)).toBeTruthy();
+  });
+});
+
+describe('conversation sequencing holdouts', () => {
+  const A = 'jarvis_inside-success_holdout_a';
+  const B = 'jarvis_personal_holdout_b';
+  function seed() {
+    mockState.conversations = [
+      { id: A, source: 'desktop', title: 'Alpha work', context: 'inside-success', message_count: 1 },
+      { id: B, source: 'desktop', title: 'Beta private', context: 'personal', message_count: 1 },
+    ];
+    mockState.messageLoader = async sessionId => ({ data: [{ id: sessionId, session_id: sessionId, role: 'user', content: sessionId === A ? 'Alpha original' : 'Beta original' }] });
+    window.localStorage.setItem('jarvis.activeConversation', A);
+    window.localStorage.setItem('jarvis.tour.goal9', 'done');
+  }
+  function startedRequests() {
+    return vi.mocked(invoke).mock.calls.filter(([command]) => command === 'start_run').map(([, args]) => (args as Record<string, unknown>)?.request as { sessionId: string; turnId: string; context: string });
+  }
+  it('continues B while A finishes; duplicate and late A events cannot overwrite B or its composer', async () => {
+    seed(); render(<App />);
+    await waitFor(() => expect(screen.getByText('Alpha original')).toBeTruthy());
+    fireEvent.change(screen.getByPlaceholderText('What needs your attention?'), { target: { value: 'Analyse this slowly' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Jarvis ↑' }));
+    await waitFor(() => expect(startedRequests()).toHaveLength(1));
+    const a = startedRequests()[0];
+    fireEvent.click(screen.getByRole('button', { name: /Beta private/ }));
+    await waitFor(() => expect(screen.getByText('Beta original')).toBeTruthy());
+    fireEvent.change(screen.getByPlaceholderText('What needs your attention?'), { target: { value: 'Reply to Beta only' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Jarvis ↑' }));
+    await waitFor(() => expect(startedRequests()).toHaveLength(2));
+    const b = startedRequests()[1];
+    fireEvent.change(screen.getByPlaceholderText('What needs your attention?'), { target: { value: 'My next Beta draft' } });
+    act(() => mockState.runEvents?.({ payload: { event: 'message.delta', run_id: 'run-1', session_id: A, turn_id: a.turnId, sequence: 1, delta: 'ALPHA SECRET PARTIAL' } }));
+    expect(screen.queryByText('ALPHA SECRET PARTIAL')).toBeNull();
+    act(() => mockState.runEvents?.({ payload: { event: 'run.completed', run_id: 'run-1', session_id: A, turn_id: a.turnId, sequence: 2, output: 'ALPHA FINISHED' } }));
+    expect(screen.queryByText('ALPHA FINISHED')).toBeNull();
+    expect((screen.getByPlaceholderText('What needs your attention?') as HTMLTextAreaElement).value).toBe('My next Beta draft');
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+    const betaEvent = { event: 'message.delta', run_id: 'run-2', session_id: B, turn_id: b.turnId, sequence: 1, delta: 'BETA STREAM' };
+    act(() => { mockState.runEvents?.({ payload: betaEvent }); mockState.runEvents?.({ payload: betaEvent }); });
+    expect(screen.getByText('BETA STREAM')).toBeTruthy();
+    expect(screen.queryByText('BETA STREAMBETA STREAM')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(vi.mocked(invoke).mock.calls.find(([command]) => command === 'stop_run')?.[1]).toMatchObject({ runId: 'run-2' }));
+    act(() => mockState.runEvents?.({ payload: { event: 'run.cancelled', run_id: 'run-2', session_id: B, turn_id: b.turnId, sequence: 2 } }));
+    await waitFor(() => expect(screen.getByText(/Incomplete draft · cancelled/)).toBeTruthy());
+    expect(screen.getByText(/provider usage may be unknown/)).toBeTruthy();
+    expect(window.localStorage.getItem('jarvis.activeConversation')).toBe(B);
+  });
+  it('ignores a delayed conversation load after a newer selection and preserves its draft', async () => {
+    seed(); let resolveAlpha!: (value: { data: Array<Record<string, unknown>> }) => void;
+    mockState.messageLoader = sessionId => sessionId === A ? new Promise(resolve => { resolveAlpha = resolve; }) : Promise.resolve({ data: [{ id: 2, session_id: B, role: 'user', content: 'Current Beta content' }] });
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /Beta private/ })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /Beta private/ }));
+    await waitFor(() => expect(screen.getByText('Current Beta content')).toBeTruthy());
+    fireEvent.change(screen.getByPlaceholderText('What needs your attention?'), { target: { value: 'Keep this draft' } });
+    await act(async () => resolveAlpha({ data: [{ id: 1, session_id: A, role: 'assistant', content: 'Stale Alpha response' }] }));
+    expect(screen.queryByText('Stale Alpha response')).toBeNull();
+    expect((screen.getByPlaceholderText('What needs your attention?') as HTMLTextAreaElement).value).toBe('Keep this draft');
+  });
+  it('keeps history and draft on a context correction; New Chat is neutral and double-submit creates one turn', async () => {
+    seed(); render(<App />);
+    await waitFor(() => expect(screen.getByText('Alpha original')).toBeTruthy());
+    fireEvent.change(screen.getByPlaceholderText('What needs your attention?'), { target: { value: 'A preserved draft' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Inside Success' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Current context' }), { target: { value: 'personal' } });
+    expect(screen.getByText('Alpha original')).toBeTruthy();
+    expect(window.localStorage.getItem('jarvis.activeConversation')).toBe(A);
+    expect((screen.getByPlaceholderText('What needs your attention?') as HTMLTextAreaElement).value).toBe('A preserved draft');
+    fireEvent.click(screen.getByRole('button', { name: 'New chat' }));
+    expect(screen.getByRole('button', { name: 'Auto context' })).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText('What needs your attention?'), { target: { value: 'Tell me a joke' } });
+    const button = screen.getByRole('button', { name: 'Ask Jarvis ↑' });
+    fireEvent.click(button); fireEvent.click(button);
+    await waitFor(() => expect(startedRequests()).toHaveLength(1));
+    expect(startedRequests()[0].context).toBe('unknown');
+    expect(vi.mocked(invoke).mock.calls.filter(([command]) => command === 'create_conversation')).toHaveLength(1);
+    expect(window.localStorage.getItem(`jarvis.draft.${A}`)).toBe('A preserved draft');
+  });
+});
+
+describe('unknown provider outcome recovery', () => {
+  it('blocks automatic resubmission and requires an explicit acknowledgement of the unknown action', async () => {
+    window.localStorage.setItem('jarvis.tour.goal9', 'done');
+    render(<App />);
+    await waitFor(() => expect(screen.getByText('Jarvis core ready')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Chat' }));
+    fireEvent.change(screen.getByPlaceholderText('What needs your attention?'), { target: { value: 'Prepare my personal follow-up' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Jarvis ↑' }));
+    await waitFor(() => expect(vi.mocked(invoke).mock.calls.some(([command]) => command === 'start_run')).toBe(true));
+    const request = (vi.mocked(invoke).mock.calls.find(([command]) => command === 'start_run')?.[1] as Record<string, unknown>).request as { turnId: string; sessionId: string };
+    act(() => mockState.runEvents?.({ payload: { event: 'run.unresolved', run_id: 'run-1', session_id: request.sessionId, turn_id: request.turnId, sequence: 1 } }));
+    expect(screen.getByText(/Continuing does not confirm success, undo anything, or repeat the earlier action/)).toBeTruthy();
+    expect(vi.mocked(invoke).mock.calls.some(([command]) => command === 'recover_conversation_run')).toBe(false);
+    expect(screen.queryByRole('button', { name: 'Ask Jarvis ↑' })).toBeNull();
+    fireEvent.keyDown(screen.getByPlaceholderText('What needs your attention?'), { key: 'Enter', metaKey: true });
+    expect(vi.mocked(invoke).mock.calls.filter(([command]) => command === 'start_run')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Continue without retrying the earlier action' }));
+    await waitFor(() => expect(vi.mocked(invoke).mock.calls.find(([command]) => command === 'recover_conversation_run')?.[1]).toEqual({ runId: 'run-1', action: 'acknowledge-unknown' }));
   });
 });

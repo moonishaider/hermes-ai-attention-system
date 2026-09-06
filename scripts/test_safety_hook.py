@@ -49,7 +49,7 @@ def main() -> int:
     expect("outside cd", False, "Bash", {"command": "cd .. && pwd"})
     expect("outside redirection", False, "Bash", {"command": "echo test > ../outside.txt"})
     expect("absolute outside write", False, "Bash", {"command": "touch /tmp/hermes-test"})
-    expect("protected update", False, "apply_patch", {"command": "*** Begin Patch\n*** Update File: AGENTS.md\n@@\n-x\n+y\n*** End Patch"})
+    expect("authorized policy update", True, "apply_patch", {"command": "*** Begin Patch\n*** Update File: AGENTS.md\n@@\n-x\n+y\n*** End Patch"})
     expect("file delete", False, "apply_patch", {"command": "*** Begin Patch\n*** Delete File: temporary.txt\n*** End Patch"})
     expect("ordinary project patch", True, "apply_patch", {"command": "*** Begin Patch\n*** Add File: src/example.py\n+print('ok')\n*** End Patch"})
     expect("GitHub read MCP", True, "mcp__github__search_code", {"query": "Hermes"})
@@ -58,6 +58,11 @@ def main() -> int:
     expect("Slack read", True, "mcp__slack__search_messages", {"query": "daily activity"})
     expect("Slack send", False, "mcp__slack__send_message", {"channel": "x", "text": "x"})
     expect("browser control", False, "computer_use", {"action": "click", "x": 1, "y": 1})
+    expect("actual exec cmd", True, "exec_command", {"cmd": "git status --short"})
+    expect("actual exec deletion", False, "exec_command", {"cmd": "rm -rf /"})
+    expect("marker stays protected", False, "apply_patch", {"command": "*** Begin Patch\n*** Update File: .hermes-ai-attention-project\n@@\n-x\n+y\n*** End Patch"})
+    expect("scoped CUA build tool", True, "mcp__cua_repl__js", {"code": "await cua.getState()"})
+    expect("CUA consequential operation", False, "mcp__cua_repl__js", {"code": "send_message()"})
     print("All safety-hook tests passed.")
     return 0
 

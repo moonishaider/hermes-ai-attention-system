@@ -668,7 +668,8 @@ class Store:
             "SELECT COALESCE(SUM(cost_usd),0) AS cost FROM usage_events WHERE substr(occurred_at,1,7)=?",
             (year_month,),
         ).fetchone()
-        return float(row["cost"])
+        native=self.connection.execute("SELECT COALESCE(SUM(cost_usd),0) FROM model_decisions WHERE substr(created_at,1,7)=? AND json_extract(signals_json,'$.source')='jarvis-front-controller'",(year_month,)).fetchone()[0]
+        return float(row["cost"])+float(native)
 
     def set_checkpoint(self, source_id: str, cursor: str) -> None:
         with self.connection:

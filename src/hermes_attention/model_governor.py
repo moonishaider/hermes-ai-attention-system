@@ -64,7 +64,7 @@ class ModelGovernor:
 
     def execute(
         self, client: DirectModelClient, prompt: str, signals: ModelSignals,
-        *, image_data_url: str | None = None, max_output_tokens: int = 256,
+        *, image_data_url: str | None = None, max_output_tokens: int = 2048,
     ) -> dict[str, Any]:
         self.router.assert_budget(optional=signals.optional_background)
         decision = self.decide(signals)
@@ -72,13 +72,15 @@ class ModelGovernor:
         started = time.monotonic()
         outcome = "failed"
         total_cost = 0.0
+        usage_known = True
         result: dict[str, Any] = {}
         try:
             result = client.generate(
                 decision.route, prompt, image_data_url=image_data_url,
                 feature=f"governed:{decision.route}", max_output_tokens=max_output_tokens,
             )
-            total_cost += float(result.get("estimated_cost_usd", 0))
+            usage_known = result.get("estimated_cost_usd") is not None
+            total_cost += float(result.get("estimated_cost_usd") or 0)
             if not result.get("success"):
                 raise ModelRouteError(str(result.get("error_class") or "route failed"))
             if decision.reviewer_route:
@@ -88,14 +90,16 @@ class ModelGovernor:
                     "state uncertainty and do not invent facts.\n\n" + str(result.get("text", "")),
                     feature="governed:review", max_output_tokens=max_output_tokens,
                 )
-                total_cost += float(reviewed.get("estimated_cost_usd", 0))
-                if reviewed.get("success"):
-                    result = reviewed
+                usage_known = usage_known and reviewed.get("estimated_cost_usd") is not None
+                total_cost += float(reviewed.get("estimated_cost_usd") or 0)
+                if not reviewed.get("success"):
+                    raise ModelRouteError("Required independent review did not complete; draft is not a reviewed final answer")
+                result = reviewed
             outcome = "success"
             return {
                 **result, "governor_run_id": run_id, "route": decision.route,
                 "reason": decision.reason, "reviewer_route": decision.reviewer_route,
-                "estimated_total_cost_usd": total_cost,
+                "estimated_total_cost_usd": total_cost if usage_known else None, "usage_known": usage_known,
             }
         finally:
             with self.store.connection:
@@ -105,6 +109,6 @@ class ModelGovernor:
                         run_id, decision.route, decision.reason,
                         json.dumps(asdict(signals), sort_keys=True), signals.user_override,
                         decision.escalation_route, decision.reviewer_route,
-                        round((time.monotonic() - started) * 1000), total_cost, outcome, utc_now(),
+                        round((time.monotonic() - started) * 1000), total_cost if usage_known else None, outcome, utc_now(),
                     ),
                 )
