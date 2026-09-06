@@ -38,7 +38,13 @@ PROTECTED_EXACT = {
     "scripts/safe_create_private_repo.sh",
     "scripts/safe_git_push.sh",
 }
-PROTECTED_PREFIXES = (".codex/hooks/", ".codex/rules/")
+# Stage B permits reviewed edits to project-owned policy controls. Historical
+# handoffs and the marker remain protected; host hook trust is never modified.
+MIGRATABLE = {p for p in PROTECTED_EXACT if p.startswith((".codex/", "scripts/"))} | {"AGENTS.md"}
+PROTECTED_EXACT -= MIGRATABLE
+PROTECTED_PREFIXES = ()
+APPROVED_CUA = {"mcp__cua_repl__js", "mcp__cua_repl.js", "mcp__cua_repl__js_reset"}
+
 
 # Commands that are never needed for this implementation. The guarded GitHub
 # wrapper scripts are allowed because their *invocation* does not contain the
@@ -135,7 +141,9 @@ def relative_target(raw: str, cwd: Path, root: Path) -> str | None:
 
 
 def is_protected(relative: str) -> bool:
-    normalized = relative.replace("\\", "/").lstrip("./")
+    normalized = relative.replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
     return normalized in PROTECTED_EXACT or normalized.startswith(PROTECTED_PREFIXES)
 
 
@@ -153,7 +161,7 @@ def iter_strings(value: Any) -> Iterable[str]:
 
 def extract_file_targets(tool_input: dict[str, Any]) -> list[str]:
     targets: list[str] = []
-    command = tool_input.get("command")
+    command = tool_input.get("command", tool_input.get("cmd"))
     if isinstance(command, str):
         for line in command.splitlines():
             match = re.match(r"^\*\*\*\s+(?:Add|Update|Delete) File:\s+(.+?)\s*$", line)
@@ -167,9 +175,11 @@ def extract_file_targets(tool_input: dict[str, Any]) -> list[str]:
 
 
 def inspect_file_tool(tool_name: str, tool_input: Any, cwd: Path, root: Path) -> None:
+    if isinstance(tool_input, str):
+        tool_input = {"command": tool_input}
     if not isinstance(tool_input, dict):
         deny(f"Uninspectable {tool_name} input; file mutation refused.")
-    command = tool_input.get("command")
+    command = tool_input.get("command", tool_input.get("cmd"))
     if isinstance(command, str) and "*** Delete File:" in command:
         deny("File deletion is forbidden; quarantine project-owned files instead.")
     targets = extract_file_targets(tool_input)
@@ -184,9 +194,9 @@ def inspect_file_tool(tool_name: str, tool_input: Any, cwd: Path, root: Path) ->
 
 
 def inspect_shell(tool_input: Any, cwd: Path, root: Path) -> None:
-    if not isinstance(tool_input, dict) or not isinstance(tool_input.get("command"), str):
+    if not isinstance(tool_input, dict) or not isinstance(tool_input.get("command", tool_input.get("cmd")), str):
         deny("Uninspectable shell command input.")
-    command = tool_input["command"]
+    command = tool_input.get("command", tool_input.get("cmd"))
     compact = " ".join(command.strip().split())
     if not compact:
         return
@@ -241,6 +251,14 @@ def inspect_shell(tool_input: Any, cwd: Path, root: Path) -> None:
 
 def inspect_external_tool(tool_name: str, tool_input: Any) -> None:
     lowered = tool_name.lower()
+    if lowered in APPROVED_CUA:
+        # CUA carries opaque JavaScript. This allows the owner-authorized build
+        # tool, not arbitrary provider mutation; runtime policy remains separate.
+        # Block explicit consequential operations; this is not semantic isolation.
+        combined = " ".join(iter_strings(tool_input)).lower()
+        if re.search(r"\b(?:checkout|purchase|transfer_funds|send_message|submit_tax|disable_security)\b", combined):
+            deny("Consequential browser operation is outside build authority.")
+        return
     if BROWSER_OR_COMPUTER.search(lowered):
         deny("Live browser/computer control is blocked during implementation; build and test with mocks.")
 
@@ -274,7 +292,7 @@ def main() -> None:
     tool_input = event.get("tool_input")
     lowered = tool_name.lower()
 
-    if tool_name == "Bash" or lowered in {"shell", "exec_command", "terminal"}:
+    if tool_name == "Bash" or lowered in {"shell", "exec_command", "terminal", "functions.exec_command", "functions__exec_command"}:
         inspect_shell(tool_input, cwd, root)
     elif any(token in lowered for token in ("apply_patch", "write_file", "edit_file", "create_file")) or lowered in {"edit", "write"}:
         inspect_file_tool(tool_name, tool_input, cwd, root)

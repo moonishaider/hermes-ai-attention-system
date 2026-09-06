@@ -47,7 +47,7 @@ prefix_rule(
 prefix_rule(
     pattern = ["git", "push"],
     decision = "forbidden",
-    justification = "Direct pushes are forbidden. Use scripts/safe_git_push.sh, which validates the approved private personal remote and tracked files.",
+    justification = "Direct pushes are forbidden. Use scripts/safe_git_push.sh, which validates the exact approved personal remote and tracked files.",
 )
 
 prefix_rule(
@@ -59,7 +59,7 @@ prefix_rule(
 prefix_rule(
     pattern = ["gh", "repo", ["create", "delete", "archive", "rename", "transfer"]],
     decision = "forbidden",
-    justification = "Direct repository mutations are forbidden. Only the guarded private-repository creation script is permitted.",
+    justification = "Direct repository mutations are forbidden. Creating replacement repositories is outside the current authorized scope.",
 )
 
 prefix_rule(

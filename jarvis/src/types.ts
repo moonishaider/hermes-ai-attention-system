@@ -17,7 +17,15 @@ export interface HealthStatus {
 
 export interface RunEvent {
   event: string;
+  action?: import("./PersonalIntentReview").PersonalIntent;
+  actionReceipt?: import("./PersonalIntentReview").PersonalIntent;
   run_id?: string;
+  root_run_id?: string;
+  session_id?: string;
+  turn_id?: string;
+  event_id?: string;
+  sequence?: number;
+  persistence_pending?: boolean;
   delta?: string;
   output?: string;
   tool?: string;
@@ -32,9 +40,10 @@ export interface RunEvent {
   runtime?: { model?: string; provider?: string };
 }
 
-export interface RunStart { runId: string; route: string; reason: string; }
+export interface RunStart { runId: string; sessionId?: string; turnId?: string; route: string; reason: string; }
 
 export interface HermesSession {
+  context?: ContextId;
   id: string;
   source: string;
   title?: string | null;
@@ -55,7 +64,11 @@ export interface HermesMessage {
   tool_name?: string | null;
   display_kind?: string | null;
   display_metadata?: {
+    action_receipt?: import("./PersonalIntentReview").PersonalIntent;
     jarvis_turn_id?: string;
+    status?: string;
+    run_id?: string;
+    partial?: boolean;
     context?: string;
     route?: string;
     progress?: string[];

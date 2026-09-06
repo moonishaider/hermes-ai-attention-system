@@ -56,7 +56,7 @@ if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     remote="${line%%[[:space:]]*}"
     url="${line#*[[:space:]]}"
     case "$url" in
-      git@github.com:moonishaider/hermes-ai-attention-system*.git|https://github.com/moonishaider/hermes-ai-attention-system*.git|https://github.com/moonishaider/hermes-ai-attention-system*) ;;
+      https://github.com/moonishaider/hermes-ai-attention-system.git) ;;
       *) fail "unapproved Git remote $remote: $url" ;;
     esac
   done < <(git -C "$ROOT" remote -v 2>/dev/null | awk '$3=="(push)" {print $1 " " $2}' | sort -u)

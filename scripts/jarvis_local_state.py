@@ -142,81 +142,20 @@ def _canonical_turn_seen(messages: list[dict[str, Any]], turn_id: str, role: str
 
 
 def conversation_turn_begin(_service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
-    """Persist the owner's submitted text before an isolated governed run.
-
-    This is used only when a second-pass reviewer is planned. The actual model
-    stages run in isolated Hermes sessions so their private review harnesses can
-    never appear in the owner's canonical conversation.
-    """
-    turn_id = _jarvis_turn_id(value.get("turnId"))
-    context_id = str(value.get("context") or "")
-    if context_id not in CONTEXTS:
-        raise ValueError("invalid conversation context")
-    owner_request = bounded(value.get("ownerRequest"), maximum=50_000, name="owner request")
-    db = _canonical_session_db()
-    try:
-        session = _jarvis_session(db, value.get("sessionId"))
-        if f"jarvis_{context_id}_" not in session["id"]:
-            raise PermissionError("conversation context does not match the governed turn")
-        messages = _recent_canonical_messages(db, session)
-        if _canonical_turn_seen(messages, turn_id, "user"):
-            return {"ok": True, "persisted": True, "idempotent": True, "turnId": turn_id}
-        db.append_messages_batch(session["id"], [{
-            "role": "user",
-            "content": owner_request,
-            "display_kind": "jarvis_user",
-            "display_metadata": {
-                "jarvis_turn_id": turn_id,
-                "context": context_id,
-                "stage": "submitted",
-            },
-        }])
-        return {"ok": True, "persisted": True, "idempotent": False, "turnId": turn_id}
-    finally:
-        db.close()
+    from hermes_attention.conversation_turns import transition
+    return transition(_canonical_session_db, ROOT, value, finish=False)
 
 
 def conversation_turn_finish(_service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
-    """Append only the final governed answer to the owner-visible thread."""
-    turn_id = _jarvis_turn_id(value.get("turnId"))
-    context_id = str(value.get("context") or "")
-    if context_id not in CONTEXTS:
-        raise ValueError("invalid conversation context")
-    assistant_message = bounded(value.get("assistantMessage"), maximum=50_000, name="assistant result")
-    route = bounded(value.get("route"), maximum=40, name="model route")
-    raw_progress = value.get("progress") or []
-    if not isinstance(raw_progress, list) or len(raw_progress) > 20:
-        raise ValueError("conversation progress must be a bounded list")
-    progress = [bounded(item, maximum=160, name="progress item") for item in raw_progress]
-    db = _canonical_session_db()
-    try:
-        session = _jarvis_session(db, value.get("sessionId"))
-        if f"jarvis_{context_id}_" not in session["id"]:
-            raise PermissionError("conversation context does not match the governed turn")
-        messages = _recent_canonical_messages(db, session)
-        if _canonical_turn_seen(messages, turn_id, "assistant"):
-            return {"ok": True, "persisted": True, "idempotent": True, "turnId": turn_id}
-        db.append_messages_batch(session["id"], [{
-            "role": "assistant",
-            "content": assistant_message,
-            "finish_reason": "governed_final",
-            "display_kind": "jarvis_answer",
-            "display_metadata": {
-                "jarvis_turn_id": turn_id,
-                "context": context_id,
-                "route": route,
-                "progress": progress,
-                "review_harness_isolated": True,
-            },
-        }])
-        return {"ok": True, "persisted": True, "idempotent": False, "turnId": turn_id}
-    finally:
-        db.close()
+    from hermes_attention.conversation_turns import transition
+    return transition(_canonical_session_db, ROOT, value, finish=True)
 
 
 def conversation_list(_service: AttentionService, value: dict[str, Any]) -> dict[str, Any]:
     """List only Jarvis-owned canonical conversations, including soft archives."""
     include_archived = bool(value.get("includeArchived", True))
+    query=value.get("query", "")
+    if not isinstance(query,str) or len(query)>200:raise ValueError("Conversation search must be at most 200 characters")
     db = _canonical_session_db()
     try:
         rows = db.list_sessions_rich(
@@ -227,15 +166,37 @@ def conversation_list(_service: AttentionService, value: dict[str, Any]) -> dict
             compact_rows=True,
             include_pinned=True,
         )
+        if query.strip():
+            # Hermes rich-list search currently covers titles only. Keep full
+            # text matching in the canonical store via a read-only adapter.
+            import sqlite3
+            connection=sqlite3.connect((Path.home()/".hermes/state.db").as_uri()+"?mode=ro",uri=True)
+            try:
+                ids=[row[0] for row in connection.execute(
+                    "SELECT s.id FROM sessions s WHERE s.source='desktop' AND substr(s.id,1,7)='jarvis_' "
+                    "AND (instr(lower(coalesce(s.title,'')),lower(?))>0 OR EXISTS (SELECT 1 FROM messages m WHERE m.session_id=s.id AND m.role IN ('user','assistant') AND instr(lower(coalesce(m.content,'')),lower(?))>0)) "
+                    "ORDER BY s.started_at DESC LIMIT 101",(query.strip(),query.strip()))]
+            finally:connection.close()
+            rows=[db.get_session(sid) for sid in ids[:100]]
+        else:ids=[]
         safe_rows = []
         for row in rows:
             if row.get("source") != "desktop" or not str(row.get("id", "")).startswith("jarvis_"):
                 continue
-            safe_rows.append({key: row.get(key) for key in (
+            safe = {key: row.get(key) for key in (
                 "id", "source", "title", "preview", "message_count", "last_active",
                 "started_at", "archived", "pinned",
-            )})
-        return {"ok": True, "data": safe_rows}
+            )}
+            if callable(getattr(db, "get_messages", None)):
+                messages = db.get_messages(row["id"])
+                safe["message_count"] = sum(1 for message in messages if message.get("role") in {"user", "assistant"} and message.get("content"))
+                for message in reversed(messages):
+                    context = (message.get("display_metadata") or {}).get("context")
+                    if context in CONTEXTS:
+                        safe["context"] = context
+                        break
+            safe_rows.append(safe)
+        return {"ok": True, "data": safe_rows, "truncated": len(ids)>100}
     finally:
         db.close()
 
@@ -1274,9 +1235,21 @@ def record_model_decision(service: AttentionService, value: dict[str, Any]) -> d
     if context_id not in CONTEXTS:
         raise ValueError("invalid model decision context")
     latency_ms = max(0, min(int(value.get("latencyMs") or 0), 3_600_000))
-    cost_usd = max(0.0, min(float(value.get("costUsd") or 0), 100.0))
+    usage_known=bool(value.get('usageKnown',value.get('costUsd') is not None))
+    usage=value.get('usage') or {}
+    spec=service.model_config['routes'][route]
+    now=datetime.now(UTC)
+    peak=now.weekday()<5 and any(a<=now.hour<b for a,b in spec.get('peak_utc_hours',[[0,24]]))
+    multiplier=1 if peak else float(spec.get('off_peak_multiplier',1))
+    input_tokens=int(usage.get('input_tokens',usage.get('prompt_tokens',0)) or 0)
+    output_tokens=int(usage.get('output_tokens',usage.get('completion_tokens',0)) or 0)
+    hit=min(input_tokens,int(usage.get('prompt_cache_hit_tokens',(usage.get('input_tokens_details') or usage.get('prompt_tokens_details') or {}).get('cached_tokens',0)) or 0))
+    cost_usd=(((input_tokens-hit)*spec['input_usd_per_million']+hit*spec.get('cache_hit_usd_per_million',spec['input_usd_per_million'])+output_tokens*spec['output_usd_per_million'])*multiplier/1000000) if usage else max(0.0,min(float(value.get('costUsd') or 0),100.0))
+    if not usage_known:cost_usd=None
     signals = {
         "source": "jarvis-front-controller",
+        "usage_known": usage_known,
+        "pricing_checked": spec.get("pricing_checked","historical-unverified"),
         "context": context_id,
         "provider": bounded(value.get("provider"), maximum=80, name="provider"),
         "model": bounded(value.get("model"), maximum=120, name="model"),
@@ -1284,8 +1257,9 @@ def record_model_decision(service: AttentionService, value: dict[str, Any]) -> d
     with service.store.connection:
         service.store.connection.execute(
             """INSERT INTO model_decisions VALUES(?,?,?,?,?,?,?,?,?,?,?)
-               ON CONFLICT(run_id) DO UPDATE SET latency_ms=excluded.latency_ms,
-                 cost_usd=excluded.cost_usd,outcome=excluded.outcome""",
+               ON CONFLICT(run_id) DO UPDATE SET latency_ms=MAX(model_decisions.latency_ms,excluded.latency_ms),
+                 cost_usd=COALESCE(excluded.cost_usd,model_decisions.cost_usd),outcome=excluded.outcome,
+                 signals_json=CASE WHEN excluded.cost_usd IS NOT NULL THEN excluded.signals_json ELSE model_decisions.signals_json END""",
             (
                 run_id, route, bounded(value.get("reason"), maximum=300, name="reason"),
                 json.dumps(signals, sort_keys=True), None, None,
@@ -1331,15 +1305,23 @@ def commitment_complete(service: AttentionService, value: dict[str, Any]) -> dic
     ).fetchone()
     if not linked:
         raise ValueError("completion proof is not ledger evidence in the commitment context")
-    service.ledger.verify_commitment_complete(task_id, evidence_id=evidence_id)
-    return {"ok": True, "taskId": task_id, "status": "completed", "externalWrite": False}
+    # The owner clicked an explicit completion control. Same-context evidence
+    # remains a citation, not an independent semantic proof of completion.
+    from hermes_attention.awareness_workspace import AwarenessWorkspace
+    awareness=AwarenessWorkspace(service.store)
+    item=awareness._task(task_id)
+    if evidence_id not in item['evidence_ids']:
+        with service.store.connection:service.store.connection.execute('UPDATE tasks SET evidence_ids_json=? WHERE task_id=?',(json.dumps(sorted(set(item['evidence_ids'])|{evidence_id})),task_id))
+        item=awareness._task(task_id)
+    result=awareness.transition({'taskId':task_id,'expectedVersion':item['version'],'action':'done','note':'Owner confirmed completion with selected evidence '+evidence_id})
+    return {"ok": True, "taskId": task_id, "status": result['status'], "completionBasis":"owner-confirmed", "externalWrite": False}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "operation",
-        choices=("state", "create", "focus", "stop-focus", "focus-control", "observe", "setting", "calendar-profile", "review-calendar-profile", "projection", "capability-control", "automation-outcome", "record-model-decision", "commitment-open", "commitment-complete", "personal-action-status", "personal-action-setting", "personal-action-preview", "personal-action-execute", "personal-action-explicit", "personal-calendar-undo", "guided-public-read", "conversation-list", "conversation-control", "conversation-turn-begin", "conversation-turn-finish", "task-create", "task-control", "attention-control", "meeting-followup", "project-checkpoint", "decision-create", "decision-outcome", "radar-evaluate", "memory-control"),
+        choices=("model-budget", "state", "create", "focus", "stop-focus", "focus-control", "observe", "setting", "calendar-profile", "review-calendar-profile", "projection", "capability-control", "automation-outcome", "record-model-decision", "commitment-open", "commitment-complete", "personal-action-status", "personal-action-setting", "personal-action-preview", "personal-action-execute", "personal-action-explicit", "personal-calendar-undo", "guided-public-read", "conversation-list", "conversation-control", "conversation-turn-begin", "conversation-turn-finish", "task-create", "task-control", "attention-control", "meeting-followup", "project-checkpoint", "decision-create", "decision-outcome", "radar-evaluate", "memory-control"),
     )
     parser.add_argument("--context")
     arguments = parser.parse_args()
@@ -1351,11 +1333,12 @@ def main() -> int:
                     raise ValueError("invalid context")
                 output = state(service, arguments.context)
             else:
-                raw = sys.stdin.buffer.read(32_769)
-                if len(raw) > 32_768:
+                raw = sys.stdin.buffer.read(262_145)
+                if len(raw) > 262_144:
                     raise ValueError("local item request is too large")
                 value = json.loads(raw or b"{}")
                 output = {
+                    "model-budget": lambda service,value: {"ok":True,"spent":service.models.assert_budget(optional=False)},
                     "create": create, "focus": focus, "stop-focus": stop_focus, "focus-control": focus_control, "observe": observe, "setting": setting,
                     "calendar-profile": calendar_profile,
                     "review-calendar-profile": review_calendar_profile,

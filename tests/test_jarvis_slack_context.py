@@ -48,11 +48,12 @@ class JarvisSlackContextTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertIn("reviewed client context", result["error"])
 
-    def test_native_runner_allowlists_only_the_narrow_slack_adapter(self):
+    def test_native_dloa_does_not_repeat_eager_slack_injection(self):
         rust = (ROOT / "jarvis" / "src-tauri" / "src" / "lib.rs").read_text()
         self.assertIn('"jarvis_slack_context.py"', rust)
-        self.assertIn("slack_context_for_prompt", rust)
-        self.assertIn("DIRECT READ-ONLY SLACK EVIDENCE", rust)
+        self.assertIn('"jarvis_dloa.py"', rust)
+        self.assertNotIn("slack_context_for_prompt", rust)
+        self.assertNotIn("DIRECT READ-ONLY SLACK EVIDENCE", rust)
 
 
 if __name__ == "__main__":

@@ -6,7 +6,34 @@ Build the Hermes-based **AI Attention & Intelligence System** described in this 
 
 Inside Success is Syed's company/job. Mitchell is a separate Upwork client. Personal, mixed, unknown, future-client, and future-project contexts must remain flexible and extensible.
 
-## Owner-selected Codex execution mode
+## Current personal-assistant build authorization
+
+The owner's current implementation authorization supersedes historical prototype
+restrictions below only within this marked project and its identified Jarvis app
+and runtime. The selected builder is GPT-6 Astra; runtime model billing stays
+separate. Authorized work includes project policy migration with snapshot, review
+and tests, scoped Chrome/computer setup and Jarvis testing, owned runtime/app
+installation with backups, existing-grant refresh, supplied-file processing,
+versioned learning, personal task grants and finance preparation. Runtime grants
+are separately enforced and are never inherited from builder Full Access.
+
+The only publication destination is the existing PUBLIC
+`moonishaider/hermes-ai-attention-system`, preserving visibility. Publish sanitized
+code/docs only through the exact-repository guard with reviewed branch and commit;
+private specifications, source data, audits and screenshots stay Git-excluded.
+No new repository, company writes, unsolicited messages, invitations, payments,
+final tax/legal submissions, security bypasses or destructive user-data operations.
+Keep the marker, hook activation and hard denies; policy edits are limited to
+owner-authorized project controls and require independent review and tests.
+Normal supported OS/provider consent may be used only within the authorized
+account/capability; physical consent and new consequential authority remain human.
+Owned installation helpers must validate exact paths, symlinks and backups before
+activation. Arbitrary outside-project shell writes remain forbidden. These hooks
+are compensating checks, not OS isolation.
+
+Historical instructions below remain context where consistent with this section.
+
+## Historical owner-selected Codex execution mode
 
 The owner explicitly selected:
 

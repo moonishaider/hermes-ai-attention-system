@@ -1,0 +1,21 @@
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
+vi.mock('@tauri-apps/api/core',()=>({invoke:vi.fn(async()=>({}))}));
+import { invoke } from '@tauri-apps/api/core';
+import { PersonalIntentReview } from './PersonalIntentReview';
+import { applyRunEvent, isRunActive, type ConversationRun } from './conversationRuns';
+const run:ConversationRun={turnId:'turn-a',sessionId:'session-a',runId:'root-a',context:'personal',phase:'running',answer:'',progress:[],startedAt:1,route:'routine',speak:false,seenEvents:[],lastSequence:0};
+afterEach(()=>{cleanup();vi.clearAllMocks();});
+it('keeps confirmation owned and never reveals internal preparation identifiers',async()=>{
+ const ledger=applyRunEvent({a:run},{event:'action.preview',run_id:'root-a',session_id:'session-a',turn_id:'turn-a',sequence:1,action:{action_type:'calendar.create',preview:{event:{summary:'Focus',start:{dateTime:'2026-09-06T12:00:00+05:00'}}}}});
+ expect(isRunActive(ledger.a)).toBe(true);
+ const refresh=vi.fn(async()=>{});
+ render(<PersonalIntentReview run={ledger.a} refresh={refresh} undo={vi.fn()}/>);
+ expect(screen.getByText('Focus')).toBeTruthy();expect(invoke).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'Confirm this action'}));
+ await waitFor(()=>expect(refresh).toHaveBeenCalledTimes(1));
+ expect(invoke).toHaveBeenCalledExactlyOnceWith('confirm_personal_intent',{runId:'root-a',confirm:true});
+ const completed=applyRunEvent(ledger,{event:'run.completed',run_id:'root-a',session_id:'session-a',turn_id:'turn-a',sequence:2,output:'Saved'});
+ expect(completed.a.pendingAction).toBeUndefined();expect(isRunActive(completed.a)).toBe(false);
+ expect(applyRunEvent(completed,{event:'action.preview',run_id:'root-a',sequence:3,action:{action_type:'calendar.create'}})).toBe(completed);
+});

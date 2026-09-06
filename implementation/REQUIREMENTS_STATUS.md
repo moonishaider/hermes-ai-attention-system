@@ -1,5 +1,24 @@
 # Requirements Status
 
+## Current candidate scope — 5 September 2026
+
+The older operational table describes prior accepted checkpoints. It is not an
+acceptance claim for this expanded candidate. The repository is now public under
+the exact-destination publication policy; historical private-publication wording
+is superseded.
+
+| Candidate area | Implementation evidence | Acceptance boundary |
+|---|---|---|
+| Conversation lifecycle | Native submission journal, isolated stages, cancellation, canonical replay and outcome recovery. | Packaged restart/recovery remains a separate gate. |
+| Documents and workflow jobs | Typed document operations, real local workflow adapters, durable scheduling and execution receipts. | Fixture/local proofs do not establish every provider workflow. |
+| Learning and skills | Native pending review, explicit preference versions/undo, selected skill edits and staged community review. | No bulk or implicit approval of real pending items. |
+| Personal actions and browser tasks | Structured intent preparation, exact resource snapshots, unsent drafts, native grants and target selection. | Provider permissions, account binding and consequential authority remain independently enforced. |
+| Professional and financial preparation | Source-backed report and finance workflows, local artifacts and review boundaries. | No company submission, payment, filing or professional signoff is implied by preparation tests. |
+| Desktop and companion | Native permissions/learning/workflow interfaces, bounded voice lifecycle and static companion package. | OS permissions and private ingress need their own verified acceptance. |
+| Compatibility and installation | Isolated interpreter/database proof, signed driver check and guarded app/runtime rollback. | Guarded app/runtime activations and partial installed acceptance are recorded; see PERSONAL_ASSISTANT_ACCEPTANCE.md for remaining checks. |
+
+Details and evidence limits: [candidate compatibility](CANDIDATE_COMPATIBILITY_2026-09-05.md).
+
 | Group | Status | Evidence |
 |---|---|---|
 | PRD-001–010 | Operational; 42/42 visible checks accepted | `/Applications/Jarvis.app` is a native Tauri application with chat, Attention, Projects, Missions, Radars, Capability Studio, explicit voice/screen controls, source progress, natural Auto Explicit personal actions, and no Terminal-first normal path. |

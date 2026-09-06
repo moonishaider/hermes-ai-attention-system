@@ -23,7 +23,8 @@
         "center": true,
         "resizable": true,
         "fullscreen": false,
-        "visible": true
+        "visible": true,
+        "dragDropEnabled": false
       },
       {
         "label": "hud",
@@ -36,15 +37,18 @@
         "decorations": false,
         "alwaysOnTop": true,
         "skipTaskbar": true,
-        "visible": false
+        "visible": false,
+        "dragDropEnabled": false
       }
     ]
   },
   "bundle": {
     "active": true,
-    "targets": ["app"],
+    "targets": [
+      "app"
+    ],
     "category": "Productivity",
-    "copyright": "Copyright © 2026 Syed Moonis Haider",
+    "copyright": "Copyright \u00a9 2026 Syed Moonis Haider",
     "shortDescription": "Personal Hermes intelligence assistant",
     "longDescription": "Jarvis is Syed's source-backed, context-separated desktop assistant powered by the protected Hermes backend.",
     "macOS": {
