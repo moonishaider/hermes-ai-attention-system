@@ -41,3 +41,33 @@ class ObservationTest(unittest.TestCase):
   with tempfile.TemporaryDirectory() as t:
    w=DloaWorkspace(Path(t).resolve());state=w._read();state['extraction_cache']={key:{'evidence_id':'resource','source_sha256':a['sha256']}};w._save(state)
    self.assertFalse(cache_complete(state,m));result=evidence_packet(w,m,{},lambda p:self.fail('Malformed cache cannot rebill'),origin_turn='s:new');self.assertEqual(result['status'],'uncertain')
+
+class AuthenticatedBodyRebindTest(unittest.TestCase):
+ def fixture(self):
+  body='I asked for Friday delivery. I explained billing. I reiterated Friday.'
+  sha=lambda text:hashlib.sha256(text.encode()).hexdigest()
+  receipt={'connection_id':'slack_inside_success_readonly','channel_id':'C123456789','message_ts':'1700000000.000001','author_id':'U123456789','fact_subject_verified':False,'response_sha256':'exact-receipt'}
+  old={'evidence_id':'resource','source':'slack-owner','source_id':'message','source_ref':'https://slack.test/archives/C123456789/p1700000000000001','connection_id':'slack_inside_success_readonly','account_id':'team','occurred_at':'2023-11-14T22:13:20+00:00','kind':'activity','text':'search rendering','sha256':sha('search rendering'),'actor_state':'uncertain'}
+  current={**old,'text':body,'sha256':sha(body),'actor_id':'U123456789','actor_state':'owner','provenance':{'message_ts':receipt['message_ts'],'verified_author_receipt':receipt,'verified_body_sha256':sha(body)}}
+  event={'authenticated_body':body,'authenticated_body_sha256':sha(body),'receipt':receipt,'manifest_id':'old','conversation_id':'thread','original_text_sha256':old['sha256'],'evidence_id':'resource'}
+  version={'version_id':'old-version','identity_receipt':event,'manifest_id':'old','conversation_id':'thread','original_text_sha256':old['sha256'],'facts':[{'text':part,'quote':part,'attribution':'owner'} for part in body.split('. ')],'event_bases':['message_act']*3}
+  prior={'id':'old','conversation_id':'thread','sources':[{'source':'slack-owner','items':[old]}]}
+  manifest={'id':'new','conversation_id':'thread','skill':{},'sources':[{'source':'slack-owner','items':[current]}],'window':{'report_date':'2023-11-14','start':'2023-11-14T00:00:00+00:00','end':'2023-11-15T00:00:00+00:00'}}
+  cache={'status':'processed','evidence_id':'resource','source_sha256':current['sha256'],'facts':version['facts'][:2],'event_bases':['message_act']*2,'limitations':[]}
+  state={'manifests':{'old':prior},'identity_fact_versions':{'resource':version},'extraction_cache':{_item_keys(manifest,[current])['resource']:cache}}
+  return state,manifest,current
+ def test_exact_authenticated_refresh_preserves_units_with_new_ids_and_current_lineage(self):
+  from hermes_attention.dloa_report import catalogue
+  state,manifest,item=self.fixture();before=copy.deepcopy(state)
+  facts=catalogue(state,manifest);self.assertEqual(len(facts),3);self.assertTrue(all(f['owner_eligible'] for f in facts.values()))
+  old_ids={hashlib.sha256(('old-version:'+str(i)).encode()).hexdigest()[:24] for i in range(3)}
+  self.assertFalse(set(facts)&old_ids);self.assertTrue(all(f['current_source_lineage']['current_manifest_id']=='new' for f in facts.values()))
+  self.assertEqual(state,before)
+ def test_changed_body_actor_receipt_context_resource_or_quote_does_not_rebind(self):
+  from hermes_attention.dloa_observations import identity_version_for
+  for field,value in [('text','changed body'),('actor_id','U999999999'),('account_id','other'),('source_ref','https://slack.test/archives/C123456789/p1700000000000002'),('occurred_at','2026-09-06T12:14:54+00:00')]:
+   state,m,item=self.fixture();item[field]=value;self.assertEqual(identity_version_for(state,m,item),{},field)
+  state,m,item=self.fixture();m['conversation_id']='other';self.assertEqual(identity_version_for(state,m,item),{})
+  state,m,item=self.fixture();item['provenance']['verified_author_receipt']={**item['provenance']['verified_author_receipt'],'response_sha256':'changed'};self.assertEqual(identity_version_for(state,m,item),{})
+  state,m,item=self.fixture();state['identity_fact_versions']['resource']['facts'][0]['quote']='invented';self.assertEqual(identity_version_for(state,m,item),{})
+  state,m,item=self.fixture();state['identity_fact_versions']['resource']['event_bases']=[];self.assertEqual(identity_version_for(state,m,item),{})

@@ -421,9 +421,25 @@ class OperationalTests(unittest.TestCase):
             self.assertEqual(png, capture.capture_interactive_png(grant.token))
         self.assertEqual("/usr/sbin/screencapture", run.call_args.args[0][0])
         self.assertEqual(["-i", "-s", "-o", "-x", "-t", "png"], run.call_args.args[0][1:-1])
-        self.assertEqual({"check": False, "capture_output": True, "timeout": 120}, run.call_args.kwargs)
+        self.assertEqual({"check": False, "capture_output": True, "timeout": 30}, run.call_args.kwargs)
         self.assertIsNotNone(captured_path)
         self.assertFalse(captured_path.exists())
+        with self.assertRaises(PermissionError):
+            capture.capture_interactive_png(grant.token)
+
+    def test_one_shot_timeout_cleans_partial_pixels_and_consumes_grant(self):
+        import subprocess
+        capture = OneShotScreenCapture()
+        grant = capture.grant_once("synthetic timeout")
+        paths = []
+        def stalled(command, **kwargs):
+            path = Path(command[-1]); paths.append(path)
+            path.write_bytes(b"partial synthetic image")
+            raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+        with patch("hermes_attention.screen.subprocess.run", side_effect=stalled):
+            with self.assertRaisesRegex(RuntimeError, "timed out"):
+                capture.capture_interactive_png(grant.token)
+        self.assertFalse(paths[0].parent.exists())
         with self.assertRaises(PermissionError):
             capture.capture_interactive_png(grant.token)
 

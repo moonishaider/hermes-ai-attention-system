@@ -39,6 +39,8 @@ class OneShotScreenCapture:
         # macOS 26 no longer streams interactive captures to ``-`` or
         # ``/dev/stdout``. Use one owner-only random temporary directory,
         # read the selected PNG once, and guarantee removal before returning.
+        # Finish picker cancellation and temporary cleanup before the native
+        # adapter watchdog; otherwise killing Python leaves the OS picker orphaned.
         with tempfile.TemporaryDirectory(prefix="hermes-screen-") as temp_dir:
             os.chmod(temp_dir, 0o700)
             capture_path = Path(temp_dir) / "one-shot.png"
@@ -48,7 +50,7 @@ class OneShotScreenCapture:
                         "/usr/sbin/screencapture", "-i", "-s", "-o", "-x",
                         "-t", "png", str(capture_path),
                     ],
-                    check=False, capture_output=True, timeout=120,
+                    check=False, capture_output=True, timeout=30,
                 )
             except subprocess.TimeoutExpired as exc:
                 raise RuntimeError("interactive capture timed out without a selection") from exc

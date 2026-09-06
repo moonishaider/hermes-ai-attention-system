@@ -23,10 +23,10 @@ def handle(value):
         turn=value.get('turnId')
         frozen=runtime.freeze(session_id,turn)
         if operation=='freeze-turn':return {'ok':True,'attachmentIds':frozen['attachment_ids']}
-        runtime.issue(stage,session_id,turn)
+        runtime.issue(stage,session_id,turn,stage_kind=value.get("stageKind","primary"))
         identities=set(frozen['attachment_ids']+frozen['generated_ids'])
         records=[r for r in runtime.documents.list(session_id) if r['id'] in identities]
-        return {'ok':True,'attachments':[{'id':r['id'],'name':r['display_name'],'status':r['extraction_status'],'version':r['version']} for r in records]}
+        return {'ok':True,'attachments':[{'id':r['id'],'name':r['display_name'],'status':r['extraction_status'],'version':r['version'],'parent_id':r.get('parent_id'),'source':r['source'],'mime_type':r['mime']} for r in records]}
     request={**value,'conversation_id':session_id,'attachment_id':value.get('id','')}
     if operation=='list': request['include_forgotten']=True  # owner metadata view only; model runtime list stays active-only
     if operation=='ingest_file': request['operation']='ingest_path'
@@ -58,7 +58,11 @@ def handle(value):
             if record.get('retention_state')!='active':
                 record['preview']='';record['citations']=[]
         generated=[r for r in records if r.get('source')=='generated-fixed-operation' and r.get('retention_state')=='active']
-        return {'ok':True,'data':records,'artifacts':[{'artifact_id':r['attachment_id'],'display_name':r['display_name'],'mime_type':r['mime_type'],'version':r['version'],'status':r['status']} for r in generated]}
+        latest={}
+        for item in generated:
+            root=item.get('artifact_root_id',item['attachment_id'])
+            if root not in latest or item['version']>latest[root]['version']:latest[root]=item
+        return {'ok':True,'data':records,'artifacts':[{'artifact_id':r['attachment_id'],'display_name':r['display_name'],'mime_type':r['mime_type'],'version':r['version'],'status':r['status'],'parent_id':r.get('parent_id'),'artifact_root_id':r.get('artifact_root_id',r['attachment_id']),'review_status':r.get('review_status','not_reviewed'),'source_ids':r.get('source_ids',[]),'is_latest':latest[r.get('artifact_root_id',r['attachment_id'])]['attachment_id']==r['attachment_id']} for r in generated]}
     return {'ok':True,**result.get('attachment',result)}
 
 def main():

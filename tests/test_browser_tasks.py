@@ -66,3 +66,30 @@ class BrowserTests(unittest.TestCase):
         with self.assertRaises(PermissionError):self.browser.prepare_field(grant['grant_id'],{'pid':42,'window_id':7,'tab_id':'opaque'},ref='password',text='secret')
         self.assertEqual(self.native.calls,[])
 if __name__=='__main__':unittest.main()
+
+
+class NativeWindowInventoryTest(unittest.TestCase):
+    def test_inventory_retains_other_spaces_without_generic_actions(self):
+        import sys
+        from unittest.mock import Mock
+        sys.path.append(str(Path.home()/'.hermes/hermes-agent'))
+        from hermes_attention.browser_tasks import NativeCUAAdapter
+        backend=Mock();backend._session_id='resolved-driver-session';backend._call_capture_tool.return_value={'data':{'windows':[
+            {'pid':10,'window_id':20,'app_name':'Google Chrome','title':'Personal task','is_on_screen':False,'z_index':1},
+            {'pid':10,'window_id':21,'app_name':'Google Chrome','title':'Current Space','is_on_screen':True,'z_index':2},
+            {'pid':None,'window_id':5}]}}
+        with patch('tools.computer_use.tool._get_backend',return_value=backend),patch('tools.computer_use.tool.handle_computer_use') as generic:
+            result=NativeCUAAdapter(session_id='exact-inventory')._call('list_windows')
+        backend._call_capture_tool.assert_called_once_with('list_windows',{'on_screen_only':False,'session':'resolved-driver-session'})
+        generic.assert_not_called();self.assertEqual([w['window_id'] for w in result['windows']],[21,20]);self.assertTrue(result['windows'][1]['off_screen'])
+    def test_inventory_error_never_falls_back_or_accepts_authority(self):
+        import sys
+        from unittest.mock import Mock
+        sys.path.append(str(Path.home()/'.hermes/hermes-agent'))
+        from hermes_attention.browser_tasks import NativeCUAAdapter
+        backend=Mock();backend._session_id='resolved-error-session';backend._call_capture_tool.return_value={'isError':True,'data':'refused'}
+        adapter=NativeCUAAdapter(session_id='exact-inventory-error')
+        with patch('tools.computer_use.tool._get_backend',return_value=backend),patch('tools.computer_use.tool.handle_computer_use') as generic:
+            with self.assertRaises(RuntimeError):adapter._call('list_windows')
+            with self.assertRaises(PermissionError):adapter._call('list_windows',on_screen_only=True)
+        generic.assert_not_called();self.assertEqual(backend._call_capture_tool.call_count,1)

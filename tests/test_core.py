@@ -195,6 +195,19 @@ class CoreTests(unittest.TestCase):
         queue = AttentionEngine(self.store).queue(context_id="personal")
         self.assertEqual("t1", queue[0]["task_id"])
 
+    def test_chat_queue_preserves_confirmed_work_and_today_snooze_policy(self):
+        from hermes_attention.attention import AttentionEngine
+        from hermes_attention.awareness_workspace import AwarenessWorkspace
+        for identity, context, status in (("personal", "personal", "open"), ("work", "inside-success", "confirmed"), ("progress", "inside-success", "in-progress"), ("dormant", "mitchell", "open"), ("finished", "personal", "done")):
+            self.store.upsert_task(TaskRecord(identity, identity, context, "task", status=status))
+        workspace = AwarenessWorkspace(self.store)
+        personal = workspace._task("personal")
+        workspace.transition({"taskId":"personal", "expectedVersion":personal["version"], "action":"snooze", "until":(datetime.now(UTC)+timedelta(hours=1)).isoformat()})
+        queue = AttentionEngine(self.store).queue()
+        self.assertEqual({"work", "progress"}, {task["task_id"] for task in queue})
+        self.assertTrue(all(task["context_id"] == "inside-success" for task in queue))
+        self.assertEqual([], AttentionEngine(self.store).queue(context_id="personal"))
+
 
 if __name__ == "__main__":
     unittest.main()

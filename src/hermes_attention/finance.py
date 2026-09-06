@@ -233,17 +233,22 @@ class FinanceWorkspace:
         _identifier(conversation_id)
         return self._read()['workspaces'].get(conversation_id,{'revisions':[]})
 
-    def deliver(self,conversation_id, *, reconciliation, title='Financial record reconciliation',source_ids=()):
+    def deliver(self,conversation_id, *, reconciliation, title='Financial record reconciliation',source_ids=(),parent_ids=None,turn_id='',review_status='not_reviewed'):
         rows=[[c,k.replace('_',' ').capitalize(),Decimal(v)] for c,values in reconciliation['totals_by_currency'].items() for k,v in values.items()]
         summary={'name':'Summary','headers':['Currency','Category','Amount'],'rows':rows}
         transactions={'name':'Transactions','headers':['Date','Account','Currency','Amount','Category','Description','Source','Row'],'rows':[[r['date'],r['account'],r['currency'],amount(r['amount']),r.get('effective_category',r['category']),r['description'],r['source'],r['source_row']] for r in reconciliation['transactions']]}
         sections=[{'heading':'Amount direction and refund interpretation','text':'All amounts are signed from the account holder perspective: receipts positive, payments negative. Customer refunds paid out are negative; expense refunds received are positive. Generic refund labels remain uncertain. Net cash flow is not taxable income. Values exceeding Excel numeric precision are preserved as exact decimal text.'},{'heading':'Reporting period','text':f"{reconciliation['period']['start']} through {reconciliation['period']['end']}. Amounts remain separated by currency. Transfers are excluded from income. This is preparation from supplied records, not a tax assessment."},{'heading':'Missing evidence and decisions','text':'\n'.join(reconciliation['questions']) or 'No unresolved item detected in supplied records; complete account coverage still requires confirmation.'},{'heading':'Reconciliation controls','text':f"{len(reconciliation['duplicates'])} stable-identity duplicates removed; {len(reconciliation['matched_transfers'])} transfer pairs matched. Expected account coverage is {'complete' if reconciliation['coverage_complete'] else 'incomplete or not established'}."}]
         mappings=list(dict.fromkeys(f"{r['source']} {r['source_row']}" for r in reconciliation['transactions']))
         sections.append({'heading':'Evidence mapping','text':'\n'.join(mappings[:100]) + ('\nAdditional source rows are listed in the accompanying workbook.' if len(mappings)>100 else '')})
+        parent_ids=parent_ids or {}
+        if not isinstance(parent_ids,dict) or set(parent_ids)-{'xlsx','csv','docx','pdf'}:raise ValueError('Use explicit parent IDs keyed by output format')
+        for fmt,identity in parent_ids.items():
+            parent=self.documents.get(identity,conversation_id)
+            if parent['source']!='generated-fixed-operation' or not parent['storage_name'].endswith('.'+fmt):raise ValueError('Revision parent format differs')
         outputs=[]
         for fmt in ('xlsx','csv','docx','pdf'):
             tables=[summary,transactions] if fmt=='xlsx' else [transactions] if fmt=='csv' else [summary]
-            outputs.append(self.documents.generate(conversation_id=conversation_id,format=fmt,title=title,sections=sections,tables=tables,source_ids=source_ids))
+            outputs.append(self.documents.generate(conversation_id=conversation_id,format=fmt,title=title,sections=sections,tables=tables,source_ids=source_ids,parent_id=parent_ids.get(fmt),turn_id=turn_id,review_status=review_status))
         return outputs
 
 

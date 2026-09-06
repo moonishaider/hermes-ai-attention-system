@@ -41,3 +41,19 @@ it('creates an explicitly scoped project and reuses its request ID after setup f
  expect(requests).toHaveLength(2);expect(requests[0].requestId).toBe(requests[1].requestId);expect(requests[0].context).toBe('personal');
  expect((screen.getByLabelText('Active project') as HTMLSelectElement).value).toBe('new-project');
 });
+
+it('lets an unclassified project retain unknown context explicitly',async()=>{
+ vi.mocked(invoke).mockImplementation(async(_command,args)=>{
+  const value=args as {operation:string;request:Record<string,unknown>};
+  if(value.operation==='awareness.project.create')return {project:{project_id:'unknown-project',name:'Unclassified follow-ups'},projectId:'unknown-project',created:true};
+  return {tasks:[],sources:[],collections:[]};
+ });
+ render(<AwarenessWorkspace context="unknown" view="Projects" onAsk={vi.fn()} onOpen={vi.fn()}/>);
+ fireEvent.change(screen.getByLabelText('Project name'),{target:{value:'Unclassified follow-ups'}});
+ fireEvent.change(screen.getByLabelText('Project objective'),{target:{value:'Preserve the source context'}});
+ fireEvent.change(screen.getByLabelText('Project context'),{target:{value:'unknown'}});
+ fireEvent.click(screen.getByRole('button',{name:'Create project'}));
+ await screen.findByText(/Project saved in unknown/);
+ const call=vi.mocked(invoke).mock.calls.find(([,args])=>(args as {operation:string}).operation==='awareness.project.create');
+ expect(call?.[1]).toMatchObject({request:{context:'unknown'}});
+});

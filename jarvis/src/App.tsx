@@ -1,3 +1,4 @@
+import { TaskReminders } from './TaskReminders';
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "./transport";
 import { listen } from "./transport";
@@ -1573,6 +1574,7 @@ function App() {
         </select></label>}</div></div>
       </header>
 
+      <TaskReminders context={context} duringChat={active === 'Chat'} query={active === 'Chat' ? [...conversationContent].reverse().find(item => item.role === 'user')?.content ?? '' : ''}/>
       {workspaceNotice && <p className="workspace-notice" role="status">{workspaceNotice}<button className="quiet" onClick={() => setWorkspaceNotice("")}>Dismiss update</button></p>}
       {active === "Settings" && <OptionalAccess/>}
       <WakeControl visible={active === "Settings"} occupied={recording || busy || speechStatus === "speaking"} onWake={toggleVoice}/>
@@ -1670,7 +1672,7 @@ function App() {
         }}>
           {conversationContent.length > 0 && <div className="message-stream">{conversationContent.map((item) => { const content = item.content ?? ""; const cards = sourceCards(content); const persistedProgress = item.display_metadata?.progress ?? []; return <article className={`message ${item.role}`} key={String(item.id)}>
             <small>{item.role === "user" ? "You" : "Jarvis"}{(item.display_metadata?.partial || ["cancelled", "failed", "interrupted"].includes(item.display_metadata?.status ?? "")) && " · incomplete draft"}</small><div className="message-copy">{withoutRawSourceUrls(content)}</div>{item.display_metadata?.action_receipt?.undoAvailable && item.display_metadata.action_receipt.result?.provider_id && <button className="quiet" disabled={busy || attachmentsPending} onClick={() => void undoSemanticReceipt(item.display_metadata!.action_receipt!)}>Undo this exact calendar change</button>}
-            {cards.length > 0 && <div className="source-cards" aria-label="Answer sources">{cards.map((card) => <article className="source-card" key={card.url}><span><strong>{card.label}</strong><small>{card.host} · {sourceEvidenceStatus.get(card.url) ?? `${item.display_metadata?.context ?? contextLabel} · cited · freshness unknown`}</small></span>{card.openable ? <button className="quiet" onClick={() => void openEvidenceSource(card.url)}>Open source</button> : <span className="pill" title="This host is not in Jarvis's reviewed source-opening allowlist">View in bounded research</span>}</article>)}</div>}
+            {cards.length > 0 && <div className="source-cards" aria-label="Answer sources">{cards.map((card) => <article className="source-card" key={card.url}><span><strong>{card.label}</strong><small>{card.host} · {sourceEvidenceStatus.get(card.url) ?? 'cited · source context and freshness unverified'}</small></span>{card.openable ? <button className="quiet" onClick={() => void openEvidenceSource(card.url)}>Open source</button> : <span className="pill" title="This host is not in Jarvis's reviewed source-opening allowlist">View in bounded research</span>}</article>)}</div>}
             {persistedProgress.length > 0 && <details className="message-progress"><summary>Source progress · {persistedProgress.length} step(s)</summary>{persistedProgress.map((line) => <p key={line}>{line}</p>)}</details>}
           </article>; })}</div>}
           {technicalMessages.length > 0 && <details className="technical-details"><summary>Technical details · {technicalMessages.length} tool event(s)</summary>{technicalMessages.map((item) => <pre key={String(item.id)}>{item.tool_name ? `${item.tool_name}\n` : ""}{item.content}</pre>)}</details>}

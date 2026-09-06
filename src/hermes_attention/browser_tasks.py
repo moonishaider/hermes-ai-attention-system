@@ -65,6 +65,22 @@ class NativeCUAAdapter:
     """Actual installed Hermes namespaced computer-use API; no daemon mode changes."""
     def __init__(self,*,session_id,network_guard=None):self.session_id=session_id;self.network_guard=network_guard
     def _call(self,action,**args):
+        if action=='list_windows':
+            if args:raise PermissionError('Window inventory accepts no caller options')
+            # The pinned Hermes wrapper hides other macOS Spaces. Inventory must
+            # retain those observed targets without focusing or reading a page.
+            import threading
+            from tools.computer_use import tool
+            from tools.computer_use.cua_backend import _windows_from_tool_result,_ingest_windows
+            backend=tool._get_backend(session_id=self.session_id)
+            with tool._backend_lock:
+                lock=tool._backend_call_locks.setdefault(self.session_id,threading.RLock())
+            with lock:
+                value=backend._call_capture_tool('list_windows',{'on_screen_only':False,'session':backend._session_id})
+            if value.get('isError') or value.get('error') or value.get('success') is False:raise RuntimeError('Native window inventory refused')
+            windows=_ingest_windows(_windows_from_tool_result(value))
+            windows.sort(key=lambda window:window['z_index'],reverse=True)
+            return {'windows':windows,'count':len(windows)}
         from tools.computer_use.tool import handle_computer_use
         value=handle_computer_use({'action':action,**args},session_id=self.session_id)
         value=json.loads(value) if isinstance(value,str) else value

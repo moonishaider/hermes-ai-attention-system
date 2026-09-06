@@ -28,7 +28,11 @@ def main() -> int:
         parser.error("prompt must contain 1 to 500 characters")
     capture = OneShotScreenCapture()
     grant = capture.grant_once(args.prompt)
-    png = capture.capture_interactive_png(grant.token)
+    try:
+        png = capture.capture_interactive_png(grant.token)
+    except RuntimeError as error:
+        print(json.dumps({"ok": False, "message": str(error), "pixelsRetained": False, "continuousCapture": False}))
+        return 1
     image_hash = sha256(png).hexdigest()
     data_url = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
     service = AttentionService()

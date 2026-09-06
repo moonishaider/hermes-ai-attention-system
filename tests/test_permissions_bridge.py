@@ -111,4 +111,34 @@ class BridgeTests(unittest.TestCase):
         adapter._call=call
         value=adapter.state(pid=1,window_id=2,tab_id='minted')
         self.assertEqual(calls,[{'pid':1,'window_id':2},{'tab_id':'minted'}]);self.assertIn('r1',value['refs'])
+    def test_consent_required_window_needs_native_nonce_before_task_scoped_launch(self):
+        from unittest.mock import patch
+        class ConsentNative:
+            title='Exact personal window'
+            state_targets=[]
+            def __init__(self,**kw):pass
+            def _call(self,action,**kw):
+                assert action=='list_windows'
+                return {'windows':[{'app_name':'Google Chrome','pid':10,'window_id':20,'title':self.title},{'app_name':'Google Chrome','pid':10,'window_id':21,'title':'Unrelated window'},{'app_name':'Google Chrome','pid':11,'window_id':20,'title':'Other process'}]}
+            def state(self,**kw):
+                self.state_targets.append(kw)
+                return {'status':'refused','refusal':{'code':'browser_consent_required'}}
+        profile={'id':'personal','label':'Personal','context_id':'personal','account_id':'owner@example.invalid','profile':'Default','app':'Google Chrome','profile_marker':'Personal','account_marker':'owner@example.invalid'}
+        p=self.root/'browser-profiles.json';p.write_text(json.dumps({'profiles':[profile]}));p.chmod(0o600)
+        self.bridge.native_factory=ConsentNative
+        grant=self.bridge.management('issue',{'title':'Synthetic task','context_id':'personal','account_id':profile['account_id'],'profile':'Default','apps':['Google Chrome'],'domains':['example.com'],'resources':['native:10:20'],'operations':['browser.read']})
+        with patch('hermes_attention.scoped_browser.launch',return_value={'scopeId':'a'*32,'result':{'status':'ok'}}) as launch:
+            targets=self.bridge.management('browser_targets',{'grantId':grant['grant_id']})
+            self.assertEqual(ConsentNative.state_targets,[{'pid':10,'window_id':20}])
+            self.assertEqual(len(targets['data']),1);self.assertIn('not inspected',targets['data'][0]['label']);launch.assert_not_called()
+            request={'sessionId':'owner1','grantId':grant['grant_id'],'targetId':targets['data'][0]['targetId']}
+            prepared=self.bridge.management('prepare-selection',request);self.assertIn('remote debugging',prepared['confirmationText']);self.assertIn('example.com',prepared['confirmationText']);launch.assert_not_called()
+            ConsentNative.title='Different window'
+            with self.assertRaises(PermissionError):self.bridge.management('commit-selection',{'nonce':prepared['nonce']})
+            launch.assert_not_called();ConsentNative.title='Exact personal window'
+            result=self.bridge.management('commit-selection',{'nonce':prepared['nonce']});self.assertEqual(result['status'],'setup-complete');self.assertFalse(result['bound']);self.assertEqual(launch.call_count,1)
+            with self.assertRaises(PermissionError):self.bridge.management('commit-selection',{'nonce':prepared['nonce']})
+            self.assertEqual(launch.call_count,1)
+        with patch('hermes_attention.scoped_browser.stop_scopes',return_value=[]) as stop:
+            self.bridge.management('stop',{'capability':'browser.read'});stop.assert_called_once_with(self.bridge.root)
 if __name__=='__main__':unittest.main()

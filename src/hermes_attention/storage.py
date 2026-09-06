@@ -594,7 +594,7 @@ class Store:
                 ),
             )
 
-    def list_tasks(self, *, context_id: str | None = None, statuses: tuple[str, ...] = ("triage", "open", "blocked")) -> list[dict[str, Any]]:
+    def list_tasks(self, *, context_id: str | None = None, statuses: tuple[str, ...] = ("triage", "open", "confirmed", "in-progress", "blocked")) -> list[dict[str, Any]]:
         placeholders = ",".join("?" for _ in statuses)
         parameters: list[Any] = list(statuses)
         query = f"SELECT * FROM tasks WHERE status IN ({placeholders})"

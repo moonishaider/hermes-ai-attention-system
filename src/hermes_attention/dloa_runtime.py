@@ -406,14 +406,16 @@ class DloaCoordinator:
             response=generate(prompt)
             if not response.get('success'):raise RuntimeError('DLOA synthesis did not return a complete model result')
             selected=json.loads(response['text'].strip().removeprefix('```json').removesuffix('```'))
-            from .dloa_report import review_rewrites,normalize_placement
+            from .dloa_report import review_rewrites,normalize_placement,validate_presentation
             selected,placement_audit=normalize_placement(selected,selection_state,manifest)
             with _locked(self.workspace.root):
                 state=self.workspace._read();state['synthesis_attempts'][key]['placement_normalization']=placement_audit;self.workspace._save(state)
             rewrites,style_review=review_rewrites(self.workspace,key,selected,selection_state,manifest,review,cancelled=cancelled)
             rendered=render_selection(selected,selection_state,manifest,rewrites)
+            presentation=validate_presentation(selected,selection_state,manifest,rewrites,binding['owner_request'])
+            if presentation['issues']:rendered+='\nPresentation requirement not met: '+' '.join(presentation['issues'])+' No work was invented or duplicated to fill the requested count; this draft needs a presentation correction.'
             if style_review['status'] not in {'not_requested','unchanged'}:rendered+='\n'+style_review['message']
-            result={'status':'completed','text':rendered,'selectionProvenance':selected,'placementNormalization':placement_audit,'styleReview':style_review,'usage':({'input_tokens':response.get('input_tokens'),'output_tokens':response.get('output_tokens')} if response.get('usage_known') else response.get('usage')),'usageKnown':response.get('usage_known',bool(response.get('usage'))),'model':response.get('model'),'costUsd':response.get('estimated_cost_usd'),'timings':{'synthesisLatencyMs':response.get('latency_ms')},'sourceStatus':final_packet['source_status'],'manifestId':manifest_id,'claimValidation':'draft; report prose not independently validated','cacheHit':False,'extractionLedger':packet.get('extraction_ledger',[]),'extractionUsage':packet.get('extraction_usage',[]),'allRetainedChunksProcessed':packet.get('all_retained_chunks_processed',not packet.get('omitted_evidence_ids'))}
+            result={'status':'completed','text':rendered,'selectionProvenance':selected,'presentationValidation':presentation,'placementNormalization':placement_audit,'styleReview':style_review,'usage':({'input_tokens':response.get('input_tokens'),'output_tokens':response.get('output_tokens')} if response.get('usage_known') else response.get('usage')),'usageKnown':response.get('usage_known',bool(response.get('usage'))),'model':response.get('model'),'costUsd':response.get('estimated_cost_usd'),'timings':{'synthesisLatencyMs':response.get('latency_ms')},'sourceStatus':final_packet['source_status'],'manifestId':manifest_id,'claimValidation':'draft; report prose not independently validated','cacheHit':False,'extractionLedger':packet.get('extraction_ledger',[]),'extractionUsage':packet.get('extraction_usage',[]),'allRetainedChunksProcessed':packet.get('all_retained_chunks_processed',not packet.get('omitted_evidence_ids'))}
             from .dloa_synthesis import current_turn_usage
             result.update(current_turn_usage(self.workspace,key,response))
             with _locked(self.workspace.root):

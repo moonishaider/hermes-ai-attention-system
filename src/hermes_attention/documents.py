@@ -151,7 +151,7 @@ class DocumentWorkspace:
             data = stream.read(MAX_BYTES + 1)
         return self.ingest_bytes(data, name=path.name, conversation_id=conversation_id, turn_id=turn_id, retention=retention, source=source, parent_id=parent_id)
 
-    def ingest_bytes(self, data, *, name, conversation_id, turn_id='', retention='conversation', source='attachment', parent_id=None):
+    def ingest_bytes(self, data, *, name, conversation_id, turn_id='', retention='conversation', source='attachment', parent_id=None, source_ids=(), review_status='not_reviewed'):
         _identifier(conversation_id)
         if turn_id:
             _identifier(turn_id)
@@ -169,10 +169,20 @@ class DocumentWorkspace:
         with _locked(self.root):
             manifest = self._read()
             parent = self.get(parent_id, conversation_id) if parent_id else None
+            if review_status not in {'not_reviewed','reviewer_output'}:
+                raise ValueError('Invalid document review status')
+            if source == 'generated-fixed-operation' and parent and (parent['source'] != source or parent['mime'] != TYPES[extension]):
+                raise ValueError('A generated revision requires an exact generated parent of the same format')
+            inherited_sources = list(dict.fromkeys([*(parent or {}).get('source_ids', []), *source_ids]))
+            for identity in inherited_sources:
+                self.get(identity, conversation_id)
             document_id = 'doc_' + uuid.uuid4().hex
             storage_name = document_id + extension
             _private_write(self.root / storage_name, data)
             record = {'id': document_id, 'original_name':name, 'display_name':name, 'mime':TYPES[extension], 'sha256':digest, 'bytes':len(data), 'source':source, 'conversation_id':conversation_id, 'turn_id':turn_id, 'version':parent['version'] + 1 if parent else 1, 'parent_id':parent_id, 'retention':retention, 'retention_state':'active', 'storage_name':storage_name, 'created_at':_now(), 'expires_at':(datetime.now(timezone.utc)+timedelta(minutes=15)).isoformat() if retention=='ephemeral' else None, 'extraction_status':'pending', 'warnings':[], 'authority':'untrusted-source-data'}
+            record.update(artifact_root_id=(parent or {}).get('artifact_root_id', (parent or {}).get('id', document_id)), source_ids=inherited_sources, review_status=review_status)
+            if parent:
+                record['version']=1+max(r['version'] for r in manifest['documents'].values() if r.get('artifact_root_id',r['id'])==record['artifact_root_id'])
             manifest['documents'][document_id] = record
             self._save(manifest)
         return self.extract(document_id, conversation_id)
@@ -345,7 +355,7 @@ class DocumentWorkspace:
             self._save(manifest)
             return record
 
-    def generate(self, *, conversation_id, format, title, sections=(), tables=(), source_ids=(), parent_id=None, turn_id=''):
+    def generate(self, *, conversation_id, format, title, sections=(), tables=(), source_ids=(), parent_id=None, turn_id='', review_status='not_reviewed'):
         """Tables: {name, headers, rows}. Cell values are data; formulas are not accepted."""
         if format not in {'txt','md','csv','xlsx','docx','pdf'}:
             raise ValueError('Unsupported output format')
@@ -353,6 +363,8 @@ class DocumentWorkspace:
             raise ValueError('A document title is required')
         if len(str(title)) > 200 or len(json.dumps([sections, tables], default=str)) > MAX_TEXT:
             raise ValueError('Output limit exceeded')
+        parent = self.get(parent_id, conversation_id) if parent_id else None
+        source_ids = list(dict.fromkeys([*(parent or {}).get('source_ids', []), *source_ids]))
         sources = [self.get(i, conversation_id) for i in source_ids]
         sections = list(sections) + ([{'heading':'Sources', 'text':'\n'.join(f"{s['display_name']} | {s['id']} | SHA256 {s['sha256']}" for s in sources)}] if sources else [])
         for table in tables:
@@ -438,7 +450,7 @@ class DocumentWorkspace:
                 grid.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#e9f1f5')),('VALIGN',(0,0),(-1,-1),'TOP'),('BOTTOMPADDING',(0,0),(-1,-1),6)])); story.append(grid)
             SimpleDocTemplate(out, leftMargin=72,rightMargin=72).build(story)
         name = re.sub(r'[^\w .-]', '_', title)[:120].strip(' .') or 'Report'
-        return self.ingest_bytes(out.getvalue(),name=name+'.'+format,conversation_id=conversation_id,turn_id=turn_id,source='generated-fixed-operation',parent_id=parent_id)
+        return self.ingest_bytes(out.getvalue(),name=name+'.'+format,conversation_id=conversation_id,turn_id=turn_id,source='generated-fixed-operation',parent_id=parent_id,source_ids=source_ids,review_status=review_status)
 
 
 def _spreadsheet_text(value):
