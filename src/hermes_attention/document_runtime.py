@@ -50,20 +50,21 @@ class DocumentRuntime:
                 self._save(state)
             return dict(turns[key])
 
-    def issue(self,stage_session_id,conversation_id,turn_id, *, ttl_seconds=3600):
+    def issue(self,stage_session_id,conversation_id,turn_id, *, ttl_seconds=3600, stage_kind="primary"):
         """Native-only. Canonical conversation ownership must already be verified."""
         for value in (stage_session_id,conversation_id,turn_id): _identifier(value)
+        if stage_kind not in {'primary','review'}: raise ValueError('Invalid native document stage')
         if not 1<=ttl_seconds<=7200: raise ValueError('Document grant lifetime is bounded to two hours')
         with _locked(self.root):
             state=self._read(); prior=state['envelopes'].get(stage_session_id)
             if prior:
-                if prior['conversation_id']!=conversation_id or prior['turn_id']!=turn_id or prior['revoked']:
+                if prior['conversation_id']!=conversation_id or prior['turn_id']!=turn_id or prior['revoked'] or prior.get('stage_kind','primary') != stage_kind:
                     raise ValueError('Stage identity cannot be rebound or silently reactivated')
                 return {k:v for k,v in prior.items() if k!='attachment_ids'}
             frozen=self.freeze(conversation_id,turn_id)
             state=self._read()
             identities=list(dict.fromkeys(frozen['attachment_ids']+frozen['generated_ids']))
-            envelope={'stage_session_id':stage_session_id,'conversation_id':conversation_id,'turn_id':turn_id,'attachment_ids':identities,'issued_at':_now().isoformat(),'expires_at':(_now()+timedelta(seconds=ttl_seconds)).isoformat(),'revoked':False,'operations':['list','read','ocr','vision','generate','finance_parse','finance_reconcile','finance_update','finance_get','finance_deliver','tax_prepare'],'receipts':[]}
+            envelope={'stage_kind':stage_kind,'stage_session_id':stage_session_id,'conversation_id':conversation_id,'turn_id':turn_id,'attachment_ids':identities,'issued_at':_now().isoformat(),'expires_at':(_now()+timedelta(seconds=ttl_seconds)).isoformat(),'revoked':False,'operations':['list','read','ocr','vision','generate','finance_parse','finance_reconcile','finance_update','finance_get','finance_deliver','tax_prepare'],'receipts':[]}
             state['envelopes'][stage_session_id]=envelope; self._save(state)
             return {k:v for k,v in envelope.items() if k!='attachment_ids'}
 
@@ -163,7 +164,7 @@ class DocumentRuntime:
         envelope=self._binding()
         finance_inputs=None
         if operation not in envelope['operations']: raise ValueError('Operation is outside this task grant')
-        schemas={'list':set(),'read':{'attachment_id','cursor','max_characters','max_units'},'ocr':{'attachment_id','max_pages'},'vision':{'attachment_id','page','image_index','question'},'generate':{'format','title','sections','tables','source_ids','parent_id'},'finance_parse':{'attachment_id','mapping','account','currency'},'finance_reconcile':{'transactions','options'},'finance_update':{'transactions','options'},'finance_get':set(),'finance_deliver':{'reconciliation','title','source_ids'},'tax_prepare':{'reconciliation','options'}}
+        schemas={'list':set(),'read':{'attachment_id','cursor','max_characters','max_units'},'ocr':{'attachment_id','max_pages'},'vision':{'attachment_id','page','image_index','question'},'generate':{'format','title','sections','tables','source_ids','parent_id'},'finance_parse':{'attachment_id','mapping','account','currency'},'finance_reconcile':{'transactions','options'},'finance_update':{'transactions','options'},'finance_get':set(),'finance_deliver':{'reconciliation','title','source_ids','parent_ids'},'tax_prepare':{'reconciliation','options'}}
         if set(payload)-schemas[operation]: raise ValueError('Unsupported payload fields for '+operation+'. Allowed top-level fields: '+', '.join(sorted(schemas[operation]))+'. Task identity and paths cannot be supplied; tax preparation fields belong inside options.')
         conversation=envelope['conversation_id']
         if operation=='list':
@@ -203,7 +204,7 @@ class DocumentRuntime:
             source_ids=payload.get('source_ids',[])
             for identity in source_ids: self._record(envelope,identity)
             if payload.get('parent_id'): self._record(envelope,payload['parent_id'])
-            result=self.documents.generate(conversation_id=conversation,turn_id=envelope['turn_id'],**payload)
+            result=self.documents.generate(conversation_id=conversation,turn_id=envelope['turn_id'],review_status='reviewer_output' if envelope.get('stage_kind')=='review' else 'not_reviewed',**payload)
             for identity in source_ids: self._record(self._binding(),identity)
             return self._receipt(envelope,operation,{'attachment':attachment(result)},[result['id']])
         if operation=='finance_parse':
@@ -245,7 +246,10 @@ class DocumentRuntime:
             checked,inputs=self._retained_finance(envelope,payload.get('reconciliation',{}))
             grounding=self._ground_finance(envelope,inputs,checked['period'])
             payload={**payload,'reconciliation':self._grounded_summary(checked,grounding)}
-            files=finance.deliver(conversation,**payload)
+            parents=payload.get('parent_ids') or {}
+            if not isinstance(parents,dict):raise ValueError('Parent IDs must be keyed by format')
+            for identity in parents.values():self._record(envelope,identity)
+            files=finance.deliver(conversation,turn_id=envelope['turn_id'],review_status='reviewer_output' if envelope.get('stage_kind')=='review' else 'not_reviewed',**payload)
             return self._receipt(envelope,operation,{'attachments':[attachment(r) for r in files]},[r['id'] for r in files])
         else:
             for row in payload.get('reconciliation',{}).get('transactions',[]): self._record(envelope,row.get('source'))

@@ -17,6 +17,42 @@ class RuntimeDocumentTest(unittest.TestCase):
         self.runtime=DocumentRuntime(self.root,origin_resolver=lambda:'stage1')
         self.runtime.issue('stage1','c1','turn1')
 
+    def test_explicit_review_lineage_survives_reopen_and_never_matches_titles(self):
+        payload={'format':'txt','title':'Summary','sections':[{'text':'Source amount 120.50'}],'source_ids':[self.record['id']]}
+        first=self.runtime.dispatch('generate',payload)['attachment']
+        unrelated=self.runtime.dispatch('generate',payload)['attachment']
+        reviewer=DocumentRuntime(self.root,origin_resolver=lambda:'review-stage')
+        reviewer.issue('review-stage','c1','turn1',stage_kind='review')
+        second=reviewer.dispatch('generate',{'format':'txt','title':'Reviewed summary','parent_id':first['attachment_id'],'sections':[{'text':'Checked source amount 120.50'}]})['attachment']
+        reopened=DocumentWorkspace(self.root).get(second['attachment_id'],'c1')
+        self.assertEqual(reopened['parent_id'],first['attachment_id'])
+        self.assertEqual(reopened['artifact_root_id'],first['attachment_id'])
+        self.assertEqual(reopened['version'],2)
+        self.assertEqual(reopened['source_ids'],[self.record['id']])
+        self.assertEqual(reopened['review_status'],'reviewer_output')
+        self.assertEqual(unrelated['version'],1)
+        self.assertIsNone(unrelated['parent_id'])
+        self.assertEqual(self.docs.get(first['attachment_id'],'c1')['sha256'],first['sha256'])
+        with self.assertRaises(ValueError):
+            self.runtime.issue('stage1','c1','turn1',stage_kind='review')
+        with self.assertRaises(ValueError):
+            reviewer.dispatch('generate',{**payload,'parent_id':self.record['id']})
+        other=self.docs.generate(conversation_id='c2',format='txt',title='Summary')
+        with self.assertRaises(ValueError):
+            reviewer.dispatch('generate',{**payload,'parent_id':other['id']})
+        with self.assertRaises(ValueError):
+            reviewer.dispatch('generate',{**payload,'format':'md','parent_id':first['attachment_id']})
+
+    def test_generated_revision_formats_and_branch_versions_are_explicit(self):
+        for fmt in ('pdf','docx','xlsx'):
+            first=self.docs.generate(conversation_id='c1',format=fmt,title='Same title',sections=[{'text':'Synthetic revision source'}],source_ids=[self.record['id']])
+            second=self.docs.generate(conversation_id='c1',format=fmt,title='Same title',parent_id=first['id'],review_status='reviewer_output')
+            third=self.docs.generate(conversation_id='c1',format=fmt,title='Alternative revision',parent_id=first['id'])
+            self.assertEqual((second['version'],third['version']),(2,3))
+            self.assertEqual(third['parent_id'],first['id'])
+            self.assertEqual(third['source_ids'],[self.record['id']])
+            self.assertTrue(self.docs.path(first['id'],'c1').is_file())
+
     def test_delivery_preserves_proven_duplicate_and_outside_exclusions_for_twenty_rows(self):
         import copy
         headers='Date,Amount,Description,TransactionID\n'

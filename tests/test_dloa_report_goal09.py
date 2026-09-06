@@ -131,3 +131,34 @@ class ReportGroundingTest(unittest.TestCase):
   text=render_selection({'sections':[],'context_fact_ids':[]},state,m)
   self.assertIn('1 added, 2 changed, 1 not seen',text);self.assertIn('not proven new work',text);self.assertIn('not freshly confirmed',text)
   del m['previous_id'];self.assertNotIn('Refresh source-record changes',render_selection({'sections':[],'context_fact_ids':[]},state,m))
+
+class PresentationContractTest(unittest.TestCase):
+ def test_counts_exclusions_and_lossless_packet(self):
+  from hermes_attention.dloa_report import presentation_contract,validate_presentation,selection_packet
+  for request in ['Keep five owner bullets and two focused meeting context items, no prior background.', 'Use exactly 5 main bullet points; use 2 meeting context groups without prior-period background.']:
+   self.assertEqual(presentation_contract(request),{'owner_bullets':5,'context_bullets':2,'exclude_background':True})
+  self.assertEqual(presentation_contract('After refresh change the count to three owner bullets')['owner_bullets'],3)
+  self.assertEqual(presentation_contract('Keep five work-related communication bullets and two focused meeting context items'),{'owner_bullets':5,'context_bullets':2})
+  self.assertEqual(presentation_contract('Use 5 verified work related communication facts')['owner_facts'],5)
+  self.assertEqual(presentation_contract('Keep five verified communication facts and two focused meeting-context bullets; keep prior-period background out of the displayed report'),{'owner_facts':5,'context_bullets':2,'exclude_background':True})
+  state,m=ReportGroundingTest().fixture();entries=catalogue(state,m);ids=list(entries)
+  selected={'sections':[],'context_fact_ids':ids}
+  check=validate_presentation(selected,state,m,{},'Keep five owner bullets and no prior background')
+  self.assertEqual(check['status'],'not_met');self.assertEqual(len(check['issues']),2)
+  packet=selection_packet(state,m,'Keep two meeting context items')
+  for fact in packet['facts']:
+   expanded={**fact,**packet['source_records'][fact['source_ref']],'retained_quote':packet['source_quotes'][fact['quote_ref']]}
+   expanded.pop('source_ref');expanded.pop('quote_ref')
+   self.assertEqual(expanded,entries[fact['fact_id']])
+
+class RevisionHistoryHoldout(unittest.TestCase):
+ def test_prior_versions_remain_context_without_cross_conversation_leak(self):
+  from hermes_attention.dloa_report import selection_packet,presentation_contract
+  state,m=ReportGroundingTest().fixture()
+  m['conversation_id']='work-thread'
+  state['reports']={'earlier':{'id':'earlier','conversation_id':'work-thread','created_at':'1','version':4,'text':'Retained work communication\nSource coverage and limitations\nOld status'},'latest':{'id':'latest','conversation_id':'work-thread','created_at':'2','version':5,'text':'Latest'},'private':{'id':'private','conversation_id':'personal-thread','created_at':'3','text':'PRIVATE-HOLDOUT'}}
+  packet=selection_packet(state,m,'Restore five owner bullets; exclude prior-window background',state['reports']['latest'])
+  self.assertEqual([r['version'] for r in packet['revision_history']],[4])
+  self.assertNotIn('PRIVATE-HOLDOUT',json.dumps(packet))
+  self.assertNotIn('Old status',json.dumps(packet['revision_history']))
+  self.assertTrue(presentation_contract(packet['owner_request'])['exclude_background'])

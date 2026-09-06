@@ -17,6 +17,21 @@ class SynthesisTests(unittest.TestCase):
    facts=[{'text':'Delivered workbook','span_start':selected['span_id'],'span_end':selected['span_id'],'attribution':'owner'}] if selected else []
    rows.append({'evidence_id':i['evidence_id'],'facts':facts,'limitations':[]})
   return {'success':True,'text':json.dumps({'items':rows})}
+ def test_successful_extraction_retains_provider_cache_counts_in_aggregate(self):
+  from hermes_attention.dloa_synthesis import current_turn_usage
+  manifest={**self.manifest,'sources':[{'items':self.items[:1]}]}
+  def model(prompt):return {**self.model(prompt),'input_tokens':100,'output_tokens':20,'cached_input_tokens':10,'usage_known':True,'estimated_cost_usd':0.01}
+  result=evidence_packet(self.w,manifest,self.packet,model,origin_turn='cache-count')
+  if result['status']=='processing_pending':result=evidence_packet(self.w,manifest,self.packet,lambda _:self.fail('No re-extraction'),origin_turn='cache-count')
+  self.assertEqual(result['status'],'completed')
+  state=self.w._read();self.assertEqual(next(iter(state['extraction_attempts'].values()))['usage']['cached_input_tokens'],10)
+  state['style_review_attempts']={'cache-count':{'usage':{'input_tokens':20,'output_tokens':5,'cached_input_tokens':5,'usage_known':True,'estimated_cost_usd':0.001}}};self.w._save(state)
+  final={'input_tokens':30,'output_tokens':6,'cached_input_tokens':8,'usage_known':True,'estimated_cost_usd':0.002}
+  aggregate=current_turn_usage(self.w,'cache-count',final)
+  self.assertEqual(aggregate['usageBreakdown']['cached_input_tokens'],23)
+  self.assertEqual(aggregate['totalUsage']['input_tokens'],150)
+  self.assertIsNone(current_turn_usage(self.w,'cache-count',{**final,'cached_input_tokens':None})['usageBreakdown']['cached_input_tokens'])
+
  def test_whitespace_only_revalidation_is_atomic_exact_and_idempotent(self):
   from hermes_attention.dloa_synthesis import revalidate_extraction,_source_quote,_item_keys
   self.assertEqual(_source_quote('done today','work done\n  today.'),'done\n  today')

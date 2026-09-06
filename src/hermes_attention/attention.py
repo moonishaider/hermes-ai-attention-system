@@ -34,8 +34,11 @@ class AttentionEngine:
         return score
 
     def queue(self, *, context_id: str | None = None, limit: int = 10) -> list[dict[str, Any]]:
-        tasks = self.store.list_tasks(context_id=context_id)
-        ranked = [{**task, "score": self._score(task), "evidence_ids": json.loads(task["evidence_ids_json"])} for task in tasks]
+        # Chat and Today share active-status, snooze and dormant-context policy.
+        # Legacy confirmed obligations remain active until explicitly completed.
+        from .awareness_workspace import AwarenessWorkspace
+        tasks = AwarenessWorkspace(self.store).snapshot(context_id)["tasks"]
+        ranked = [{**task, "score": self._score(task), "evidence_ids_json": json.dumps(task["evidence_ids"])} for task in tasks]
         ranked.sort(key=lambda item: item["score"], reverse=True)
         return ranked[: max(1, min(limit, 25))]
 

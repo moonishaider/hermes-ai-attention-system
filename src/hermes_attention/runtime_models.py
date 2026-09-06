@@ -166,7 +166,7 @@ class DirectModelClient:
             provider=provider, model=spec["model"], feature=feature, context_id="synthetic" if feature.startswith("route-smoke") else None,
             input_tokens=input_tokens, output_tokens=output_tokens, cost_usd=cost, latency_ms=latency, success=success,
         )
-        return {**asdict(SmokeResult(route, provider, spec["model"], success, latency, input_tokens, output_tokens, cost, received, error_class)), "text": output_text, "model_attempt_id":attempt_id, "request_sha256":hashlib.sha256(json.dumps(body).encode()).hexdigest(), "prompt_sha256":hashlib.sha256(prompt.encode()).hexdigest(), "usage_known":usage_known, "estimated_cost_usd":cost if usage_known else None}
+        return {**asdict(SmokeResult(route, provider, spec["model"], success, latency, input_tokens, output_tokens, cost, received, error_class)), "text": output_text, "cached_input_tokens":cache_hit if ("prompt_cache_hit_tokens" in usage or "cached_tokens" in (usage.get("input_tokens_details") or usage.get("prompt_tokens_details") or {})) else None, "model_attempt_id":attempt_id, "request_sha256":hashlib.sha256(json.dumps(body).encode()).hexdigest(), "prompt_sha256":hashlib.sha256(prompt.encode()).hexdigest(), "usage_known":usage_known, "estimated_cost_usd":cost if usage_known else None}
 
     def smoke(self, route: str, *, image_data_url: str | None = None) -> dict[str, Any]:
         result = self.generate(

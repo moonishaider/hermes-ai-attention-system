@@ -31,6 +31,43 @@ class AwarenessRuntimeTest(unittest.TestCase):
   self.assertEqual(self.store.connection.execute('SELECT status FROM tasks').fetchone()[0],'open')
   with self.assertRaises(PermissionError):self.runtime.meeting_commit({**request,'confirmed':False})
   with self.assertRaises(PermissionError):self.runtime.meeting_commit({**request,'context':'personal'})
+ def test_source_linked_project_checkpoint_resume_and_followup(self):
+  analysis=self.runtime.meeting_analyze('meeting',self.hash)
+  project=self.runtime.workspace.project_create({'requestId':'source-linked-project','context':'inside-success','name':'Synthetic workbook','objective':'Review source-linked formulas','evidenceIds':['meeting']})['projectId']
+  request={'analysisId':analysis['analysisId'],'context':'inside-success','projectId':project,'confirmed':True,'selected':[{'candidateId':x['candidate_id'],'owner':'Sid' if x['kind']=='task' else 'Tyler'} for x in analysis['candidates']]}
+  self.runtime.meeting_commit(request);self.runtime.meeting_commit(request)
+  resumed=self.runtime.workspace.resume(project)
+  checkpoint=resumed['checkpoint']['state'];self.assertEqual(checkpoint['state'],'source-linked meeting checkpoint')
+  self.assertEqual(checkpoint['source']['source_timestamp'],'2026-09-04T15:00:00Z')
+  self.assertFalse(checkpoint['completed']);task=resumed['linked_tasks'][0]
+  self.assertEqual(task['owner'],'Sid');self.assertEqual(task['evidence_ids'],['meeting'])
+  self.runtime.workspace.transition({'taskId':task['task_id'],'expectedVersion':task['version'],'action':'done'})
+  current=self.runtime.workspace.resume(project)['linked_tasks'][0]
+  self.assertEqual(current['status'],'done');self.assertEqual(current['review']['completion'],'owner-confirmed')
+  self.assertEqual(self.runtime.workspace.resume(project)['checkpoint']['state'],checkpoint)
+  self.assertEqual(self.store.connection.execute("SELECT count(*) FROM project_snapshots WHERE snapshot_id LIKE 'meeting-checkpoint:%'").fetchone()[0],1)
+
+ def test_unknown_source_project_lifecycle_preserves_context_owner_and_evidence(self):
+  self.store.add_evidence(EvidenceItem('unknown-meeting','Unclassified synthetic transcript',self.content,Provenance('uploaded-transcript','owner-upload','unknown-fixture','2026-09-04T15:00:00Z','2026-09-05T18:00:00Z',account_id='owner'),(ContextLabel('unknown',1,'fixture','1'),)))
+  original=self.runtime.workspace.source('unknown-meeting')
+  analysis=self.runtime.meeting_analyze('unknown-meeting',original['content_hash'])
+  creation={'requestId':'unknown-source-project','context':'unknown','name':'Unclassified follow-ups','objective':'Review source without guessing company','evidenceIds':['unknown-meeting']}
+  project=self.runtime.workspace.project_create(creation)['projectId']
+  self.assertFalse(self.runtime.workspace.project_create(creation)['created'])
+  task_candidate=next(x for x in analysis['candidates'] if x['kind']=='task')
+  request={'analysisId':analysis['analysisId'],'context':'unknown','projectId':project,'confirmed':True,'selected':[{'candidateId':task_candidate['candidate_id'],'owner':'Sid'}]}
+  with self.assertRaises(PermissionError):self.runtime.meeting_commit({**request,'context':'inside-success'})
+  with self.assertRaisesRegex(ValueError,'context mismatch'):self.runtime.workspace.project_create({**creation,'requestId':'wrong-source-context','context':'personal'})
+  self.runtime.meeting_commit(request);self.runtime.meeting_commit(request)
+  resumed=self.runtime.workspace.resume(project);task=resumed['linked_tasks'][0];checkpoint=resumed['checkpoint']['state']
+  self.assertEqual(resumed['project']['context_id'],'unknown');self.assertEqual(task['context_id'],'unknown');self.assertEqual(task['owner'],'Sid');self.assertEqual(task['evidence_ids'],['unknown-meeting'])
+  self.assertEqual(checkpoint['source'],original);self.assertFalse(checkpoint['completed'])
+  self.runtime.workspace.transition({'taskId':task['task_id'],'expectedVersion':task['version'],'action':'done'})
+  reopened=AwarenessRuntime(self.service,clock=lambda:self.now).workspace.resume(project)
+  self.assertEqual(reopened['linked_tasks'][0]['status'],'done');self.assertEqual(reopened['linked_tasks'][0]['review']['completion'],'owner-confirmed')
+  self.assertEqual(reopened['checkpoint']['state'],checkpoint);self.assertEqual(self.runtime.workspace.source('unknown-meeting'),original)
+  self.assertEqual(self.store.connection.execute("SELECT count(*) FROM project_snapshots WHERE snapshot_id LIKE 'meeting-checkpoint:%'").fetchone()[0],1)
+
  def test_role_quote_contract_preserves_strict_attribution_guard(self):
   out=self.runtime.meeting_analyze('meeting',self.hash)
   self.assertIn('full transcript line including the speaker name',self.calls[0])

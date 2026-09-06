@@ -180,14 +180,14 @@ def evidence_packet(workspace,manifest,packet,model,*,cancelled=lambda:False,max
             value=json.loads(response['text'].strip().removeprefix('```json').removesuffix('```'))
             normalized=_validate_rows(value,batch,keys,span_mode=True)
             with _locked(workspace.root):
-                state=workspace._read();state.setdefault('extraction_cache',{}).update(normalized);state['extraction_attempts'][batch_key].update(status='completed',usage={'input_tokens':response.get('input_tokens'),'output_tokens':response.get('output_tokens'),'estimated_cost_usd':response.get('estimated_cost_usd'),'usage_known':response.get('usage_known',bool(response.get('usage')))});workspace._save(state)
+                state=workspace._read();state.setdefault('extraction_cache',{}).update(normalized);state['extraction_attempts'][batch_key].update(status='completed',usage={'input_tokens':response.get('input_tokens'),'output_tokens':response.get('output_tokens'),'cached_input_tokens':response.get('cached_input_tokens'),'estimated_cost_usd':response.get('estimated_cost_usd'),'usage_known':response.get('usage_known',bool(response.get('usage')))});workspace._save(state)
             processed_batches+=1
             if processed_batches>=max_batches:
                 completed=sum(keys[i['evidence_id']] in state['extraction_cache'] for i in items)
                 return {'status':'processing_pending','completedChunks':completed,'totalChunks':len(items),'remainingChunks':len(items)-completed,'progressToken':hashlib.sha256(json.dumps(sorted(k for k in keys.values() if k in state['extraction_cache'])).encode()).hexdigest(),'batchLimit':max_batches,'nextOperation':'synthesize','message':'Validated extraction saved; continue this exact turn to process remaining evidence or finalize.','maxModelCallsThisInvocation':1}
         except Exception as error:
             with _locked(workspace.root):
-                state=workspace._read();state['extraction_attempts'][batch_key].update(status='uncertain',error=type(error).__name__,failure_reason=str(error)[:300],model_error_class=(response or {}).get('error_class'),response_received=(response or {}).get('response_received'),failed_response_text=str((response or {}).get('text',''))[:100000],failed_response_sha256=hashlib.sha256(str((response or {}).get('text','')).encode()).hexdigest(),failed_response_truncated=len(str((response or {}).get('text','')))>100000,usage={k:(response or {}).get(k) for k in ('input_tokens','output_tokens','estimated_cost_usd','usage_known')});workspace._save(state)
+                state=workspace._read();state['extraction_attempts'][batch_key].update(status='uncertain',error=type(error).__name__,failure_reason=str(error)[:300],model_error_class=(response or {}).get('error_class'),response_received=(response or {}).get('response_received'),failed_response_text=str((response or {}).get('text',''))[:100000],failed_response_sha256=hashlib.sha256(str((response or {}).get('text','')).encode()).hexdigest(),failed_response_truncated=len(str((response or {}).get('text','')))>100000,usage={k:(response or {}).get(k) for k in ('input_tokens','output_tokens','cached_input_tokens','estimated_cost_usd','usage_known')});workspace._save(state)
             return {'status':'uncertain','message':'Extraction incomplete or invalid; completed prior chunks retained, no automatic rebilling.','batch_id':batch_key}
     with _locked(workspace.root):
         state=workspace._read();cache=state['extraction_cache']
@@ -207,11 +207,11 @@ def current_turn_usage(workspace,origin_turn,final_response=None):
     rows.extend(a.get('usage',{}) for key,a in state.get('style_review_attempts',{}).items() if key==origin_turn)
     if final_response is not None:
         r=final_response;u=r.get('usage') or {}
-        rows.append({'input_tokens':r.get('input_tokens',u.get('input_tokens')),'output_tokens':r.get('output_tokens',u.get('output_tokens')),'estimated_cost_usd':r.get('estimated_cost_usd'),'usage_known':r.get('usage_known',bool(u))})
+        rows.append({'input_tokens':r.get('input_tokens',u.get('input_tokens')),'output_tokens':r.get('output_tokens',u.get('output_tokens')),'cached_input_tokens':r.get('cached_input_tokens'),'estimated_cost_usd':r.get('estimated_cost_usd'),'usage_known':r.get('usage_known',bool(u))})
     known_cost=sum(r['estimated_cost_usd'] for r in rows if isinstance(r.get('estimated_cost_usd'),(int,float)))
     tokens_known=bool(rows) and all(r.get('usage_known') is True and isinstance(r.get('input_tokens'),int) and isinstance(r.get('output_tokens'),int) for r in rows)
     costs_known=bool(rows) and all(isinstance(r.get('estimated_cost_usd'),(int,float)) for r in rows)
-    return {'totalUsage':{'input_tokens':sum(r['input_tokens'] for r in rows) if tokens_known else None,'output_tokens':sum(r['output_tokens'] for r in rows) if tokens_known else None},'totalUsageKnown':tokens_known,'totalCostUsd':known_cost if costs_known else None,'knownCostSubtotalUsd':known_cost,'totalCostKnown':costs_known,'currentTurnModelCalls':len(rows),'costBasis':'Only calls initiated in this canonical turn; cached historical extraction excluded'}
+    return {'totalUsage':{'input_tokens':sum(r['input_tokens'] for r in rows) if tokens_known else None,'output_tokens':sum(r['output_tokens'] for r in rows) if tokens_known else None},'totalUsageKnown':tokens_known,'totalCostUsd':known_cost if costs_known else None,'knownCostSubtotalUsd':known_cost,'totalCostKnown':costs_known,'currentTurnModelCalls':len(rows),'usageBreakdown':{'basis':'Sum of provider-reported tokens across calls, including repeated context; not unique evidence or retained metadata counters','cached_input_tokens':sum(r['cached_input_tokens'] for r in rows) if rows and all(type(r.get('cached_input_tokens')) is int for r in rows) else None},'costBasis':'Only calls initiated in this canonical turn; cached historical extraction excluded'}
 
 
 def diagnose_extraction(workspace,database,session_id,turn_id,*,allow_local=False):

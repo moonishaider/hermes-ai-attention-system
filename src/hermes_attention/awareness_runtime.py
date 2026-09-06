@@ -31,7 +31,7 @@ class GmailMetadataCollector:
 class AwarenessRuntime:
     def __init__(self,service,*,clock=None,collector_factory=None,model=None):
         self.service=service;self.store=service.store;self.clock=clock or (lambda:datetime.now(timezone.utc));self.collector_factory=collector_factory;self.model=model
-        self.workspace=AwarenessWorkspace(self.store)
+        self.workspace=AwarenessWorkspace(self.store,clock=self.clock)
         self.store.connection.executescript('''CREATE TABLE IF NOT EXISTS awareness_refresh_state(source TEXT PRIMARY KEY,state_json TEXT,updated_at TEXT);
         CREATE TABLE IF NOT EXISTS awareness_semantic_meetings(analysis_id TEXT PRIMARY KEY,evidence_id TEXT,source_hash TEXT,result_json TEXT,created_at TEXT);
         ''')
@@ -272,8 +272,14 @@ class AwarenessRuntime:
             self.store.connection.execute('BEGIN IMMEDIATE')
             for choice in selected:
                 item=by_id[choice['candidateId']];identity=item['candidate_id'];existing=self.store.connection.execute('SELECT result_json FROM awareness_meeting_items WHERE candidate_id=?',(identity,)).fetchone()
-                if existing:results.append(json.loads(existing[0]));continue
-                result={**item,'owner':choice['owner'],'source':source,'project_id':project,'reviewed_by':'owner-desktop'};now=self.clock().isoformat()
+                if existing:
+                    retained=json.loads(existing[0])
+                    if retained['owner']!=choice['owner']:raise ValueError('Saved assignee differs; use the task correction flow')
+                    if project:
+                        retained['project_ids']=list(dict.fromkeys([*retained.get('project_ids',[]),*([retained['project_id']] if retained.get('project_id') else []),project]))
+                        self.store.connection.execute('UPDATE awareness_meeting_items SET result_json=? WHERE candidate_id=?',(json.dumps(retained),identity))
+                    results.append(retained);continue
+                result={**item,'owner':choice['owner'],'source':source,'project_id':project,'project_ids':[project] if project else [],'reviewed_by':'owner-desktop'};now=self.clock().isoformat()
                 if item['kind']=='task':
                     result['task_id']='meeting:'+identity
                     self.store.connection.execute('INSERT OR IGNORE INTO tasks VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',(result['task_id'],item['title'],context,'meeting-commitment','open',50,choice['owner'],None,None,json.dumps([row['evidence_id']]),0.8,now))
@@ -281,6 +287,11 @@ class AwarenessRuntime:
                     result['decision_id']='meeting:'+identity
                     self.store.connection.execute('INSERT OR IGNORE INTO decisions VALUES(?,?,?,?,?,?,?,?,?,?,?)',(result['decision_id'],context,project,item['title'],'[]','Owner-reviewed semantic transcript proposal',None,None,json.dumps([row['evidence_id']]),now,None))
                 self.store.connection.execute('INSERT INTO awareness_meeting_items VALUES(?,?,?,?,?)',(identity,row['evidence_id'],row['source_hash'],json.dumps(result),now));results.append(result)
+            if project:
+                snapshot_id='meeting-checkpoint:'+hashlib.sha256(json.dumps([value['analysisId'],project,sorted(x['candidate_id'] for x in results)]).encode()).hexdigest()
+                checkpoint={'summary':'Reviewed meeting follow-ups: '+'; '.join(x['title'] for x in results),'next_step':'Review the linked open tasks; meeting statements do not prove task completion.','state':'source-linked meeting checkpoint','verification':'Owner-reviewed transcript items with exact source quotations','completed':False,'analysis_id':value['analysisId'],'source':source,'items':results,'task_ids':[x['task_id'] for x in results if x.get('task_id')]}
+                self.store.connection.execute('INSERT OR IGNORE INTO project_snapshots VALUES(?,?,?,?,?)',(snapshot_id,project,json.dumps(checkpoint),json.dumps([row['evidence_id']]),self.clock().isoformat()))
+                self.store.connection.execute('UPDATE projects SET freshness_at=?,updated_at=? WHERE project_id=?',(self.clock().isoformat(),self.clock().isoformat(),project))
         return {'items':results,'providerWrite':False,'completionClaimed':False}
 
     def dispatch(self,operation,value):

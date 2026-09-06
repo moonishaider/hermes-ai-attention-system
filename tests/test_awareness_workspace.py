@@ -24,6 +24,21 @@ class AwarenessTests(unittest.TestCase):
  def test_snooze_due_clock(self):
   task=self.workspace._task('personal');self.workspace.transition({'taskId':'personal','expectedVersion':task['version'],'action':'snooze','until':(self.now+timedelta(hours=1)).isoformat()})
   self.assertEqual(self.workspace.snapshot('personal')['tasks'],[]);self.now+=timedelta(hours=2);self.assertEqual(len(self.workspace.snapshot('personal')['tasks']),1)
+ def test_reminder_snooze_restart_catchup_and_context_suppression(self):
+  query={'context':'personal','duringChat':True,'query':'unrelated cooking'}
+  self.assertEqual(self.workspace.reminders(query)['data'],[])
+  query['query']='personal proposal';notice=self.workspace.reminders(query)['data'][0]
+  until=self.now+timedelta(minutes=10)
+  self.workspace.transition({'taskId':'personal','expectedVersion':notice['version'],'action':'snooze','until':until.isoformat()})
+  self.assertEqual(self.workspace.reminders(query)['data'],[])
+  self.assertFalse(self.workspace.reminders({**query,'taskId':notice['taskId'],'occurrence':notice['occurrence'],'expectedVersion':notice['version']},acknowledge=True)['acknowledged'])
+  self.now=until+timedelta(seconds=1);restarted=AwarenessWorkspace(self.store,clock=lambda:self.now)
+  current=restarted.reminders(query)['data'][0]
+  ack=restarted.reminders({**query,'taskId':current['taskId'],'occurrence':current['occurrence'],'expectedVersion':current['version']},acknowledge=True)
+  self.assertTrue(ack['acknowledged']);self.assertEqual(restarted.reminders(query)['data'],[])
+  self.assertEqual(AwarenessWorkspace(self.store,clock=lambda:self.now).reminders(query)['data'],[])
+  self.assertEqual(len(restarted.reminders({'context':'inside-success'})['data']),1)
+
  def test_meeting_owner_and_idempotent_decisions_tasks(self):
   preview=self.workspace.meeting_preview('inside-success');self.assertEqual(len(preview['candidates']),3)
   self.assertEqual(preview['candidates'][0]['owner'],'Unconfirmed assignee');self.assertEqual(preview['candidates'][1]['owner'],'Sid')
@@ -47,7 +62,7 @@ class ProjectCreationTests(unittest.TestCase):
   reopened=AwarenessWorkspace(store).dispatch('project.create',request);self.assertFalse(reopened['created']);self.assertEqual(created['projectId'],reopened['projectId'])
   self.assertEqual(store.connection.execute('SELECT count(*) FROM projects').fetchone()[0],1)
   with self.assertRaisesRegex(ValueError,'different input'):aw.project_create({**request,'objective':'Changed'})
-  for context in ['mitchell','auto','unknown']:
+  for context in ['mitchell','auto','mixed']:
    with self.assertRaises(ValueError):aw.project_create({**request,'requestId':'other-request','context':context})
  def test_empty_checkpoint_is_explicit_unverified_owner_report(self):
   store=Store(':memory:');self.addCleanup(store.close);aw=AwarenessWorkspace(store)

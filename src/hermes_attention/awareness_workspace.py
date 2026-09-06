@@ -77,6 +77,28 @@ class AwarenessWorkspace:
             self.store.connection.execute("BEGIN IMMEDIATE")
             return self._transition(value)
 
+    def reminders(self,value,*,acknowledge=False):
+        """Due occurrences use a durable identity; snooze creates a later occurrence.
+
+        Delivery is local UI only. Unrelated conversations neither receive nor
+        consume a reminder. Reopening the app rechecks unacknowledged due tasks.
+        """
+        with self.store.connection:
+            self.store.connection.execute('BEGIN IMMEDIATE')
+            candidates=[]
+            for task in self.snapshot(value.get('context'),query=value.get('query',''),during_chat=value.get('duringChat',False))['tasks']:
+                if not task['due']:continue
+                occurrence=stable_hash([task['task_id'],task['due_at'],task['review'].get('snoozed_until')])
+                if task['review'].get('reminded_occurrence')==occurrence:continue
+                candidates.append({'taskId':task['task_id'],'title':task['title'],'context':task['context_id'],'occurrence':occurrence,'version':task['version']})
+            if not acknowledge:return {'data':candidates[:3],'delivery':'local in-app only'}
+            selected=next((task for task in candidates if task['taskId']==value.get('taskId') and task['occurrence']==value.get('occurrence') and task['version']==value.get('expectedVersion')),None)
+            if not selected:return {'acknowledged':False,'reason':'Reminder changed, suppressed, or already delivered'}
+            review=self._task(selected['taskId'])['review']
+            review.update(reminded_occurrence=selected['occurrence'],reminded_at=self.clock().isoformat())
+            self.store.connection.execute('INSERT OR REPLACE INTO awareness_task_reviews VALUES(?,?,?)',(selected['taskId'],json.dumps(review),self.clock().isoformat()))
+            return {'acknowledged':True,'task':{**selected,'version':self._task(selected['taskId'])['version']}}
+
     def _transition(self,value):
         item=self._task(value['taskId'])
         if value.get('expectedVersion')!=item['version']:raise ValueError('Task changed; reload before applying this review')
@@ -160,7 +182,7 @@ class AwarenessWorkspace:
         request_id=value.get('requestId')
         if not isinstance(request_id,str) or not re.fullmatch(r'[A-Za-z0-9_-]{8,100}',request_id):raise ValueError('A stable owner request ID is required')
         context=value.get('context')
-        if context not in {'personal','inside-success'}:raise ValueError('Choose an active personal or Inside Success context')
+        if context not in {'personal','inside-success','unknown'}:raise ValueError('Choose an active personal, Inside Success, or unknown context')
         fields={}
         for field,limit,default in [('name',120,None),('objective',2000,None),('completionContract',1000,'Owner confirms the objective is complete')]:
             text=value.get(field,default)
@@ -209,11 +231,18 @@ class AwarenessWorkspace:
 
     def resume(self,project_id):
         project=self._project(project_id)
-        row=self.store.connection.execute('SELECT * FROM project_snapshots WHERE project_id=? ORDER BY created_at DESC LIMIT 1',(project_id,)).fetchone()
+        row=self.store.connection.execute('SELECT * FROM project_snapshots WHERE project_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1',(project_id,)).fetchone()
         checkpoint={**dict(row),'state':json.loads(row['state_json'])} if row else None
-        return {'project':project,'checkpoint':checkpoint,'attention':self.snapshot(project['context_id'])['tasks'][:10],'apps_opened':False,'completion_basis':'Only task review receipts indicate completion'}
+        linked=[]
+        for identity in (checkpoint or {}).get('state',{}).get('task_ids',[]):
+            task=self._task(identity)
+            if task['context_id']!=project['context_id']:raise ValueError('Project task context changed; review required')
+            linked.append(task)
+        return {'project':project,'checkpoint':checkpoint,'linked_tasks':linked,'attention':self.snapshot(project['context_id'])['tasks'][:10],'apps_opened':False,'completion_basis':'Only task review receipts indicate completion'}
 
     def dispatch(self,operation,value):
+        if operation=='reminders.pending':return self.reminders(value)
+        if operation=='reminders.ack':return self.reminders(value,acknowledge=True)
         if operation=='snapshot':return self.snapshot(value.get('context'),query=value.get('query',''),during_chat=value.get('duringChat',False))
         if operation=='task.transition':return self.transition(value)
         if operation=='meeting.preview':return self.meeting_preview(value['evidenceId'])
