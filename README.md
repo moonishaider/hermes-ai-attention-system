@@ -1,3 +1,5 @@
+> **Personal project — development paused.** See [archive and restart status](ARCHIVE_STATUS.md). Public configuration uses examples; private runtime data is stored separately.
+
 # Hermes AI Attention & Intelligence System — Codex Handoff v2
 
 **Prepared for:** Syed Moonis Haider  
